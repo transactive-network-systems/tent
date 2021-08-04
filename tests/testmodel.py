@@ -86,6 +86,10 @@ def test_schedule():
     test_mdl = Neighbor()
     test_mdl.maximumPower = 100
 
+    # 210803DJH: The assignment of active vertices depends on whether a neighbor is transactive or not. Let's presume it
+    #            is not to test the more basic case.
+    test_mdl.transactive = False
+
     #   Make sure that the model and object cross-reference one another
     # test_obj.model = test_mdl
     # test_mdl.object = test_obj

@@ -284,6 +284,9 @@ class LocalAsset(object):
         # 200929DJH: This next line prevents the list of scheduled powers from growing indefinitely.
         self.scheduledPowers = [x for x in self.scheduledPowers if x.market.marketState != MarketState.Expired]
 
+        # 210803DJH: Auctions use this flag, so it should probably be set after every successful scheduling of power.
+        self.scheduleCalculated = True
+
         sp = [(x.timeInterval.name, x.value) for x in self.scheduledPowers]
         _log.debug(f"{self.name} asset model scheduledPowers are: {sp}")
 

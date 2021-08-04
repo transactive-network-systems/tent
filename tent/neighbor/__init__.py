@@ -1612,11 +1612,16 @@ class Neighbor:
             # - corrected_vertex.marginalPrice is currently the LMP of delivered supply, excluding effects of transport
             #   losses.
             if vertex.power > 0:
+                # 210907DJH: Checked this next calculation of power based on supplier's power.
                 power = vertex.power * (1 - self.lossFactor * (vertex.power / self.maximumPower))
                 # Make sure that the reduced power is not greater than the maximum capacity referred to the demand side.
                 if power > self.maximumPower * (1 - self.lossFactor):
                     power = self.maximumPower * (1 - self.lossFactor)
                 # Correct the supplier's LMP to include marginal losses.
+                # 210907DJH: Checked this next calculation of marginal loss price based on supply neighbor's marginal
+                #            price and its stated power. If cost is taken as the product of supply neighbor's marginal
+                #            price and supply energy, this marginal price at the recipient location is equivalent to the
+                #            first variation of the cost with change in received power.
                 vertex.marginalPrice = vertex.marginalPrice \
                                        / (1 - 2 * (vertex.power / self.maximumPower) * self.lossFactor)
                 vertex.power = power
@@ -1643,14 +1648,26 @@ class Neighbor:
                 #   losses.
                 # Calculated the supplied power from the supply-side perspective. It is a negative value because of the
                 # sign convention for demand.
-
+                # 210907DJH: Confirmed that this calculated power indeed recovers the supply neighbor power as a
+                #            function of local demand from this neighbor.
                 power = -(self.maximumPower / (2 * self.lossFactor)) \
-                        * (1 - (1 - 4 * (-vertex.power/self.maximumPower) * self.lossFactor) ** 0.5)
+                    * (1 - (1 - 4 * (-vertex.power/self.maximumPower) * self.lossFactor) ** 0.5)
 
                 if power < -self.maximumPower:
                     power = -self.maximumPower
 
-                vertex.marginalPrice = vertex.marginalPrice * (1 - 2 * (-power / self.maximumPower) * self.lossFactor)
+                # 210907DJH: I found that this next function that finds a supply neighbor's marginal price from the
+                #            local  agent's marginal price and received power does not perfectly recover the price and
+                #            thereby remove all the impacts of losses. This may have been due to its use of the recently
+                #            estimated neighbor supply. The discrepancy was minor, but it could accumulate in iterative
+                #            systems.
+                #            The replacement function was found to perfectly find the neighbor's orignial marginal
+                #            price, less loss impacts. It uses the local import power instead of the estimated
+                #            neighbor's export power.
+                # vertex.marginalPrice = vertex.marginalPrice * (1 - 2 * (-power / self.maximumPower) * self.lossFactor)
+                vertex.marginalPrice = vertex.marginalPrice * \
+                                       (1 + 4 * self.lossFactor * vertex.power / self.maximumPower) ** 0.5
+
                 vertex.power = power
 
         return corrected_vertices

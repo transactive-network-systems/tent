@@ -1350,7 +1350,10 @@ def test_include_marginal_losses():
     expected_vertices[2].power = expected_power
     expected_vertices[5].power = expected_power
     expected_vertices[8].power = expected_power
-    expected_price = 0.1 / (1 - 2 * (10/test_neighbor.maximumPower) * test_neighbor.lossFactor)
+    # 210907DJH: The method's formula was altered as follows. This does not change the outcome, but the calculation is
+    #            more meaningful.
+    # expected_price = 0.1 / (1 - 2 * (10/test_neighbor.maximumPower) * test_neighbor.lossFactor)
+    expected_price = 0.1 / (1 - 4 * expected_power * test_neighbor.lossFactor / test_neighbor.maximumPower) ** 0.5
     expected_vertices[2].marginalPrice = -expected_price
     expected_vertices[5].marginalPrice = 0
     expected_vertices[8].marginalPrice = expected_price
@@ -1586,8 +1589,11 @@ def test_remove_marginal_losses():
     assert len(new_vertices) == 9, ' Expected 9 vertices returned. Got ' + str(len(new_vertices)) + '.'
     expected_vertices = test_vertices
     expected_power = -(0.5 * test_neighbor.maximumPower / test_neighbor.lossFactor) * \
-                     (1 - (1 - 4 * (10/test_neighbor.maximumPower) * test_neighbor.lossFactor) ** 0.5 )
-    expected_price = 0.1 * (1 - 2 * (-expected_power / test_neighbor.maximumPower) * test_neighbor.lossFactor)
+                     (1 - (1 - 4 * (10/test_neighbor.maximumPower) * test_neighbor.lossFactor) ** 0.5)
+    # 210907DJH: The recovery of neighbor's marginal price has been changed in code due to slight inaccuracy. This
+    #            change makes the test consistent with the code.
+    # expected_price = 0.1 * (1 - 2 * (-expected_power / test_neighbor.maximumPower) * test_neighbor.lossFactor)
+    expected_price = 0.1 * (1 - 4 * 10 * test_neighbor.lossFactor / test_neighbor.maximumPower) ** 0.5
     expected_vertices[0].power = expected_power
     expected_vertices[3].power = expected_power
     expected_vertices[6].power = expected_power

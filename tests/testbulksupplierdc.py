@@ -76,6 +76,9 @@ def test_update_vertices():
                                       market_clearing_time=dt,
                                       start_time=dt)
     test_market.timeIntervals = [test_time_interval]
+    # 210803DJH: The market clearing time must be defined because it is needed by the new data_manager.py for
+    #            IntervalValue objects.
+    test_market.marketClearingTime = dt
 
     try:
         test_neighbor.update_vertices(test_market)
@@ -111,6 +114,8 @@ def test_update_vertices():
                                       market_clearing_time=dt,
                                       start_time=dt)
     test_market.timeIntervals = [test_time_interval]
+    # 210803DJH: data_manager.py requires that the market be assigned a market clearing time.
+    test_market.marketClearingTime = dt
 
     try:
         test_neighbor.update_vertices(test_market)
