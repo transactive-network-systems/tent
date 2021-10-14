@@ -97,3 +97,65 @@ TIMESTAMP,SOURCE_TYPE,SOURCE_NAME,MARKET_SERIES,MARKET_CLEARING_DATE,MARKET_CLEA
 2021-08-03 17:33:59.817244,BulkSupplier_dc,,Market Series,2021-03-03,13:00:00,2021-03-03,13:00:00,Active_Vertex,0.03641,50,0
 2021-08-03 17:33:59.817244,BulkSupplier_dc,,Market Series,2021-03-03,13:00:00,2021-03-03,13:00:00,Active_Vertex,9.31641,50,0
 2021-08-03 17:33:59.817244,BulkSupplier_dc,,Market Series,2021-03-03,13:00:00,2021-03-03,13:00:00,Active_Vertex,9.31641,100,0
+2021-10-14 12:44:31.357288,Neighbor,test_neighbor,test_market_series,2021-10-14,12:44:31,2021-10-14,12:44:31,Scheduled_Power,1234.5678,,
+2021-10-14 12:44:31.372922,Neighbor,test_neighbor,test_market_series,2021-10-14,12:44:31,2021-10-14,12:44:31,Scheduled_Power,1234.5678,,
+2021-10-14 12:44:31.372922,Neighbor,test_neighbor,test_market_series,2021-10-14,12:44:31,2021-10-14,12:44:31,Scheduled_Power,1234.5678,,
+2021-10-14 12:44:31.372922,Neighbor,test_neighbor,test_market_series,2021-10-14,12:44:31,2021-10-14,12:44:31,Scheduled_Power,1234.5678,,
+2021-10-14 12:44:31.372922,Neighbor,test_neighbor,test_market_series,2021-10-14,12:44:31,2021-10-14,12:44:31,Scheduled_Power,0,0,0
+2021-10-14 12:44:31.372922,Neighbor,test_neighbor,test_market_series,2021-10-14,12:44:31,2021-10-14,12:44:31,Scheduled_Power,0,0,0
+2021-10-14 12:44:31.372922,Neighbor,test_neighbor,test_market_series,2021-10-14,12:44:31,2021-10-14,12:44:31,Scheduled_Power,0,0,0
+2021-10-14 12:44:31.372922,Neighbor,test_neighbor,test_market_series,2021-10-14,12:44:31,2021-10-14,12:44:31,Scheduled_Power,0,0,0
+2021-10-14 12:44:45.559203,BulkSupplier_dc,,Market Series,2021-01-14,01:44:45,2021-01-14,01:44:45,Active_Vertex,0.0366,0,0
+2021-10-14 12:44:45.559203,BulkSupplier_dc,,Market Series,2021-01-14,01:44:45,2021-01-14,01:44:45,Active_Vertex,0.0366,100,0
+2021-10-14 12:52:54.294838,BulkSupplier_dc,,Market Series,2021-01-14,01:52:54,2021-01-14,01:52:54,Active_Vertex,0.0366,0,0
+2021-10-14 12:52:54.294838,BulkSupplier_dc,,Market Series,2021-01-14,01:52:54,2021-01-14,01:52:54,Active_Vertex,0.0366,100,0
+2021-10-14 12:53:29.490753,BulkSupplier_dc,,Market Series,2021-01-14,01:53:29,2021-01-14,01:53:29,Active_Vertex,0.0366,0,0
+2021-10-14 12:53:29.490753,BulkSupplier_dc,,Market Series,2021-01-14,01:53:29,2021-01-14,01:53:29,Active_Vertex,0.0366,100,0
+2021-10-14 12:56:58.761690,Neighbor,test_neighbor,test_market_series,2021-10-14,12:56:58,2021-10-14,12:56:58,Scheduled_Power,1234.5678,,
+2021-10-14 12:56:58.777319,Neighbor,test_neighbor,test_market_series,2021-10-14,12:56:58,2021-10-14,12:56:58,Scheduled_Power,1234.5678,,
+2021-10-14 12:56:58.777319,Neighbor,test_neighbor,test_market_series,2021-10-14,12:56:58,2021-10-14,12:56:58,Scheduled_Power,1234.5678,,
+2021-10-14 12:56:58.777319,Neighbor,test_neighbor,test_market_series,2021-10-14,12:56:58,2021-10-14,12:56:58,Scheduled_Power,1234.5678,,
+2021-10-14 12:56:58.777319,Neighbor,test_neighbor,test_market_series,2021-10-14,12:56:58,2021-10-14,12:56:58,Scheduled_Power,0,0,0
+2021-10-14 12:56:58.777319,Neighbor,test_neighbor,test_market_series,2021-10-14,12:56:58,2021-10-14,12:56:58,Scheduled_Power,0,0,0
+2021-10-14 12:56:58.777319,Neighbor,test_neighbor,test_market_series,2021-10-14,12:56:58,2021-10-14,12:56:58,Scheduled_Power,0,0,0
+2021-10-14 12:56:58.777319,Neighbor,test_neighbor,test_market_series,2021-10-14,12:56:58,2021-10-14,12:56:58,Scheduled_Power,0,0,0
+2021-10-14 13:46:59.028488,BulkSupplier_dc,,Market Series,2021-01-14,01:46:59,2021-01-14,01:46:59,Active_Vertex,0.0366,0,0
+2021-10-14 13:46:59.028488,BulkSupplier_dc,,Market Series,2021-01-14,01:46:59,2021-01-14,01:46:59,Active_Vertex,0.0366,100,0
+2021-10-14 13:47:34.533469,BulkSupplier_dc,,Market Series,2021-01-14,01:47:34,2021-01-14,01:47:34,Active_Vertex,0.0366,0,0
+2021-10-14 13:47:34.533469,BulkSupplier_dc,,Market Series,2021-01-14,01:47:34,2021-01-14,01:47:34,Active_Vertex,0.0366,100,0
+2021-10-14 13:50:39.778231,Neighbor,test_neighbor,test_market_series,2021-10-14,13:50:39,2021-10-14,13:50:39,Scheduled_Power,1234.5678,,
+2021-10-14 13:50:39.778231,Neighbor,test_neighbor,test_market_series,2021-10-14,13:50:39,2021-10-14,13:50:39,Scheduled_Power,1234.5678,,
+2021-10-14 13:50:39.778231,Neighbor,test_neighbor,test_market_series,2021-10-14,13:50:39,2021-10-14,13:50:39,Scheduled_Power,1234.5678,,
+2021-10-14 13:50:39.778231,Neighbor,test_neighbor,test_market_series,2021-10-14,13:50:39,2021-10-14,13:50:39,Scheduled_Power,1234.5678,,
+2021-10-14 13:50:39.793861,Neighbor,test_neighbor,test_market_series,2021-10-14,13:50:39,2021-10-14,13:50:39,Scheduled_Power,0,0,0
+2021-10-14 13:50:39.793861,Neighbor,test_neighbor,test_market_series,2021-10-14,13:50:39,2021-10-14,13:50:39,Scheduled_Power,0,0,0
+2021-10-14 13:50:39.793861,Neighbor,test_neighbor,test_market_series,2021-10-14,13:50:39,2021-10-14,13:50:39,Scheduled_Power,0,0,0
+2021-10-14 13:50:39.793861,Neighbor,test_neighbor,test_market_series,2021-10-14,13:50:39,2021-10-14,13:50:39,Scheduled_Power,0,0,0
+2021-10-14 14:01:27.063532,BulkSupplier_dc,,Market Series,2021-01-14,01:01:27,2021-01-14,01:01:27,Active_Vertex,0.0366,0,0
+2021-10-14 14:01:27.063532,BulkSupplier_dc,,Market Series,2021-01-14,01:01:27,2021-01-14,01:01:27,Active_Vertex,0.0366,100,0
+2021-10-14 14:01:27.063532,BulkSupplier_dc,,Market Series,2021-03-03,13:00:00,2021-03-03,13:00:00,Active_Vertex,0.03641,0,0
+2021-10-14 14:01:27.063532,BulkSupplier_dc,,Market Series,2021-03-03,13:00:00,2021-03-03,13:00:00,Active_Vertex,0.03641,50,0
+2021-10-14 14:01:27.063532,BulkSupplier_dc,,Market Series,2021-03-03,13:00:00,2021-03-03,13:00:00,Active_Vertex,9.31641,50,0
+2021-10-14 14:01:27.063532,BulkSupplier_dc,,Market Series,2021-03-03,13:00:00,2021-03-03,13:00:00,Active_Vertex,9.31641,100,0
+2021-10-14 14:02:02.207052,Neighbor,test_neighbor,test_market_series,2021-10-14,14:02:02,2021-10-14,14:02:02,Scheduled_Power,1234.5678,,
+2021-10-14 14:02:02.207052,Neighbor,test_neighbor,test_market_series,2021-10-14,14:02:02,2021-10-14,14:02:02,Scheduled_Power,1234.5678,,
+2021-10-14 14:02:02.207052,Neighbor,test_neighbor,test_market_series,2021-10-14,14:02:02,2021-10-14,14:02:02,Scheduled_Power,1234.5678,,
+2021-10-14 14:02:02.207052,Neighbor,test_neighbor,test_market_series,2021-10-14,14:02:02,2021-10-14,14:02:02,Scheduled_Power,1234.5678,,
+2021-10-14 14:02:02.207052,Neighbor,test_neighbor,test_market_series,2021-10-14,14:02:02,2021-10-14,14:02:02,Scheduled_Power,0,0,0
+2021-10-14 14:02:02.207052,Neighbor,test_neighbor,test_market_series,2021-10-14,14:02:02,2021-10-14,14:02:02,Scheduled_Power,0,0,0
+2021-10-14 14:02:02.207052,Neighbor,test_neighbor,test_market_series,2021-10-14,14:02:02,2021-10-14,14:02:02,Scheduled_Power,0,0,0
+2021-10-14 14:02:02.207052,Neighbor,test_neighbor,test_market_series,2021-10-14,14:02:02,2021-10-14,14:02:02,Scheduled_Power,0,0,0
+2021-10-14 14:13:59.434493,BulkSupplier_dc,,Market Series,2021-01-14,01:13:59,2021-01-14,01:13:59,Active_Vertex,0.0366,0,0
+2021-10-14 14:13:59.434493,BulkSupplier_dc,,Market Series,2021-01-14,01:13:59,2021-01-14,01:13:59,Active_Vertex,0.0366,100,0
+2021-10-14 14:13:59.450136,BulkSupplier_dc,,Market Series,2021-03-03,13:00:00,2021-03-03,13:00:00,Active_Vertex,0.03641,0,0
+2021-10-14 14:13:59.450136,BulkSupplier_dc,,Market Series,2021-03-03,13:00:00,2021-03-03,13:00:00,Active_Vertex,0.03641,50,0
+2021-10-14 14:13:59.450136,BulkSupplier_dc,,Market Series,2021-03-03,13:00:00,2021-03-03,13:00:00,Active_Vertex,9.31641,50,0
+2021-10-14 14:13:59.450136,BulkSupplier_dc,,Market Series,2021-03-03,13:00:00,2021-03-03,13:00:00,Active_Vertex,9.31641,100,0
+2021-10-14 14:14:07.116872,Neighbor,test_neighbor,test_market_series,2021-10-14,14:14:07,2021-10-14,14:14:07,Scheduled_Power,1234.5678,,
+2021-10-14 14:14:07.116872,Neighbor,test_neighbor,test_market_series,2021-10-14,14:14:07,2021-10-14,14:14:07,Scheduled_Power,1234.5678,,
+2021-10-14 14:14:07.116872,Neighbor,test_neighbor,test_market_series,2021-10-14,14:14:07,2021-10-14,14:14:07,Scheduled_Power,1234.5678,,
+2021-10-14 14:14:07.116872,Neighbor,test_neighbor,test_market_series,2021-10-14,14:14:07,2021-10-14,14:14:07,Scheduled_Power,1234.5678,,
+2021-10-14 14:14:07.116872,Neighbor,test_neighbor,test_market_series,2021-10-14,14:14:07,2021-10-14,14:14:07,Scheduled_Power,0,0,0
+2021-10-14 14:14:07.116872,Neighbor,test_neighbor,test_market_series,2021-10-14,14:14:07,2021-10-14,14:14:07,Scheduled_Power,0,0,0
+2021-10-14 14:14:07.116872,Neighbor,test_neighbor,test_market_series,2021-10-14,14:14:07,2021-10-14,14:14:07,Scheduled_Power,0,0,0
+2021-10-14 14:14:07.116872,Neighbor,test_neighbor,test_market_series,2021-10-14,14:14:07,2021-10-14,14:14:07,Scheduled_Power,0,0,0

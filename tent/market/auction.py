@@ -271,7 +271,14 @@ class Auction(Market):
             # signal and its records.
             # 200702DJH: Why is this misspelling of "vertices" permitted here???????????????
             # upstream_agent.update_verices(self) #???????????????
-            upstream_agent.update_vertices(self)
+            # upstream_agent.update_vertices(self)
+            # 211014DJH: I've discovered that method update_dc_threshold is never being called for upstream neighbors.
+            #            Therefore the demand-charge threshold was not being updated from results of prior markets in
+            #            the given market series. This change should correct the problem because the schedule method
+            #            calls method update_dc_thrshold.
+            # upstream_agent.update_vertices(self)
+            upstream_agent.schedule(self)
+
             # Sum all the agent's active local asset and neighbor vertices and determine the LMP at which local power is
             # balanced.
             self.balance(my_transactive_node)

@@ -419,11 +419,16 @@ def production(obj, price, ti, market=None):
             raise Exception(f'No active vertices were found for {obj.name} in time interval {ti.name}'
                             f' for market: {market.name}')
 
+    else:
+        return power_from_vertices(pvv, price)
+
+def power_from_vertices(vertices, price):
+
     # Ensure that the production vertices are ordered by increasing price.
     # Vertices having same price are ordered by power.
-    pvv = order_vertices(pvv)  # vertices
+    pvv = order_vertices(vertices)  # vertices
 
-    if pvv_len == 1:  # One active vertices were found in the given time interval
+    if len(pvv) == 1:  # One active vertices were found in the given time interval
         # Presume that using a single production vertex is shorthand for
         # constant, inelastic production.
         p1 = pvv[0].power  # [avg.kW]
@@ -445,7 +450,7 @@ def production(obj, price, ti, market=None):
         else:  # The marginal price lies among the active vertices
             # Index through the active vertices pvv in the given time
             # interval ti
-            for i in range(pvv_len - 1):
+            for i in range(len(pvv) - 1):
                 if pvv[i].marginalPrice <= price < pvv[i + 1].marginalPrice:
                     # The marginal price falls between two vertices that
                     # are sloping upward to the right. Interpolate
