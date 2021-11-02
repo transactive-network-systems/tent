@@ -97,7 +97,7 @@ class CSVMeterPoint(PullMeterPoint):
             start_time = time_intervals[i].startTime
             end_time = start_time + time_intervals[i].duration
             # Attempt to get value based on timeInterval.
-            # If the timeInterval does not exist in the csv data, skip. 
+            # If the timeInterval does not exist in the csv data, skip.
             try:
                 start_value = meter_df["Metered_Energy"][start_time]
                 end_value = meter_df["Metered_Energy"][end_time]
@@ -118,7 +118,7 @@ class CSVMeterPoint(PullMeterPoint):
         """
         super(CSVMeterPoint, self).store(db, time_intervals)
         return
-        
+
     def read_database(self, db="csvMeter.db", key=None):
         # If key is specified, Start_Time in database will be checked
         # If a value matching the Start_Time exists, it will be returned
