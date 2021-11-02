@@ -557,6 +557,10 @@ class Neighbor:
                 self.demandThreshold = float('inf')
             # _log.debug(f"measurement: {d} threshold: {self.demandThreshold}")
 
+                # 211102DJH: This next line will cause problems if a "dummy" market has been partially configured at
+                #            startup. It is preferable to keep the demandThreshold constant instead.
+                # self.demandThreshold = float('inf')
+                pass
         else:
             # An appropriate MeterPoint was found. The demand threshold may be updated from the MeterPoint.
 
