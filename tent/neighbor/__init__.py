@@ -866,6 +866,7 @@ class Neighbor:
         active_threshold = copy(demand_threshold)
 
         # Index again through the active market time intervals.
+        new_active_vertices = []
         for t in range(len(time_intervals)):
 
             # Pick out the indexed time interval.
@@ -927,12 +928,20 @@ class Neighbor:
                 active_vertex = active_vertices[av]
 
                 # Store the vertex as an active vertex interval value.
-                self.activeVertices.append(IntervalValue(calling_object=self,
+                # 211109DJH: This next code is modified to have the list of new active vertices collected and later
+                #            placed among active vertices and sent to a CSV file.
+                new_active_vertices.append(IntervalValue(calling_object=self,
                                                          time_interval=time_interval,
                                                          market=market,
                                                          measurement_type=MeasurementType.ActiveVertex,
                                                          value=active_vertex)
                                            )
+
+        # 211109DJH: Place the updated new active vertices among active vertices.
+        self.activeVertices.extend(new_active_vertices)
+
+        # 211109DJH: Save the newly updated vertices to a CSV file.
+        append_table(obj=new_active_vertices)
 
         # 200929DJH: Trim any active vertices that lie in expired markets so that the list will not grow indefinitely.
         self.activeVertices = [x for x in self.activeVertices if x.market.marketState != MarketState.Expired]
