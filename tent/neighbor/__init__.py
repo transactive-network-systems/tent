@@ -817,7 +817,10 @@ class Neighbor:
                     # indexed time interval. Use these to re-create active vertices.
 
                     # Sort the received_vertices (which happen to be TransactiveRecords) by increasing price and power.
-                    received_vertices = order_vertices(received_vertices)
+                    # 211208DJH: This mew method not only orders vertices but also checks for and fixes irrationality.
+                    #            The method order_vertices() has also been improved to apply sequential record numbers.
+                    # received_vertices = order_vertices(received_vertices)
+                    [received_vertices, count] = Vertex.check_rationality(received_vertices, action="fix_up")
 
                     # Index through the vertices in the received transactive records for the indexed time interval.
                     for k in range(len(received_vertices)):

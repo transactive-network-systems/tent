@@ -140,4 +140,6 @@ class Vertex:
 
         v_star = [v_star[x] for x in range(len(v_star)) if x not in tbd]  # Delete any irrational vertices
 
-        return order_vertices(v_star), ivf
+        v_star = order_vertices(v_star)
+
+        return v_star[:], ivf
