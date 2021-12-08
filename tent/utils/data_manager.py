@@ -108,7 +108,7 @@ def append_interval_value_table(method=METHOD, objects=None):
 
     for obj in objects:
         SOURCE_TYPE = obj.associatedClass
-        SOURCE_NAME = obj.associatedObject
+        SOURCE_NAME = obj.associatedObject  # 211116DJH: TODO: This should probably be the object's name.
         MARKET_SERIES = obj.market.marketSeriesName
         # 211109DJH: The use of strftime() throws errors if these datetime objects were not defined. This approach
         #            should be more tolerant.

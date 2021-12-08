@@ -91,6 +91,7 @@ def test_is_hlh():
 
 
 def test_order_vertices():
+    print('Running test_order_vertices():')
     try:
         from tent.containers.vertex import Vertex
     except (SystemError, ImportError):
@@ -103,12 +104,13 @@ def test_order_vertices():
         Vertex(0.3, 0, 0),
         Vertex(0.3, 0, 100),
         Vertex(0.2, 0, 0)
-    ]
+        ]
     ov = order_vertices(uv)
-    assert ov[0] == uv[3]
-    assert ov[1] == uv[1]
-    assert ov[2] == uv[2]
-    assert ov[3] == uv[0]
+    # 211207DJH: Method order_vertices() has been updated to also assign record numbers to the ordered vertices. These
+    #            next assert tests test both the original and improved functionality.
+    assert ov == [uv[x] for x in [3, 1, 2, 0]], 'ERROR: Vertices were NOT ordered properly.'
+    assert [0, 1, 2, 3] == [ov[x].record for x in range(4)], 'ERROR: Vertex records were not assigned in sequence ' \
+                                                             'properly.'
 
 
 def test_production():

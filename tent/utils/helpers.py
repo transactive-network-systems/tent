@@ -220,10 +220,16 @@ def is_heavyloadhour(datetime_value):
 
 
 def order_vertices(uv):
-    return sorted(uv, key=lambda x: (x.marginalPrice, x.power))
+    # TODO: This helper function architecturally belongs among Vertex methods, not here. Move.
+    # 211307DJH: Improving method to also assign sequential record numbers to the ordered vertices.
+    sv = sorted(uv, key=lambda x: (x.marginalPrice, x.power))
+    for n in range(len(sv)):
+        sv[n].record = n
+    return sv
 
 
 def prod_cost_from_vertices(obj, ti, pwr):
+    # TODO: This helper function architecturally belongs among Vertex methods, not here. Move.
     # Infer production cost for a power from the
     # vertices that define an object's supply curve
     #
@@ -423,7 +429,7 @@ def production(obj, price, ti, market=None):
         return power_from_vertices(pvv, price)
 
 def power_from_vertices(vertices, price):
-
+    # TODO: This helper function architecturally belongs among Vertex methods, not here. Move.
     # Ensure that the production vertices are ordered by increasing price.
     # Vertices having same price are ordered by power.
     pvv = order_vertices(vertices)  # vertices

@@ -94,3 +94,50 @@ class Vertex:
             "record": self.record
         }
         return vertex_dict
+
+    @staticmethod
+    def check_rationality(v, action="None"):
+        try:
+            from helpers import order_vertices
+        except ModuleNotFoundError:
+            from .helpers import order_vertices
+        # 211207DJH: This method checks whether a list of vertices is rational, meaning that signed power is a
+        #            non-decreasing function of marginal price. These possible actions are allowed:
+        #            action=="fix_up": The powers of irrational points are made rational by increasing the powers to be
+        #                              equal to that corresponding to the next lower price.
+        #            action=="fix_down": The powers of irrational points are made rational by decreasing the powers to
+        #                                be equal to that corresponding to the next higher price.
+        #            action=="None": No action is taken, but the status is reported.
+        #            action=="delete_up": Irrational vertices are deleted if their powers are less than that
+        #                                 corresponding to the next lower price.
+        #            action=="delete_down": Irrational vertices are deleted if their powers are greater than that
+        #                                   corresponding to the next higher price.
+        v_star = order_vertices(v)                                               # order the vertices by price and power
+        v_temp = [Vertex(float("-inf"), 0, v_star[0].power)]
+        v_temp.extend(v_star)
+        v_temp.append(Vertex(float("inf"), 0, v_star[-1].power))
+        ivf = 0                                                                     # count of irrational vertices found
+        tbd = []                                                                         # list of indices to be deleted
+
+        if action in ["fix_up", "delete_up", "None"]:
+            for x in range(len(v_star)):                                             # increasing index through vertices
+                if v_temp[x+1].power < v_temp[x].power:                       # if vertex power is decreasing with price
+                    ivf = ivf + 1                                              # increment the irrational vertex counter
+                    if action == "fix_up":              # make irrational vertex power equal to that at next lower price
+                        v_temp[x+1].power = v_temp[x].power
+                    elif action == "delete_up":                           # Append the index of the vertex to be deleted
+                        tbd.append(x)
+        else:
+            for x in range(len(v_star), 0, -1):                                      # decreasing index through vertices
+                if v_temp[x].power > v_temp[x+1].power:
+                    ivf = ivf + 1
+                    if action == "fix_down":
+                        v_temp[x].power = v_temp[x+1].power
+                    elif action == "delete_down":
+                        tbd.append(x-1)
+
+        v_star = v_temp[1:len(v_star)+1]  # Remove the two extended vertices
+
+        v_star = [v_star[x] for x in range(len(v_star)) if x not in tbd]  # Delete any irrational vertices
+
+        return order_vertices(v_star), ivf
