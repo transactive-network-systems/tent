@@ -47,13 +47,22 @@ under Contract DE-AC05-76RL01830
 # measurement location within the circuit. Therefore, a single physical
 # meter might be the source of more than one MeterPoint.
 
+import sys
+import pandas as pd
+import sqlite3
 from datetime import datetime, date, timedelta
+from interval_value import IntervalValue
+from market import Market
+from market_state import MarketState
+from time_interval import TimeInterval
 
 from measurement_type import MeasurementType
 from measurement_unit import MeasurementUnit
-from helpers import format_ts, format_date
+from helpers import find_obj_by_ti, format_ts, format_date
 
-
+# TODO: Create MODbus/BACnet Meter child class
+#       Use VOLTTRON MODbus/BACnet read methods from VOLTTRON drivers
+#       Build Unit Tests. Functionally the same as CSV Meter
 class MeterPoint:
     def __init__(self,
                  description='',
@@ -70,6 +79,7 @@ class MeterPoint:
         self.name = name
 
         # These following properties are dynamically assigned and should not be assigned during meter configuration:
+        self.meter_intervals = []
         self.current_hour_measurements = []
         self.current_measurement = None
         self.lastUpdate = None
@@ -95,11 +105,183 @@ class MeterPoint:
         # subclasses and redefine this function as needed to handle unique conditions.
         print('Made it to MeterPoint.read_meter() for ' + obj.name)
 
-    def store(self):
+    def _intervalValue_to_dataFrame(self, intVal):
+        """
+        Helper method to convert IntervalValues into dataframes.
+        Intended for writing to database. Format based on data_manager.py
+        """
+        DATE_FORMAT = "%Y-%m-%d"  # Simple date format like '2021-01-26'.
+        TIME_FORMAT = "%H:%M:%S"  # Simple time format like '13:14:15'.
+        TIMESTAMP = format(datetime.now())
+        SOURCE_TYPE = intVal.associatedClass
+        SOURCE_NAME = intVal.associatedObject
+        MARKET_SERIES = intVal.market.marketSeriesName
+        MARKET_CLEARING_DATE = intVal.market.marketClearingTime.strftime(DATE_FORMAT)
+        MARKET_CLEARING_TIME = intVal.market.marketClearingTime.strftime(TIME_FORMAT)
+        INTERVAL_STARTING_DATE = intVal.timeInterval.startTime.strftime(DATE_FORMAT)
+        INTERVAL_STARTING_TIME = intVal.timeInterval.startTime.strftime(TIME_FORMAT)
+        MEASUREMENT_TYPE = MeasurementType.get(intVal.measurementType)
+        VALUE_1 = intVal.value
+        mini_df = pd.DataFrame({
+            "TIMESTAMP": TIMESTAMP,
+            "SOURCE_TYPE": SOURCE_TYPE,
+            "SOURCE_NAME": SOURCE_NAME,
+            "MARKET_SERIES": MARKET_SERIES,
+            "MARKET_CLEARING_DATE": MARKET_CLEARING_DATE,
+            "MARKET_CLEARING_TIME": MARKET_CLEARING_TIME,
+            "INTERVAL_STARTING_DATE": INTERVAL_STARTING_DATE,
+            "INTERVAL_STARTING_TIME": INTERVAL_STARTING_TIME,
+            "MEASUREMENT_TYPE": MEASUREMENT_TYPE,
+            "VALUE_1": VALUE_1
+        })
+        return mini_df
+
+# TODO: Do we need to recreate the market class from the database, 
+#       or will that exist and we can pass the market in here? Is this needed/useful?
+    def _dataFrame_to_intervalValue(self, df):
+        """
+        Helper method to convert dataframes into IntervalValues.
+        Intended for reading from database.
+        """
+        DATE_TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
+        market_date_time = df["MARKET_CLEARING_DATE"] + " " + df["MARKET_CLEARING_TIME"]
+        tmpMart = Market(market_series_name=df["MARKET_SERIES"],market_clearing_time=market_date_time)
+        intVal_date_time = df["INTERVAL_STARTING_DATE"] + " " + df["INTERVAL_STARTING_TIME"]
+        intVal = IntervalValue(calling_object=getattr(sys.modules[__name__], df["SOURCE_TYPE"]), 
+                               market=tmpMart, 
+                               measurement_type=df["MEASUREMENT_TYPE"],
+                               value=df["VALUE_1"]
+                               )
+    
+    def store(self, db=None, timeIntervals=None):
         """
         Store last measurement into historian
         The default approach here could be to append a text record file. If the file is reserved for one meterpoint,
         little or no metadata need be repeated in records. Minimum content should be reading time and datum.
         Implementers will be found to have diverse practices for historians.
+
         """
-        pass
+        conn = sqlite3.connect(db)
+        # When specific value is specified, store in database.
+        # Disregards whether or not the value is in meter interval list or not
+        # Force command
+        if timeIntervals:
+            for ti in timeIntervals:
+                intervalValueObj = find_obj_by_ti(self.meter_intervals, ti)
+                if intervalValueObj:
+                    self.meter_intervals.pop(self.meter_intervals.index(intervalValueObj))
+                    mini_df = self._intervalValue_to_dataFrame(intervalValueObj)
+                    mini_df.to_sql("meter", conn, index=False, if_exists="append")
+        # If nothing is specified, use the default behaviour
+        # Only remove value from list if market has expired for intervalValue
+        else:
+            for interval in self.meter_intervals:
+                if interval.market.marketState == MarketState.Expired:
+                    mini_df = self._intervalValue_to_dataFrame(interval)
+                    mini_df.to_sql("meter", conn, index=False, if_exists="append")
+                    self.meter_intervals.pop(self.meter_intervals.index(interval))
+        return
+        
+    # TODO: Should we track by TIMESTAMP vs. intervalValue startTime
+    def read_database(self, db=None, key=None):
+        # If key is specified, Start_Time in database will be checked
+        # If a value matching the Start_Time exists, it will be returned
+        conn = sqlite3.connect(db)        
+        if key:
+            DATE_FORMAT = "%Y-%m-%d"  # Simple date format like '2021-01-26'.
+            TIME_FORMAT = "%H:%M:%S"  # Simple time format like '13:14:15'.
+            key_date = key.strftime(DATE_FORMAT)
+            key_time = key.strftime(TIME_FORMAT)
+            mini_df = pd.read_sql(f"SELECT * FROM meter WHERE INTERVAL_STARTING_DATE = {key_date} AND INTERVAL_STARTING_TIME = {key_time}", conn)
+            return mini_df["VALUE_1"][0]
+        # If no key is specified, return all values found in the database
+        # These values will be returned as a list
+        else:
+            mini_df = pd.read_sql("SELECT * FROM meter", conn)
+            return mini_df["VALUE_1"].to_list()
+
+# TODO: Add additional functionality based on measurement types, or create new children classes based on measurement
+# TODO: Create Unit Test to verify functionality
+class CSVMeterPoint(MeterPoint):
+    def __init__(self,
+                 description='',
+                 measurement_interval=timedelta(hours=1),
+                 measurement_type=MeasurementType.Unknown,
+                 measurement_unit=MeasurementUnit.Unknown,
+                 name=''
+                 ):
+        super(CSVMeterPoint, self).__init__(description, measurement_interval, measurement_type, 
+            measurement_unit, name)
+        
+    # TODO: Consider how/whether this use of datetime.utcnow() affects simulations.
+    def set_meter_value(self, value, last_update=datetime.utcnow()):
+        self.current_hour_measurements.append(value)
+        self.lastUpdate = last_update
+
+    def update_avg(self):
+        if len(self.current_hour_measurements) > 30:
+            self.current_measurement = sum(self.current_hour_measurements) / len(self.current_hour_measurements)
+            self.current_hour_measurements = []
+        return self.current_measurement
+
+    def _csv_to_df(self):
+        """
+        Helper function to clean up csv for usable dataframe format
+        within the context of the CSVMeter.
+        CSV in format [Timestamp, Real Energy Total]
+        Dataframe in format [index, Timestamp, Value]
+        """
+        meter_df = pd.read_csv(self.path)
+        meter_df.rename(columns={
+            meter_df.columns[0]: "Timestamp",
+            meter_df.columns[1]: "Metered_Energy"
+            },
+            inplace=True
+        )
+
+        meter_df['Timestamp'] = pd.to_datetime(meter_df['Timestamp'], format="%Y-%m-%d %H:%M:%S")
+        meter_df.set_index('Timestamp', inplace=True)
+        return meter_df 
+        
+
+    def read_meter(self, market, csv_path_str):
+        # Read the meter point at scheduled intervals from csv
+        # CSV format: [timestamp, value]
+        # MeterPoints are updated on a schedule. Properties have been defined to keep track of the time of the last
+        # update and the interval between updates.
+        # Read market
+        # While this seems easy, meters will be found to be diverse and may use diverse standards and protocols. Create
+        # subclasses and redefine this function as needed to handle unique conditions.
+        # CSV Format
+        print('Made it to MeterPoint.read_meter() for ' + market.name)
+        
+        self.path = csv_path_str
+        meter_df = self._csv_to_df()
+        # Gather active time intervals
+        time_intervals = market.timeIntervals
+        for i in range(len(time_intervals)):
+            start_time = time_intervals[i].startTime
+            end_time = start_time + time_intervals[i].duration
+            # Get closest points to timeInterval start and end time
+            start_value = meter_df["Metered_Energy"][start_time]
+            end_value = meter_df["Metered_Energy"][end_time]
+            interval_value = end_value - start_value
+            interval = IntervalValue(self, time_intervals[i], market, MeasurementType.EnergyReal, interval_value)
+            self.meter_intervals.append(interval)
+        return self.meter_intervals
+
+    def store(self, db="csvMeter.db", timeIntervals=None):
+        """
+        Store last measurement into historian
+        The default approach here could be to append a text record file. If the file is reserved for one meterpoint,
+        little or no metadata need be repeated in records. Minimum content should be reading time and datum.
+        Implementers will be found to have diverse practices for historians.
+
+        """
+        super(MeterPoint, self).store(db, timeIntervals)
+        return
+        
+    def read_database(self, db="csvMeter.db", key=None):
+        # If key is specified, Start_Time in database will be checked
+        # If a value matching the Start_Time exists, it will be returned
+        return super(MeterPoint, self).read_database(db, key)
