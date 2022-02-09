@@ -99,7 +99,7 @@ class TestCSVMeterPoint(unittest.TestCase):
 
     def test_case1(self):
         """
-        Read data from csv to meter.
+        Read data from csv.
         """
         print("\nCASE 1: Read from CSV file")
         # Verify nothing is stored in meter_intervals
@@ -119,6 +119,29 @@ class TestCSVMeterPoint(unittest.TestCase):
                 # Verify that values match csv value intervals
                 self.assertEqual(self.test_csv_meter.meter_intervals[x].value, (self.test_df["energy (kW)"][x+1] - self.test_df["energy (kW)"][x]))
 
+    def test_case2(self):
+        """
+        Read data from csv when the timeInterval does not line up with all values from csv.
+        """
+        print("\nCASE 2: Read from CSV with unequal timestamps")
+        # Verify nothing is stored in meter_intervals
+        assert len(self.test_csv_meter.meter_intervals) == 0
+        self.test_market.intervalsToClear += 1
+        self.test_market.check_intervals()
+        # Read in all values in csv
+        self.test_csv_meter.read_meter(self.test_market, self.test_csv_path)
+        # Verify that all values have been read in.
+        # This value should be one less than the length of the csv file (intervals)
+        assert len(self.test_csv_meter.meter_intervals) == (self.test_csv_length - 1)
+        
+        for x in range(self.test_csv_length-1):
+            with self.subTest(x=x):
+                # Verify that all values are IntervalValues
+                assert isinstance(self.test_csv_meter.meter_intervals[x], IntervalValue)
+                # Verify that timestamps match csv
+                self.assertEqual(self.test_csv_meter.meter_intervals[x].timeInterval.startTime, self.test_df["Timestamp"][x])
+                # Verify that values match csv value intervals
+                self.assertEqual(self.test_csv_meter.meter_intervals[x].value, (self.test_df["energy (kW)"][x+1] - self.test_df["energy (kW)"][x]))
 
 if __name__ == '__main__':
     # Run using python's built-in unit test module
@@ -130,12 +153,23 @@ if __name__ == '__main__':
     DIVIDER()  # **********
     test_fixture = TestCSVMeterPoint()
     print('Running test fixture ' + str(test_fixture) + '.')
+    
+    # TEST CASE 1
     test_fixture.setUp()
     try:
         test_fixture.test_case1()
     except Exception as e:
         failed(e)
     test_fixture.tearDown()
+    
+    # TEST CASE 2
+    test_fixture.setUp()
+    try:
+        test_fixture.test_case2()
+    except Exception as e:
+        failed(e)
+    test_fixture.tearDown()
+
     print('Fixture ' + str(test_fixture) + 'ran to completion.')
     DIVIDER()  # **********
 

@@ -262,12 +262,16 @@ class CSVMeterPoint(MeterPoint):
         for i in range(len(time_intervals)):
             start_time = time_intervals[i].startTime
             end_time = start_time + time_intervals[i].duration
-            # Get closest points to timeInterval start and end time
-            start_value = meter_df["Metered_Energy"][start_time]
-            end_value = meter_df["Metered_Energy"][end_time]
-            interval_value = end_value - start_value
-            interval = IntervalValue(self, time_intervals[i], market, MeasurementType.EnergyReal, interval_value)
-            self.meter_intervals.append(interval)
+            # Attempt to get value based on timeInterval.
+            # If the timeInterval does not exist in the csv data, skip. 
+            try:
+                start_value = meter_df["Metered_Energy"][start_time]
+                end_value = meter_df["Metered_Energy"][end_time]
+                interval_value = end_value - start_value
+                interval = IntervalValue(self, time_intervals[i], market, MeasurementType.EnergyReal, interval_value)
+                self.meter_intervals.append(interval)
+            except KeyError:
+                pass
         return self.meter_intervals
 
     def store(self, db="csvMeter.db", timeIntervals=None):
