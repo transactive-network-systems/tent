@@ -44,7 +44,7 @@ import os
 import sys
 import unittest
 import pandas as pd
-from meter_point import CSVMeterPoint
+from csv_meter_point import CSVMeterPoint
 from datetime import datetime, date, timedelta
 from interval_value import IntervalValue
 from neighbor_model import Neighbor
@@ -148,7 +148,7 @@ if __name__ == '__main__':
     # unittest.main()
     # Run manually
     DIVIDER()  # **********
-    print('\nRunning tests in test_meter.py')
+    print('\nRunning tests in test_meter_csv.py')
 
     DIVIDER()  # **********
     test_fixture = TestCSVMeterPoint()
@@ -173,5 +173,5 @@ if __name__ == '__main__':
     print('Fixture ' + str(test_fixture) + 'ran to completion.')
     DIVIDER()  # **********
 
-    print("\nTests in test_meter.py ran to completion.")
+    print("\nTests in test_meter_csv.py ran to completion.")
     DIVIDER()  # **********        
