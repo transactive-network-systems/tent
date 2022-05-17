@@ -102,7 +102,8 @@ from bacpypes.task import TaskManager
 
 class BACnetConfig(InformationServiceModel):
     def __init__(self,
-                 address = '', 
+                 local_address = '', 
+                 target_address = '',
                  description = '', 
                  informationType = MeasurementType.Unknown,
                  informationUnits = MeasurementUnit.Unknown,
@@ -111,7 +112,11 @@ class BACnetConfig(InformationServiceModel):
                  updatePeriod = timedelta(hours=1), 
                  updateInterval = timedelta(hours=1)
                  ):
-        self.address = address
+        # Address to set for the BACnetProxy. 
+        # TODO: May want to create a single BACnetProxy for TENT, and use address to specify meter address only                 
+        self.address = local_address 
+        # Address of BACnet device to scrape points from
+        self.target_address = target_address 
         self.description = description
         self.informationType = informationType
         self.informationUnits = informationUnits
@@ -119,7 +124,7 @@ class BACnetConfig(InformationServiceModel):
         self.serviceExpirationDate = serviceExpirationDate
         self.updatePeriod = updatePeriod
         self.updateInterval = updateInterval
-        super(BACnetMeterPoint, self).__init__()
+        super(BACnetConfig, self).__init__()
 
 
 class BACnetMeterPoint(MeterPoint):
@@ -133,11 +138,11 @@ class BACnetMeterPoint(MeterPoint):
                  ):
         super(BACnetMeterPoint, self).__init__(description, measurement_interval, measurement_type, 
             measurement_unit, name)
-
-        self.bacnet_proxy = BACnetProxy(bacnet_config.address)
+        self.bacnet_config = bacnet_config
+        self.bacnet_proxy = BACnetProxy(self.bacnet_config.address)
        
 
-    def read_meter(self, market, device_address, points):
+    def read_meter(self, market, device_address, points=None):
         # Read the meter point at scheduled intervals from csv
         # CSV format: [timestamp, value]
         # MeterPoints are updated on a schedule. Properties have been defined to keep track of the time of the last
@@ -146,12 +151,16 @@ class BACnetMeterPoint(MeterPoint):
         # While this seems easy, meters will be found to be diverse and may use diverse standards and protocols. Create
         # subclasses and redefine this function as needed to handle unique conditions.
         # CSV Format
+
         print('Made it to BACnetMeterPoint.read_meter() for ' + market.name)
         
         # Gather active time intervals
         time_intervals = market.timeIntervals
         for i in range(len(time_intervals)):
-            bacnet_data = self.bacnet_proxy.read_using_single_request(device_address, points)
+            if points:
+                bacnet_data = self.bacnet_proxy.read_using_single_request(device_address, points)
+            else:
+                bacnet_data = self.bacnet_proxy.read_using_single_request(device_address, self.bacnet_config.description)
             # Attempt to get value based on timeInterval.
             # If the timeInterval does not exist in the csv data, skip. 
             try:
