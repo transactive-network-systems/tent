@@ -47,4 +47,6 @@ from enum import Enum
 class MarketTypes(Enum):
     auction = 1
     consensus = 2
-    unknown = 3
+    # 211208DJH: Adding type "reconciliation"
+    reconciliation = 3
+    unknown = 4

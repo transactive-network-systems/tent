@@ -165,7 +165,7 @@ class Market:
         self.marketState = MarketState.Initial if first_market_in_series else self.initialMarketState
         self.marginalPrices = []  # [IntervalValue]; Values are [$/kWh]
         # This market object's name. Use market series name as root
-        self.name = self.marketSeriesName.replace(' ', '_') + '_' + str(self.marketClearingTime)[:19]
+        self.name = self.get_market_name()
         self.netPowers = []  # [IntervalValue]; Values are [avg.kW]
         self.nextMarketClearingTime = self.marketClearingTime + self.marketClearingInterval
         self.priceModel = HourlyAveragePriceModel(forgetting_factor=14, default_price=self.defaultPrice)
@@ -1892,3 +1892,8 @@ class Market:
             "marketOrder": self.marketOrder
         }
         return market_series_dict
+
+    def get_market_name(self):
+        dt = str(self.marketClearingTime)
+        market_name = self.marketSeriesName.replace(' ', '_') + '_' + dt[:19]
+        return market_name

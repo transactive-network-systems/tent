@@ -669,3 +669,35 @@ def are_different2(m, s, threshold, calling_neighbor=''):
 
     _log.debug("TCC for {} are_different2 returns {}".format(calling_neighbor, is_diff))
     return is_diff
+
+
+def read_spline(filename=None, xval=0, test=False):
+    # Use a cubic spline table to interpolate an dependent variable y for a given independent variable xval.
+    # The presumed file structure columns are ordered ['x', 'a', 'b', 'c', 'd'], where the cubic spline is calculated
+    # as a*dx^3 + b*dx^2 + c*dx + d, where dx = xval - x.
+    # TODO: This lookup function does not prohibit extrapolation of spine above the last, maximum independent variable
+    #  value.
+    # TODO: This lookup function presumes a column order. Can this be made more forgiving?
+    import csv
+    # filename = 'C:/Users/D3H843\Desktop/Active Projects/TSP-Read Capacity Value from Table/CapacityPriceSpline.csv'
+    # xval = 12000
+    y = []
+    with open(filename, newline='') as csvfile:
+        reader = csv.reader(csvfile, quoting=csv.QUOTE_NONNUMERIC)
+        for row in reader:
+            if isinstance(row[0], str):  # Case 1
+                # print(str(row[0]), 'Case 1')
+                continue
+            elif xval >= row[0]:  # Case 2
+                # print(str(row[0]), 'Case 2')
+                dx = xval - row[0]
+                a = row[1]
+                b = row[2]
+                c = row[3]
+                d = row[4]
+                y = a * dx ** 3 + b * dx ** 2 + c * dx + d
+            else:  # Case 3
+                # print(str(row[0]), 'Case 3')
+                break
+        # print(y)
+        return y

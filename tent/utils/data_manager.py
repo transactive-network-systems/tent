@@ -382,3 +382,215 @@ def lookup_vertex_key(method=METHOD, obj=None):
 
 def lookup_primary_key(method=METHOD, obj=None):
     pass
+
+
+def plot_vertices(source_type=0,
+                  source_name=0,
+                  market_series=0,
+                  interval_date=0,
+                  interval_time=0,
+                  measurement_type=0,
+                  get_key=False,
+                  plot=False,
+                  verbose=False,
+                  datafile="//pnl/projects/cetc/TransactiveTesting/TENT/Simulation/test_tnt/onebuilding_test_12_08/"
+                           "CSV_DATA/campus_city/campus/IntervalValues.csv"
+                  ):
+    """
+    :param datafile: string - relative or absolute directory and filename
+    :param source_type: integer - dictionary index
+    :param source_name: integer - dictionary index
+    :param market_series: integer - dictionary index
+    :param interval_date: integer - dictionary index
+    :param interval_time: integer - dictionary index
+    :param measurement_type: integer - dictionary index
+    :param verbose: boolean - set True to get verbose verifications
+    :param get_key: boolean - set True to receive data dictionary key
+    :param plot: boolean -set True to plot vertex set
+    :return: None
+    """
+    import csv
+    import os
+    import matplotlib.pyplot as plt
+
+    if verbose:
+        print("Made it to method plot_vertices().")
+
+    if not os.path.isfile(datafile):  # The data file does not exist.
+        print('File ' + datafile + ' does not exist.')
+        raise FileNotFoundError
+    else:
+        if verbose:
+            print('File ' + datafile + ' exists.')
+
+    # Read the datafile:
+    lines = list(csv.DictReader(open(datafile, 'r')))
+
+    # Create dictionaries for the columns of the datafile:
+    source_type_set = set([lines[i]['SOURCE_TYPE'] for i in range(len(lines))])
+    source_type_dict = {i: list(sorted(source_type_set))[i] for i in range(len(source_type_set))}
+
+    source_name_set = set([lines[i]['SOURCE_NAME'] for i in range(len(lines))])
+    source_name_dict = {i: list(sorted(source_name_set))[i] for i in range(len(source_name_set))}
+
+    market_series_set = set([lines[i]['MARKET_SERIES'] for i in range(len(lines))])
+    market_series_dict = {i: list(sorted(market_series_set))[i] for i in range(len(market_series_set))}
+
+    interval_date_set = set([lines[i]['INTERVAL_STARTING_DATE'] for i in range(len(lines))])
+    interval_date_dict = {i: list(sorted(interval_date_set))[i] for i in range(len(interval_date_set))}
+
+    interval_time_set = set([lines[i]['INTERVAL_STARTING_TIME'] for i in range(len(lines))])
+    interval_time_dict = {i: list(sorted(interval_time_set))[i] for i in range(len(interval_time_set))}
+
+    measurement_type_set = set([lines[i]['MEASUREMENT_TYPE'] for i in range(len(lines))])
+    measurement_type_dict = {i: list(sorted(measurement_type_set))[i] for i in range(len(measurement_type_set))}
+
+    if get_key:  # print a key to the CSV dictionaries:
+        print('\nCSV file dictionary keys: \n'
+              + '  Source types: ' + str(source_type_dict) + '\n'
+              + '  Source names: ' + str(source_name_dict) + '\n'
+              + '  Market series: ' + str(market_series_dict) + '\n'
+              + '  Interval date range: {0: ' + str(interval_date_dict[0]) + '} to {' + str(len(interval_date_dict)-1)
+                                + ': ' + str(interval_date_dict[len(interval_date_dict)-1]) + '}\n'
+              + '  Interval time range: {0: ' + str(interval_time_dict[0]) + '} to {' + str(len(interval_time_dict)-1)
+                                + ': ' + str(interval_time_dict[len(interval_time_dict)-1]) + '}\n'
+              + '  Measurement types: ' + str(measurement_type_dict) + '\n'
+              )
+
+    items0 = []
+    try:
+        items0 = [source_type_dict[source_type] == lines[i]['SOURCE_TYPE']
+                  for i in range(len(lines))]
+    except KeyError:
+        print('The source type key must be less than or equal to ' + str(len(source_type_dict)-1) + '.')
+        return
+    finally:
+        if verbose or get_key:
+            print('Source type ' + str(source_type) + ': \"' + str(source_type_dict[source_type]) + '\" ('
+                  + str(sum(items0)) + ' records)')
+
+    items1 = []
+    try:
+        items1 = [source_name_dict[source_name] == lines[i]['SOURCE_NAME']
+                  for i in range(len(lines))]
+    except KeyError:
+        print('The source name key must be less than or equal to ' + str(len(source_name_dict) - 1) + '.')
+        return
+    finally:
+        if verbose or get_key:
+            print('Source name ' + str(source_name) + ': \"' + str(source_name_dict[source_name])
+                  + '\" (' + str(sum(items1)) + ' records)')
+
+    items2 = []
+    try:
+        items2 = [market_series_dict[market_series] == lines[i]['MARKET_SERIES']
+                  for i in range(len(lines))]
+    except KeyError:
+        print('The market series key must be less than or equal to ' + str(len(market_series_dict) - 1) + '.')
+    finally:
+        if verbose or get_key:
+            print('Market series ' + str(market_series) + ': \"' + str(market_series_dict[market_series])
+                  + '\" (' + str(sum(items2)) + ' records)')
+
+    items3 = []
+    try:
+        items3 = [interval_date_dict[interval_date] == lines[i]['INTERVAL_STARTING_DATE']
+                  for i in range(len(lines))]
+    except KeyError:
+        print('The interval date key must be less than or equal to ' + str(len(interval_date_dict) - 1) + '.')
+    finally:
+        if verbose or get_key:
+            print('Interval date ' + str(interval_date) + ': \"' + str(interval_date_dict[interval_date])
+                  + '\" (' + str(sum(items3)) + ' records)')
+
+    items4 = []
+    try:
+        items4 = [interval_time_dict[interval_time] == lines[i]['INTERVAL_STARTING_TIME']
+                  for i in range(len(lines))]
+    except KeyError:
+        print('The interval time key must be less than or equal to ' + str(len(interval_time_dict) - 1) + '.')
+    finally:
+        if verbose or get_key:
+            print('Interval time ' + str(interval_time) + ': \"' + str(interval_time_dict[interval_time])
+                  + '\" (' + str(sum(items4)) + ' records)')
+
+    items5 = []
+    try:
+        items5 = [measurement_type_dict[measurement_type] == lines[i]['MEASUREMENT_TYPE']
+                  for i in range(len(lines))]
+    except KeyError:
+        print('The measurement type key must be less than or equal to ' + str(len(measurement_type_dict) - 1) + '.')
+    finally:
+        if verbose or get_key:
+            print('Measurement type ' + str(measurement_type) + ': \"' + str(measurement_type_dict[measurement_type])
+                  + '\" (' + str(sum(items5)) + ' records)')
+
+    items = [items0[i] * items1[i] * items2[i] * items3[i] * items4[i] * items5[i] for i in range(len(lines))]
+
+    if verbose:
+        print('There are ' + str(sum(items)) + ' records matching all chosen keys.')
+
+    if sum(items) == 0:
+        Warning('The chosen keys resulted in no records. Stopping.')
+        return None
+
+    if plot:
+        item_numbers = [i for i in range(len(lines)) if items[i] == 1]
+
+        x = []
+        y = []
+        for item in item_numbers:
+            x.append(lines[item]['VALUE_1'])
+            y.append(lines[item]['VALUE_2'])
+
+        if len(item_numbers)==1:
+            x = [-0.1, 0, 0.1]
+            y = [y[0], y[0], y[0]]
+
+        cond = [x[i] != float('inf') and x[i] is not None
+                and y[i] != float('inf') and y[i] is not None
+                for i in range(len(x))]
+        xf = [float(x[i]) for i in range(len(x)) if cond[i]]
+        yf = [float(y[i]) for i in range(len(x)) if cond[i]]
+
+        try:
+            # Plot the vertices that have been found:
+            plt.close()
+            xmin = min(xf)
+            xmax = max(xf)
+            xdif = 0.1 * (xmax - xmin)
+            plt.xlim(xmin - xdif, xmax + xdif)
+            if len(item_numbers)==1:
+                plt.plot(xf, yf)
+            else:
+                plt.plot(xf, yf, marker='*')
+            plt.ylabel('quantity [avg. kW]')
+            plt.xlabel('marginal price [$/kWh]')
+
+            xpos = round(sum(xf)/len(xf), 3)
+            ypos = round(sum(yf)/len(yf), 3)
+
+            item = item_numbers[0]
+            text = 'Source: ' + lines[item]['SOURCE_NAME'] + '\n' + \
+                   'Series: ' + lines[item]['MARKET_SERIES'] + '\n' + \
+                   '  ' + 'Date: ' + lines[item]['INTERVAL_STARTING_DATE'] + '\n' + \
+                   '  ' + 'Time: ' + lines[item]['INTERVAL_STARTING_TIME'] + '\n' + \
+                   '  ' + 'Type: ' + lines[item]['MEASUREMENT_TYPE']
+            plt.text(xpos, ypos, text, multialignment="left")
+
+            # Add arrow toward -infinity.
+            plt.annotate("", xy=(xf[0] - xdif, yf[0]),
+                         xytext=(xf[0], yf[0]),
+                         arrowprops=dict(arrowstyle="->", color='b'))
+
+            # Add arrow toward +infinity.
+            plt.annotate("", xy=(xf[-1] + xdif, yf[-1]),
+                         xytext=(xf[-1], yf[-1]),
+                         arrowprops=dict(arrowstyle="->", color='b'))
+
+            plt.show()
+
+        except ZeroDivisionError:
+            print('This set has no valid members.')
+
+    return None
