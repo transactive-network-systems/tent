@@ -51,7 +51,7 @@ import headers
 from datetime import datetime, timedelta
 from information_service_model import InformationServiceModel
 from interval_value import IntervalValue
-from meter_point import MeterPoint
+from tent.meter_point import MeterPoint
 from measurement_type import MeasurementType
 from measurement_unit import MeasurementUnit
 from collections import defaultdict

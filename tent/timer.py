@@ -46,7 +46,7 @@ under Contract DE-AC05-76RL01830
 from datetime import datetime
 
 
-class Timer:
+class Timer(object):
     created_time = None
     sim_one_hr_in_sec = 1200
     sim_start_time = None
@@ -66,6 +66,13 @@ class Timer:
             cur_time = cls.sim_start_time + simulation_time_diff
 
         return cur_time
+
+    @classmethod
+    def now(cls, tzinfo=None):
+        if tzinfo:
+            return tzinfo.localize(cls.get_cur_time())
+        else:
+            return cls.get_cur_time()
 
 
 if __name__ == '__main__':

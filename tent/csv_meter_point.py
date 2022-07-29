@@ -50,7 +50,7 @@ under Contract DE-AC05-76RL01830
 import pandas as pd
 from datetime import datetime, timedelta
 from interval_value import IntervalValue
-from meter_point import MeterPoint
+from tent.meter_point import MeterPoint
 from measurement_type import MeasurementType
 from measurement_unit import MeasurementUnit
 

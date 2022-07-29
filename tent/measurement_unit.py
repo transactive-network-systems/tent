@@ -42,7 +42,9 @@ under Contract DE-AC05-76RL01830
 """
 
 
-class MeasurementUnit:
+from enum import Enum
+
+class MeasurementUnit(Enum):
     # MeasurementUnit enumeration - confirm allowed unit of measure is being
     # used
     #

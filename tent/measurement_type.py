@@ -41,8 +41,10 @@ operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
 
+from enum import Enum
 
-class MeasurementType:
+
+class MeasurementType(Enum):
     # MeasurementType Enumeration
     #   This enumeration is used by IntervalValue class to consistently
     #   specify types of measurements being made, including their units of
@@ -85,6 +87,8 @@ class MeasurementType:
     PredictedValue = 34
     Unknown = 40
 
+    # TODO: Deprecated method. If it is not necessary to have data_manager.append_interval_value_table():112 get an
+    #  underscore delimited version, this functionality is already provided by Enum as obj.measurementType.name.
     @classmethod
     def get(cls, number=40):
         lookup = {1: 'Voltage',
