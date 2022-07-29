@@ -43,15 +43,13 @@ under Contract DE-AC05-76RL01830
 
 
 from vertex import Vertex
-from interval_value import IntervalValue
-from measurement_type import MeasurementType
-from helpers import *
-from market import Market
-from time_interval import TimeInterval
-from local_asset_model import LocalAsset
+from tent.interval_value import IntervalValue
+from tent.measurement_type import MeasurementType
+from tent.helpers import *
+from tent.local_asset_model import LocalAsset
 from timer import Timer
-from market_state import MarketState
-from log import LogLevels, log_statement, VOLTTRON_ENV
+from tent.market_state import MarketState
+from tent.log import LogLevels, log_statement
 
 
 class TccModel(LocalAsset):

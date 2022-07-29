@@ -42,12 +42,13 @@ under Contract DE-AC05-76RL01830
 """
 
 
-from helpers import *
-from measurement_type import MeasurementType
-from local_asset_model import LocalAsset
-from interval_value import IntervalValue
-from market_state import MarketState
-from log import log_statement, LogLevels
+from tent.helpers import *
+from tent.measurement_type import MeasurementType
+from tent.local_asset_model import LocalAsset
+from tent.interval_value import IntervalValue
+from tent.market_state import MarketState
+from tent.log import log_statement
+
 
 class SolarPvResource(LocalAsset, object):
     # SolarPvResourceModel Subclass for renewable solar PV generation The Solar PV resource is treated here as a must-

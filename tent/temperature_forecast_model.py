@@ -44,17 +44,15 @@ under Contract DE-AC05-76RL01830
 
 import os
 import csv
-import logging
 from datetime import datetime, timedelta
 from dateutil import parser
 import dateutil.tz
 import gevent
 
-from information_service_model import InformationServiceModel
-from measurement_type import MeasurementType
-from measurement_unit import MeasurementUnit
-from interval_value import IntervalValue
-from log import VOLTTRON_ENV, LogLevels, log_statement
+from tent.information_service_model import InformationServiceModel
+from tent.measurement_type import MeasurementType
+from tent.interval_value import IntervalValue
+from tent.log import VOLTTRON_ENV, LogLevels, log_statement
 
 class TemperatureForecastModel(InformationServiceModel, object):
     """
@@ -213,8 +211,8 @@ class TemperatureForecastModel(InformationServiceModel, object):
 
 
 if __name__ == '__main__':
-    from market import Market
-    import helpers
+    from tent.market import Market
+    from tent import helpers
 
     forecaster = TemperatureForecastModel('/home/hngo/PycharmProjects/volttron-applications/pnnl/TNSAgent/campus_config.json')
 

@@ -41,15 +41,12 @@ operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
 
-
-from datetime import datetime, timedelta
-
-from helpers import *
-from vertex import Vertex
-from time_interval import TimeInterval
-from interval_value import IntervalValue
-from measurement_type import MeasurementType
-from market import Market
+from tent.helpers import *
+from tent.vertex import Vertex
+from tent.time_interval import TimeInterval
+from tent.interval_value import IntervalValue
+from tent.measurement_type import MeasurementType
+from tent.market import Market
 
 
 def test_is_hlh():
@@ -95,7 +92,7 @@ def test_is_hlh():
 
 def test_order_vertices():
     try:
-        from vertex import Vertex
+        from tent.vertex import Vertex
     except (SystemError, ImportError):
         from .vertex import Vertex
 
@@ -115,8 +112,8 @@ def test_order_vertices():
 
 
 def test_production():
-    from local_asset_model import LocalAsset
-    from market import Market
+    from tent.local_asset_model import LocalAsset
+    from tent.market import Market
 
     print('Running test_production()')
     pf = 'pass'
@@ -200,8 +197,8 @@ def test_production():
 
 
 def test_prod_cost_from_formula():
-    from local_asset_model import LocalAsset
-    from market import Market
+    from tent.local_asset_model import LocalAsset
+    from tent.market import Market
 
     print('Running test_prod_cost_from_formula()')
     pf = 'pass'
@@ -263,8 +260,8 @@ def test_prod_cost_from_formula():
 
 
 def test_prod_cost_from_vertices():
-    from local_asset_model import LocalAsset
-    from market import Market
+    from tent.local_asset_model import LocalAsset
+    from tent.market import Market
 
     # TEST_PROD_COST_FROM_VERTICES - tests function prod_cost_from_vertices()
     print('Running test_prod_cost_from_vertices()')
@@ -366,7 +363,7 @@ def test_prod_cost_from_vertices():
 
 def test_are_different2():
     # 210127DJH: TODO: I observe many errors in this test today, but the method is not currently being used in auctions.
-    from transactive_record import TransactiveRecord
+    from tent.transactive_record import TransactiveRecord
 
     print('Running test_are_different2()')
     pf = 'pass'

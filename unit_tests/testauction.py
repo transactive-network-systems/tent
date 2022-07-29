@@ -42,17 +42,17 @@ under Contract DE-AC05-76RL01830
 """
 
 
-from auction import Auction
-from local_asset_model import LocalAsset
-from TransactiveNode import TransactiveNode
-from time_interval import TimeInterval
+from tent.auction import Auction
+from tent.local_asset_model import LocalAsset
+from tent.TransactiveNode import TransactiveNode
+from tent.time_interval import TimeInterval
 from datetime import datetime, timedelta
-from market_state import MarketState
-from neighbor_model import Neighbor
-from direction import Direction
-from vertex import Vertex
-from interval_value import IntervalValue
-from transactive_record import TransactiveRecord
+from tent.market_state import MarketState
+from tent.neighbor_model import Neighbor
+from tent.direction import Direction
+from tent.vertex import Vertex
+from tent.interval_value import IntervalValue
+from tent.transactive_record import TransactiveRecord
 
 
 def test_while_in_negotiation():

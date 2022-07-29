@@ -41,9 +41,9 @@ operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
 
-from auction import Auction
+from tent.auction import Auction
 from timer import Timer
-from log import VOLTTRON_ENV, LogLevels, log_statement
+from tent.log import VOLTTRON_ENV, log_statement
 
 
 class RealTimeAuction(Auction):
