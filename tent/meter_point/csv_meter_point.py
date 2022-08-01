@@ -51,11 +51,11 @@ import pandas as pd
 
 from tent.interval_value import IntervalValue
 from tent.measurement_type import MeasurementType
-from tent.meter_point import MeterPoint
+from tent.meter_point.pull_meter_point import PullMeterPoint
 
 
 # TODO: Add additional functionality based on measurement types, or create new children classes based on measurement
-class CSVMeterPoint(MeterPoint):
+class CSVMeterPoint(PullMeterPoint):
     def __init__(self, csv_path, *args, **kwargs):
         super(CSVMeterPoint, self).__init__(*args, **kwargs)
         self.csv_path = csv_path

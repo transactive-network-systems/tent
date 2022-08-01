@@ -56,7 +56,7 @@ from tent import headers
 from tent.async_ import AsyncCall
 from tent.interval_value import IntervalValue
 from tent.helpers import format_timestamp
-from tent.meter_point import MeterPoint
+from tent.meter_point.pull_meter_point import PullMeterPoint
 from tent.measurement_type import MeasurementType
 
 from bacpypes.task import RecurringTask
@@ -96,7 +96,7 @@ from bacpypes.basetypes import ServicesSupported
 from bacpypes.task import TaskManager
 
 
-class BACnetMeterPoint(MeterPoint):
+class BACnetMeterPoint(PullMeterPoint):
     def __init__(self, bacnet_config, *args, **kwargs):
         super(BACnetMeterPoint, self).__init__(*args, **kwargs)
         if (not isinstance(bacnet_config, dict) or

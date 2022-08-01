@@ -41,7 +41,7 @@ operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
 import unittest
-from tent.bacnet_meter_point import BACnetMeterPoint
+from tent.meter_point.bacnet_meter_point import BACnetMeterPoint
 from tent.market import Market
 
 import os
