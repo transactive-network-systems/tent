@@ -50,7 +50,7 @@ from tent.market import Market
 from tent.data_manager import *
 
 
-def DIVIDER():
+def divider():
     print(70*'*')
 
 
@@ -69,7 +69,7 @@ class TestCSVMeterPoint(unittest.TestCase):
         """
         # Dummy meter csv file creation.
         self.test_csv_path = "tmp_csv_meter_point_test.csv"
-        self.test_date = datetime(2020, 1, 1) # Test date Jan 1, 2020
+        self.test_date = datetime(2020, 1, 1)  # Test date Jan 1, 2020
         self.test_csv_length = 100
         self.test_df = pd.DataFrame({
             "Timestamp": [(self.test_date + timedelta(hours=x)) for x in range(self.test_csv_length)],
@@ -82,7 +82,7 @@ class TestCSVMeterPoint(unittest.TestCase):
         self.test_market.check_intervals()
 
         # Initialize CSVMeterPoint object
-        self.test_csv_meter = CSVMeterPoint(name="TestCSVMeter")
+        self.test_csv_meter = CSVMeterPoint(name="TestCSVMeter", csv_path=self.test_csv_path)
 
     def tearDown(self):
         """
@@ -99,7 +99,7 @@ class TestCSVMeterPoint(unittest.TestCase):
         # Verify nothing is stored in meter_intervals
         assert len(self.test_csv_meter.meter_intervals) == 0
         # Read in all values in csv
-        self.test_csv_meter.read_meter(self.test_market, self.test_csv_path)
+        self.test_csv_meter.read_meter(self.test_market)
         # Verify that all values have been read in.
         # This value should be one less than the length of the csv file (intervals)
         assert len(self.test_csv_meter.meter_intervals) == (self.test_csv_length - 1)
@@ -109,9 +109,11 @@ class TestCSVMeterPoint(unittest.TestCase):
                 # Verify that all values are IntervalValues
                 assert isinstance(self.test_csv_meter.meter_intervals[x], IntervalValue)
                 # Verify that timestamps match csv
-                self.assertEqual(self.test_csv_meter.meter_intervals[x].timeInterval.startTime, self.test_df["Timestamp"][x])
+                self.assertEqual(self.test_csv_meter.meter_intervals[x].timeInterval.startTime,
+                                 self.test_df["Timestamp"][x])
                 # Verify that values match csv value intervals
-                self.assertEqual(self.test_csv_meter.meter_intervals[x].value, (self.test_df["energy (kW)"][x+1] - self.test_df["energy (kW)"][x]))
+                self.assertEqual(self.test_csv_meter.meter_intervals[x].value,
+                                 (self.test_df["energy (kW)"][x+1] - self.test_df["energy (kW)"][x]))
 
     def test_case2(self):
         """
@@ -123,7 +125,7 @@ class TestCSVMeterPoint(unittest.TestCase):
         self.test_market.intervalsToClear += 1
         self.test_market.check_intervals()
         # Read in all values in csv
-        self.test_csv_meter.read_meter(self.test_market, self.test_csv_path)
+        self.test_csv_meter.read_meter(self.test_market)
         # Verify that all values have been read in.
         # This value should be one less than the length of the csv file (intervals)
         assert len(self.test_csv_meter.meter_intervals) == (self.test_csv_length - 1)
@@ -133,18 +135,21 @@ class TestCSVMeterPoint(unittest.TestCase):
                 # Verify that all values are IntervalValues
                 assert isinstance(self.test_csv_meter.meter_intervals[x], IntervalValue)
                 # Verify that timestamps match csv
-                self.assertEqual(self.test_csv_meter.meter_intervals[x].timeInterval.startTime, self.test_df["Timestamp"][x])
+                self.assertEqual(self.test_csv_meter.meter_intervals[x].timeInterval.startTime,
+                                 self.test_df["Timestamp"][x])
                 # Verify that values match csv value intervals
-                self.assertEqual(self.test_csv_meter.meter_intervals[x].value, (self.test_df["energy (kW)"][x+1] - self.test_df["energy (kW)"][x]))
+                self.assertEqual(self.test_csv_meter.meter_intervals[x].value,
+                                 (self.test_df["energy (kW)"][x+1] - self.test_df["energy (kW)"][x]))
+
 
 if __name__ == '__main__':
     # Run using python's built-in unit test module
     # unittest.main()
     # Run manually
-    DIVIDER()  # **********
+    divider()  # **********
     print('\nRunning tests in test_meter_csv.py')
 
-    DIVIDER()  # **********
+    divider()  # **********
     test_fixture = TestCSVMeterPoint()
     print('Running test fixture ' + str(test_fixture) + '.')
     
@@ -165,7 +170,7 @@ if __name__ == '__main__':
     test_fixture.tearDown()
 
     print('Fixture ' + str(test_fixture) + 'ran to completion.')
-    DIVIDER()  # **********
+    divider()  # **********
 
     print("\nTests in test_meter_csv.py ran to completion.")
-    DIVIDER()  # **********        
+    divider()  # **********
