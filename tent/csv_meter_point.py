@@ -48,35 +48,17 @@ under Contract DE-AC05-76RL01830
 # meter might be the source of more than one MeterPoint.
 
 import pandas as pd
-from datetime import datetime, timedelta
-from interval_value import IntervalValue
+
+from tent.interval_value import IntervalValue
+from tent.measurement_type import MeasurementType
 from tent.meter_point import MeterPoint
-from measurement_type import MeasurementType
-from measurement_unit import MeasurementUnit
 
 
 # TODO: Add additional functionality based on measurement types, or create new children classes based on measurement
 class CSVMeterPoint(MeterPoint):
-    def __init__(self,
-                 description='',
-                 measurement_interval=timedelta(hours=1),
-                 measurement_type=MeasurementType.Unknown,
-                 measurement_unit=MeasurementUnit.Unknown,
-                 name=''
-                 ):
-        super(CSVMeterPoint, self).__init__(description, measurement_interval, measurement_type, 
-            measurement_unit, name)
-        
-    # TODO: Consider how/whether this use of datetime.utcnow() affects simulations.
-    def set_meter_value(self, value, last_update=datetime.utcnow()):
-        self.current_hour_measurements.append(value)
-        self.lastUpdate = last_update
-
-    def update_avg(self):
-        if len(self.current_hour_measurements) > 30:
-            self.current_measurement = sum(self.current_hour_measurements) / len(self.current_hour_measurements)
-            self.current_hour_measurements = []
-        return self.current_measurement
+    def __init__(self, csv_path, *args, **kwargs):
+        super(CSVMeterPoint, self).__init__(*args, **kwargs)
+        self.csv_path = csv_path
 
     def _csv_to_df(self):
         """
@@ -85,7 +67,7 @@ class CSVMeterPoint(MeterPoint):
         CSV in format [Timestamp, Real Energy Total]
         Dataframe in format [index, Timestamp, Value]
         """
-        meter_df = pd.read_csv(self.path)
+        meter_df = pd.read_csv(self.csv_path)
         meter_df.rename(columns={
             meter_df.columns[0]: "Timestamp",
             meter_df.columns[1]: "Metered_Energy"
@@ -95,11 +77,10 @@ class CSVMeterPoint(MeterPoint):
 
         meter_df['Timestamp'] = pd.to_datetime(meter_df['Timestamp'], format="%Y-%m-%d %H:%M:%S")
         meter_df.set_index('Timestamp', inplace=True)
-        return meter_df 
-        
+        return meter_df
 
-    def read_meter(self, market, csv_path_str):
-        # Read the meter point at scheduled intervals from csv
+    def read_meter(self, market):
+        # Read the meter point at scheduled intervals from csv.
         # CSV format: [timestamp, value]
         # MeterPoints are updated on a schedule. Properties have been defined to keep track of the time of the last
         # update and the interval between updates.
@@ -108,8 +89,7 @@ class CSVMeterPoint(MeterPoint):
         # subclasses and redefine this function as needed to handle unique conditions.
         # CSV Format
         print('Made it to MeterPoint.read_meter() for ' + market.name)
-        
-        self.path = csv_path_str
+
         meter_df = self._csv_to_df()
         # Gather active time intervals
         time_intervals = market.timeIntervals
@@ -128,18 +108,18 @@ class CSVMeterPoint(MeterPoint):
                 pass
         return self.meter_intervals
 
-    def store(self, db="csvMeter.db", timeIntervals=None):
+    def store(self, db="csvMeter.db", time_intervals=None):
         """
         Store last measurement into historian
-        The default approach here could be to append a text record file. If the file is reserved for one meterpoint,
+        The default approach here could be to append a text record file. If the file is reserved for one MeterPoint,
         little or no metadata need be repeated in records. Minimum content should be reading time and datum.
         Implementers will be found to have diverse practices for historians.
 
         """
-        super(MeterPoint, self).store(db, timeIntervals)
+        super(CSVMeterPoint, self).store(db, time_intervals)
         return
         
     def read_database(self, db="csvMeter.db", key=None):
         # If key is specified, Start_Time in database will be checked
         # If a value matching the Start_Time exists, it will be returned
-        return super(MeterPoint, self).read_database(db, key)
+        return super(CSVMeterPoint, self).read_database(db, key)
