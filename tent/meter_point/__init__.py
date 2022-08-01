@@ -153,80 +153,82 @@ class MeterPoint(TimeSeriesBuffer):
         # subclasses and redefine this function as needed to handle unique conditions.
         print('Made it to MeterPoint.read_meter() for ' + obj.name)
 
-    # TODO: PEP8 names in this function.
-    def _intervalValue_to_dataFrame(self, intVal):
+    @staticmethod
+    def _interval_value_to_data_frame(int_val):
         """
         Helper method to convert IntervalValues into dataframes.
         Intended for writing to database. Format based on data_manager.py
         """
-        DATE_FORMAT = "%Y-%m-%d"  # Simple date format like '2021-01-26'.
-        TIME_FORMAT = "%H:%M:%S"  # Simple time format like '13:14:15'.
-        TIMESTAMP = format(datetime.now())  # TODO: Get rid of explicit datetime.
-        SOURCE_TYPE = intVal.associatedClass
-        SOURCE_NAME = intVal.associatedObject
-        MARKET_SERIES = intVal.market.marketSeriesName
-        MARKET_CLEARING_DATE = intVal.market.marketClearingTime.strftime(DATE_FORMAT)
-        MARKET_CLEARING_TIME = intVal.market.marketClearingTime.strftime(TIME_FORMAT)
-        INTERVAL_STARTING_DATE = intVal.timeInterval.startTime.strftime(DATE_FORMAT)
-        INTERVAL_STARTING_TIME = intVal.timeInterval.startTime.strftime(TIME_FORMAT)
-        MEASUREMENT_TYPE = MeasurementType.get(intVal.measurementType)
-        VALUE_1 = intVal.value
+        date_format = "%Y-%m-%d"  # Simple date format like '2021-01-26'.
+        time_format = "%H:%M:%S"  # Simple time format like '13:14:15'.
+        timestamp = format(Timer.get_cur_time())
+        source_type = int_val.associatedClass
+        source_name = int_val.associatedObject
+        market_series = int_val.market.marketSeriesName
+        market_clearing_date = int_val.market.marketClearingTime.strftime(date_format)
+        market_clearing_time = int_val.market.marketClearingTime.strftime(time_format)
+        interval_starting_date = int_val.timeInterval.startTime.strftime(date_format)
+        interval_starting_time = int_val.timeInterval.startTime.strftime(time_format)
+        measurement_type = MeasurementType.get(int_val.measurementType)
+        value_1 = int_val.value
         mini_df = pd.DataFrame({
-            "TIMESTAMP": TIMESTAMP,
-            "SOURCE_TYPE": SOURCE_TYPE,
-            "SOURCE_NAME": SOURCE_NAME,
-            "MARKET_SERIES": MARKET_SERIES,
-            "MARKET_CLEARING_DATE": MARKET_CLEARING_DATE,
-            "MARKET_CLEARING_TIME": MARKET_CLEARING_TIME,
-            "INTERVAL_STARTING_DATE": INTERVAL_STARTING_DATE,
-            "INTERVAL_STARTING_TIME": INTERVAL_STARTING_TIME,
-            "MEASUREMENT_TYPE": MEASUREMENT_TYPE,
-            "VALUE_1": VALUE_1
+            "TIMESTAMP": timestamp,
+            "SOURCE_TYPE": source_type,
+            "SOURCE_NAME": source_name,
+            "MARKET_SERIES": market_series,
+            "MARKET_CLEARING_DATE": market_clearing_date,
+            "MARKET_CLEARING_TIME": market_clearing_time,
+            "INTERVAL_STARTING_DATE": interval_starting_date,
+            "INTERVAL_STARTING_TIME": interval_starting_time,
+            "MEASUREMENT_TYPE": measurement_type,
+            "VALUE_1": value_1
         })
         return mini_df
 
     # TODO: Do we need to recreate the market class from the database,
     #       or will that exist and we can pass the market in here? Is this needed/useful?
-    def _dataFrame_to_intervalValue(self, df):
+    @staticmethod
+    def _data_frame_to_interval_value(df):
         """
         Helper method to convert dataframes into IntervalValues.
         Intended for reading from database.
         """
-        DATE_TIME_FORMAT = "%Y-%m-%d %H:%M:%S"
+        date_time_format = "%Y-%m-%d %H:%M:%S"
         market_date_time = df["MARKET_CLEARING_DATE"] + " " + df["MARKET_CLEARING_TIME"]
-        tmpMart = Market(market_series_name=df["MARKET_SERIES"], market_clearing_time=market_date_time)
-        intVal_date_time = df["INTERVAL_STARTING_DATE"] + " " + df["INTERVAL_STARTING_TIME"]
-        intVal = IntervalValue(calling_object=getattr(sys.modules[__name__], df["SOURCE_TYPE"]),
-                               market=tmpMart,
-                               measurement_type=df["MEASUREMENT_TYPE"],
-                               value=df["VALUE_1"]
-                               )
+        tmp_mart = Market(market_series_name=df["MARKET_SERIES"], market_clearing_time=market_date_time)
+        int_val_date_time = df["INTERVAL_STARTING_DATE"] + " " + df["INTERVAL_STARTING_TIME"]
+        int_val = IntervalValue(calling_object=getattr(sys.modules[__name__], df["SOURCE_TYPE"]),
+                                market=tmp_mart,
+                                measurement_type=df["MEASUREMENT_TYPE"],
+                                value=df["VALUE_1"]
+                                )
+        # TODO: This method appears to be incomplete.  It does not return or assign anything.
 
-    def store(self, db=None, timeIntervals=None):
+    def store(self, db=None, time_intervals=None):
         """
         Store last measurement into historian
-        The default approach here could be to append a text record file. If the file is reserved for one meterpoint,
+        The default approach here could be to append a text record file. If the file is reserved for one MeterPoint,
         little or no metadata need be repeated in records. Minimum content should be reading time and datum.
         Implementers will be found to have diverse practices for historians.
 
         """
         conn = sqlite3.connect(db)
         # When specific value is specified, store in database.
-        # Disregards whether or not the value is in meter interval list or not
+        # Disregards whether the value is in meter interval list or not
         # Force command
-        if timeIntervals:
-            for ti in timeIntervals:
-                intervalValueObj = find_obj_by_ti(self.meter_intervals, ti)
-                if intervalValueObj:
-                    self.meter_intervals.pop(self.meter_intervals.index(intervalValueObj))
-                    mini_df = self._intervalValue_to_dataFrame(intervalValueObj)
+        if time_intervals:
+            for ti in time_intervals:
+                interval_value_obj = find_obj_by_ti(self.meter_intervals, ti)
+                if interval_value_obj:
+                    self.meter_intervals.pop(self.meter_intervals.index(interval_value_obj))
+                    mini_df = self._interval_value_to_data_frame(interval_value_obj)
                     mini_df.to_sql("meter", conn, index=False, if_exists="append")
         # If nothing is specified, use the default behaviour
         # Only remove value from list if market has expired for intervalValue
         else:
             for interval in self.meter_intervals:
                 if interval.market.marketState == MarketState.Expired:
-                    mini_df = self._intervalValue_to_dataFrame(interval)
+                    mini_df = self._interval_value_to_data_frame(interval)
                     mini_df.to_sql("meter", conn, index=False, if_exists="append")
                     self.meter_intervals.pop(self.meter_intervals.index(interval))
         return
@@ -237,12 +239,14 @@ class MeterPoint(TimeSeriesBuffer):
         # If a value matching the Start_Time exists, it will be returned
         conn = sqlite3.connect(db)
         if key:
-            DATE_FORMAT = "%Y-%m-%d"  # Simple date format like '2021-01-26'.
-            TIME_FORMAT = "%H:%M:%S"  # Simple time format like '13:14:15'.
-            key_date = key.strftime(DATE_FORMAT)
-            key_time = key.strftime(TIME_FORMAT)
+            date_format = "%Y-%m-%d"  # Simple date format like '2021-01-26'.
+            time_format = "%H:%M:%S"  # Simple time format like '13:14:15'.
+            key_date = key.strftime(date_format)
+            key_time = key.strftime(time_format)
             mini_df = pd.read_sql(
-                f"SELECT * FROM meter WHERE INTERVAL_STARTING_DATE = {key_date} AND INTERVAL_STARTING_TIME = {key_time}",
+                f"SELECT *"
+                f" FROM meter "
+                f"WHERE INTERVAL_STARTING_DATE = {key_date} AND INTERVAL_STARTING_TIME = {key_time}",
                 conn)
             return mini_df["VALUE_1"][0]
         # If no key is specified, return all values found in the database
