@@ -119,29 +119,19 @@ class MeterPoint(TimeSeriesBuffer):
         """Average or some other aggregate metric."""
         return mean(self.current_interval_measurements)
 
-    # TODO: Looks like this should be time, not value.
-    # TODO: PEP8 this name.
     @property
-    def last_update(self):
+    def last_updated(self):
         """Most recent measurement."""
-        return self.last
+        return self.last.d_time
 
     @property
     def current_measurement(self):
         """Most recent measurement."""
-        return self.last
+        return self.last.value
 
     def set_meter_value(self, value, last_update=None):
         last_update = last_update if last_update else Timer.get_cur_time()
         self.append(self.scale_factor * value, last_update)
-        self.last = last_update
-
-    # TODO: Remove update_avg, but first investigate its use: make sure no functionality lost.
-    # def update_avg(self):
-    #     if len(self.current_hour_measurements) > 30:
-    #         self.current_measurement = sum(self.current_hour_measurements) / len(self.current_hour_measurements)
-    #         self.current_hour_measurements = []
-    #     return self.current_measurement
 
     def read_meter(self, obj):
         # Read the meter point at scheduled intervals
@@ -204,6 +194,8 @@ class MeterPoint(TimeSeriesBuffer):
                                 )
         # TODO: This method appears to be incomplete.  It does not return or assign anything.
 
+    # TODO: Are we expecting the meter to hold onto multiple past intervals before saving?
+    #  This should probably be refactored to only store the current value.
     def store(self, db=None, time_intervals=None):
         """
         Store last measurement into historian
