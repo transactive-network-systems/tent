@@ -47,21 +47,19 @@ under Contract DE-AC05-76RL01830
 # measurement location within the circuit. Therefore, a single physical
 # meter might be the source of more than one MeterPoint.
 
-import headers
-from datetime import datetime, timedelta
-from information_service_model import InformationServiceModel
-from interval_value import IntervalValue
-from tent.meter_point import MeterPoint
-from measurement_type import MeasurementType
-from measurement_unit import MeasurementUnit
 from collections import defaultdict
-from async_ import AsyncCall
+from datetime import datetime
 from gevent.event import AsyncResult
-
 from queue import Queue, Empty
 
-from bacpypes.task import RecurringTask
+from tent import headers
+from tent.async_ import AsyncCall
+from tent.interval_value import IntervalValue
+from tent.helpers import format_timestamp
+from tent.meter_point import MeterPoint
+from tent.measurement_type import MeasurementType
 
+from bacpypes.task import RecurringTask
 import bacpypes.core
 
 import threading
@@ -71,7 +69,7 @@ bacpypes.core.enable_sleeping()
 
 from bacpypes.pdu import Address, GlobalBroadcast
 from bacpypes.app import BIPSimpleApplication
-from bacpypes.service.device import LocalDeviceObject
+from bacpypes.local.device import LocalDeviceObject
 from bacpypes.object import get_datatype
 
 from bacpypes.apdu import (ReadPropertyRequest,
@@ -97,78 +95,65 @@ from bacpypes.constructeddata import Array, Any, Choice
 from bacpypes.basetypes import ServicesSupported
 from bacpypes.task import TaskManager
 
-class BACnetConfig(InformationServiceModel):
-    def __init__(self,
-                 local_address = '', 
-                 target_address = '',
-                 description = '', 
-                 informationType = MeasurementType.Unknown,
-                 informationUnits = MeasurementUnit.Unknown,
-                 nextQueryTime = None,
-                 serviceExpirationDate = None,
-                 updatePeriod = timedelta(hours=1), 
-                 updateInterval = timedelta(hours=1)
-                 ):
-        # Address to set for the BACnetProxy. 
-        # TODO: May want to create a single BACnetProxy for TENT, and use address to specify meter address only                 
-        self.address = local_address 
-        # Address of BACnet device to scrape points from
-        self.target_address = target_address 
-        self.description = description
-        self.informationType = informationType
-        self.informationUnits = informationUnits
-        self.nextQueryTime = nextQueryTime
-        self.serviceExpirationDate = serviceExpirationDate
-        self.updatePeriod = updatePeriod
-        self.updateInterval = updateInterval
-        super(BACnetConfig, self).__init__()
-
 
 class BACnetMeterPoint(MeterPoint):
-    def __init__(self,
-                 description='',
-                 measurement_interval=timedelta(hours=1),
-                 measurement_type=MeasurementType.Unknown,
-                 measurement_unit=MeasurementUnit.Unknown,
-                 name='',
-                 bacnet_config = BACnetConfig()
-                 ):
-        super(BACnetMeterPoint, self).__init__(description, measurement_interval, measurement_type, 
-            measurement_unit, name)
-        self.bacnet_config = bacnet_config
-        self.bacnet_proxy = BACnetProxy(self.bacnet_config.address)
-       
+    def __init__(self, bacnet_config, *args, **kwargs):
+        super(BACnetMeterPoint, self).__init__(*args, **kwargs)
+        if (not isinstance(bacnet_config, dict) or
+                'local_address' not in bacnet_config or 'target_address' not in bacnet_config):
+            raise ValueError(f'BACnetMeterPoint requires a bacnet_config dictionary with at least'
+                             f' "local_address" and "target_address" specified.')
+        self.bacnet_config = {
+            'device_address': bacnet_config['local_address'],
+            'target_address': bacnet_config['target_address'],
+            'max_apdu_len': bacnet_config.get('max_apdu_len', 1024),
+            'seg_supported': bacnet_config.get('seg_supported', "segmentedBoth"),
+            'obj_id': bacnet_config.get('obj_id', 599),
+            'obj_name': bacnet_config.get('obj_name', "TENT BACnetMeterPoint"),
+            'ven_id': bacnet_config.get('ven_id', 15),
+            'max_per_request': bacnet_config.get('max_per_request', 1000000),
+            'request_check_interval': bacnet_config.get('request_check_interval', 100)
+        }
+        # TODO: May want to create a single BACnetProxy for TENT, and use address to specify meter address only.
+        self.bacnet_proxy = BACnetProxy(**self.bacnet_config)
 
+    # TODO: Adding parameters to this function breaks the interface defined in MeterPoint.
+    #  Can we use an object variable for device_address & points? Device_address should be available, but if we want to
+    #  read different points for some reason, that should probably be another function that doesn't subclass MeterPoint.
     def read_meter(self, market, device_address, points=None):
-        # Read the meter point at scheduled intervals from csv
-        # CSV format: [timestamp, value]
         # MeterPoints are updated on a schedule. Properties have been defined to keep track of the time of the last
         # update and the interval between updates.
         # Read market
         # While this seems easy, meters will be found to be diverse and may use diverse standards and protocols. Create
         # subclasses and redefine this function as needed to handle unique conditions.
-        # CSV Format
 
         print('Made it to BACnetMeterPoint.read_meter() for ' + market.name)
-        
+        # TODO: A meter would not be expected to have forward intervals, but the market should not have expired ones.
+        #  This should probably be refactored to only query the current value.
+        #  Future forecasts should be the domain of information services.
         # Gather active time intervals
         time_intervals = market.timeIntervals
-        for i in range(len(time_intervals)):
+        for interval in time_intervals:
             if points:
                 bacnet_data = self.bacnet_proxy.read_using_single_request(device_address, points)
             else:
-                bacnet_data = self.bacnet_proxy.read_using_single_request(device_address, self.bacnet_config.description)
+                # TODO: What should this description key contain? This was not clear from original code, and the
+                #  bacnet_proy.read_using_single_request() method only accepts something with .items() (e.g., a dict).
+                #  The current change to a dict for bacnet_config does not include a description. Should it?
+                #  This appears to need to be a dictionary of points.
+                bacnet_data = self.bacnet_proxy.read_using_single_request(device_address,
+                                                                          self.bacnet_config['description'])
             # Attempt to get value based on timeInterval.
             # If the timeInterval does not exist in the csv data, skip. 
             try:
-                interval_value = bacnet_data
-                interval = IntervalValue(self, time_intervals[i], market, MeasurementType.EnergyReal, interval_value)
-                self.meter_intervals.append(interval)
+                value = bacnet_data
+                interval_value = IntervalValue(self, interval, market, MeasurementType.EnergyReal, value)
+                self.meter_intervals.append(interval_value)
             except KeyError:
                 pass
         return self.meter_intervals
 
-    def store(self, db="bacnetMeter.db", timeIntervals=None):
+    def store(self, db="bacnetMeter.db", time_intervals=None):
         """
         Store last measurement into historian
         The default approach here could be to append a text record file. If the file is reserved for one meterpoint,
@@ -176,14 +161,13 @@ class BACnetMeterPoint(MeterPoint):
         Implementers will be found to have diverse practices for historians.
 
         """
-        super(MeterPoint, self).store(db, timeIntervals)
+        super(BACnetMeterPoint, self).store(db, time_intervals)
         return
         
     def read_database(self, db="bacnetMeter.db", key=None):
         # If key is specified, Start_Time in database will be checked
         # If a value matching the Start_Time exists, it will be returned
-        return super(MeterPoint, self).read_database(db, key)
-
+        return super(BACnetMeterPoint, self).read_database(db, key)
 
 
 # Make sure the TaskManager singleton exists...
@@ -510,37 +494,6 @@ class BACnetApplication(BIPSimpleApplication, RecurringTask):
 
 write_debug_str = "Writing: {target} {type} {instance} {property} (Priority: {priority}, Index: {index}): {value}"
 
-def format_timestamp(time_stamp):
-    """Create a consistent datetime string representation based on
-    ISO 8601 format.
-    
-    YYYY-MM-DDTHH:MM:SS.mmmmmm for unaware datetime objects.
-    YYYY-MM-DDTHH:MM:SS.mmmmmm+HH:MM for aware datetime objects
-    
-    :param time_stamp: value to convert
-    :type time_stamp: datetime
-    :returns: datetime in string format
-    :rtype: str
-    """
-
-    time_str = time_stamp.strftime("%Y-%m-%dT%H:%M:%S.%f")
-
-    if time_stamp.tzinfo is not None:
-        sign = '+'
-        td = time_stamp.tzinfo.utcoffset(time_stamp)
-        if td.days < 0:
-            sign = '-'
-            td = -td
-
-        seconds = td.seconds
-        minutes, seconds = divmod(seconds, 60)
-        hours, minutes = divmod(minutes, 60)
-        time_str += "{sign}{HH:02}:{MM:02}".format(sign=sign,
-                                                HH=hours,
-                                                MM=minutes)
-
-    return time_str
-
 
 class BACnetProxy(object):
     """
@@ -548,7 +501,7 @@ class BACnetProxy(object):
     """
     def __init__(self, device_address, max_apdu_len, seg_supported, obj_id, obj_name, ven_id, max_per_request,
                  request_check_interval=100, **kwargs):
-        super(BACnetProxy, self).__init__(**kwargs)
+        super(BACnetProxy, self).__init__()
 
         async_call = AsyncCall()
         self.bacnet_application = None
@@ -711,12 +664,12 @@ class BACnetProxy(object):
         """
 
         print(write_debug_str.format(target=target_address,
-                                          type=object_type,
-                                          instance=instance_number,
-                                          property=property_name,
-                                          priority=priority,
-                                          index=index,
-                                          value=value))
+                                     type=object_type,
+                                     instance=instance_number,
+                                     property=property_name,
+                                     priority=priority,
+                                     index=index,
+                                     value=value))
 
         request = WritePropertyRequest(objectIdentifier=(object_type, instance_number),
                                        propertyIdentifier=property_name)
@@ -926,8 +879,8 @@ class BACnetProxy(object):
                 print("sending read property request for point {} on device {}".format(point_name, device_path))
                 self.read_property(address, object_type, instance_number, 'covIncrement')
             except Exception as error:
-                print("the covIncrement for {} on {} could not be read, no cov subscription was established".
-                             format(point_name, device_path))
+                print(f"the covIncrement for {point_name} on {device_path} could not be read,"
+                      f" no cov subscription was established")
                 print(error)
 
     def send_cov_subscription(self, address, subscriber_process_identifier, monitored_object_identifier, lifetime,

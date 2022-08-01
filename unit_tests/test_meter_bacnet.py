@@ -41,7 +41,7 @@ operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
 import unittest
-from tent.bacnet_meter_point import BACnetConfig, BACnetMeterPoint
+from tent.bacnet_meter_point import BACnetMeterPoint
 from tent.market import Market
 
 import os
@@ -50,7 +50,8 @@ import socket
 BACNET_DEVICE_TOPIC = "devices/bacnet"
 BACNET_TEST_IP = "BACNET_TEST_IP"
 
-def DIVIDER():
+
+def divider():
     print(70*'*')
 
 
@@ -69,9 +70,11 @@ class TestBACnetMeterPoint(unittest.TestCase):
         """
         device_address = socket.gethostbyname(socket.gethostname() + ".local")
         print(f"Device address for proxy agent for testing: {device_address}")
-        bacnet_config = BACnetConfig(local_address=device_address,
-                                     target_address=os.environ.get(BACNET_TEST_IP),
-                                     description="BACnet Meter Device")
+        bacnet_config = {
+            'local_address': device_address,
+            'target_address': os.environ.get(BACNET_TEST_IP),
+            'description': "BACnet Meter Device"
+        }
         
         # Mock market object creation
         self.test_market = Market(intervals_to_clear=(self.test_csv_length-1), market_clearing_time=self.test_date)
@@ -92,8 +95,8 @@ class TestBACnetMeterPoint(unittest.TestCase):
         """
         print("\nCASE 1: Read from BACnet device")
         register_values = [
-        "3820a/Field Bus.3820A CHILLER.AHU-COIL-CHWR-T",
-        "3820a/Field Bus.3820A CHILLER.CHW-FLOW",
+            "3820a/Field Bus.3820A CHILLER.AHU-COIL-CHWR-T",
+            "3820a/Field Bus.3820A CHILLER.CHW-FLOW",
         ]
         actual_values = self.test_bacnet_meter.read_meter()
         print(f"Result of read_meter: {actual_values}")
@@ -106,10 +109,10 @@ if __name__ == '__main__':
     # Run using python's built-in unit test module
     # unittest.main()
     # Run manually
-    DIVIDER()  # **********
+    divider()  # **********
     print('\nRunning tests in test_meter_bacnet.py')
 
-    DIVIDER()  # **********
+    divider()  # **********
     test_fixture = TestBACnetMeterPoint()
     print('Running test fixture ' + str(test_fixture) + '.')
     
@@ -122,7 +125,7 @@ if __name__ == '__main__':
     test_fixture.tearDown()
     
     print('Fixture ' + str(test_fixture) + 'ran to completion.')
-    DIVIDER()  # **********
+    divider()  # **********
 
     print("\nTests in test_meter_bacnet.py ran to completion.")
-    DIVIDER()  # **********        
+    divider()  # **********
