@@ -74,7 +74,8 @@ class SimpleBuilding(LocalAsset):
                  name='Very_Simple_Building',
                  schedule_calculated=False,
                  scheduling_horizon=timedelta(hours=0),
-                 subclass=None):
+                 subclass=None,
+                 *args, **kwargs):
         super(LocalAsset, self).__init__(cost_parameters=cost_parameters,
                                          default_power=default_power,
                                          description=description,
@@ -85,7 +86,8 @@ class SimpleBuilding(LocalAsset):
                                          name=name,
                                          schedule_calculated=schedule_calculated,
                                          scheduling_horizon=scheduling_horizon,
-                                         subclass=subclass)  # Inherit from any parent class
+                                         subclass=subclass,
+                                         *args, **kwargs)  # Inherit from any parent class
         self.defaultVertices = [off_peak_vertex,
                                 on_peak_vertex0,
                                 on_peak_vertex1

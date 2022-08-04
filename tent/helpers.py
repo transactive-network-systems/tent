@@ -42,11 +42,23 @@ under Contract DE-AC05-76RL01830
 """
 
 
+import dateutil
+import logging
 import math
+import pytz
 
 from datetime import datetime, timedelta
+from .utils.log import setup_logging
 
-from log import log_statement, LogLevels
+setup_logging()
+_log = logging.getLogger(__name__)
+
+
+def validate_bool(value, name):
+    if not (isinstance(value, bool) or isinstance(value, int) or isinstance(value, float)):
+        raise ValueError(f'{name} must be bool, not {type(value)}')
+    return bool(value)
+
 
 def format_date(dt):
     return dt.strftime('%Y%m%d')
@@ -501,12 +513,12 @@ def are_different1(s, r, threshold, calling_neighbor=''):
     # except:
     #     raise Exception("TCC r0.power: {} s0.power: {} dq: {}".format(r0.power, s0.power, dq))
 
-    log_statement("TCC neighbor {} has q_avg {}, r0.power {}, s0.power {}, dq {}, dmp {}".format(
-         calling_neighbor, q_avg, r0.power, s0.power, dq, dmp), LogLevels.debug)
-    log_statement("TCC neighbor {} s is: {}".format(
-        calling_neighbor,[(x.timeInterval, x.record, x.power, x.marginalPrice) for x in s]), LogLevels.debug)
-    log_statement("TCC neighbor {} r is: {}".format(
-         calling_neighbor, [(x.timeInterval, x.record, x.power, x.marginalPrice) for x in r]), LogLevels.debug)
+    _log.debug("TCC neighbor {} has q_avg {}, r0.power {}, s0.power {}, dq {}, dmp {}".format(
+         calling_neighbor, q_avg, r0.power, s0.power, dq, dmp))
+    _log.debug("TCC neighbor {} s is: {}".format(
+         calling_neighbor,[(x.timeInterval, x.record, x.power, x.marginalPrice) for x in s]))
+    _log.debug("TCC neighbor {} r is: {}".format(
+         calling_neighbor, [(x.timeInterval, x.record, x.power, x.marginalPrice) for x in r]))
 
     if q_avg != 0:
         if len(s) == 1 or len(r) == 1:
@@ -527,8 +539,8 @@ def are_different1(s, r, threshold, calling_neighbor=''):
         # is less than the threshold criterion. Return false, meaning that
         # the two messages are not significantly different.
         is_diff = False
+    _log.debug("TCC for {} are_different1 returns {}".format(calling_neighbor, is_diff))
 
-    log_statement("TCC for {} are_different1 returns {}".format(calling_neighbor, is_diff), LogLevels.debug)
     return is_diff
 
 
@@ -565,12 +577,12 @@ def are_different2(m, s, threshold, calling_neighbor=''):
         # Calculate the average scheduled power avg_q of the two sets of records.
         avg_q = 0.5 * abs(m0.power + s0.power)  # [avg.kW]
 
-        log_statement("TCC neighbor {} has q_avg {}, m0.power {}, s0.power {}, dq {}".format(
-            calling_neighbor, avg_q, m0.power, s0.power, dq), LogLevels.debug)
-        log_statement("TCC neighbor {} s is: {}".format(
-            calling_neighbor, [(x.timeInterval, x.record, x.power, x.marginalPrice) for x in s]), LogLevels.debug)
-        log_statement("TCC neighbor {} m is: {}".format(
-            calling_neighbor, [(x.timeInterval, x.record, x.power, x.marginalPrice) for x in m]), LogLevels.debug)
+        _log.debug("TCC neighbor {} has q_avg {}, m0.power {}, s0.power {}, dq {}".format(
+            calling_neighbor, avg_q, m0.power, s0.power, dq))
+        _log.debug("TCC neighbor {} s is: {}".format(
+            calling_neighbor, [(x.timeInterval, x.record, x.power, x.marginalPrice) for x in s]))
+        _log.debug("TCC neighbor {} m is: {}".format(
+            calling_neighbor, [(x.timeInterval, x.record, x.power, x.marginalPrice) for x in m]))
 
         # Calculate relative distance d between the two scheduled powers.
         # Avoid the unlikely condition that the average power is zero.
@@ -597,10 +609,10 @@ def are_different2(m, s, threshold, calling_neighbor=''):
         s0 = [x for x in s if x.record != 0]
         m0 = [x for x in m if x.record != 0]
 
-        log_statement("TCC neighbor {} s is: {}".format(
-            calling_neighbor, [(x.timeInterval, x.record, x.power, x.marginalPrice) for x in s]), LogLevels.debug)
-        log_statement("TCC neighbor {} m is: {}".format(
-            calling_neighbor, [(x.timeInterval, x.record, x.power, x.marginalPrice) for x in m]), LogLevels.debug)
+        _log.debug("TCC neighbor {} s is: {}".format(
+            calling_neighbor, [(x.timeInterval, x.record, x.power, x.marginalPrice) for x in s]))
+        _log.debug("TCC neighbor {} m is: {}".format(
+            calling_neighbor, [(x.timeInterval, x.record, x.power, x.marginalPrice) for x in m]))
 
         # Index through the sent and calculated flexibility records. See if
         # any record cannot be matched with a corresponding member of
@@ -642,5 +654,5 @@ def are_different2(m, s, threshold, calling_neighbor=''):
             if is_diff:
                 break
 
-    log_statement("TCC for {} are_different2 returns {}".format(calling_neighbor, is_diff), LogLevels.debug)
+    _log.debug("TCC for {} are_different2 returns {}".format(calling_neighbor, is_diff))
     return is_diff

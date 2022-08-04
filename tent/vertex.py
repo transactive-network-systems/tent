@@ -42,6 +42,7 @@ under Contract DE-AC05-76RL01830
 """
 
 
+from tent.helpers import validate_bool
 
 class Vertex:
     def __init__(self, marginal_price, prod_cost, power, continuity=True, power_uncertainty=0.0, record=0):
@@ -51,24 +52,36 @@ class Vertex:
         # covers actual costs, but includes no profits. Others can be offered a cost that additionally includes
         # production surplus (aka "profit"). NOTE that this is stated as absolute dollar ($), not dollars per hour
         # ($/h).
-        self.cost = prod_cost  # [$] Real & >=0.0
+        self.cost = float(prod_cost)  # [$] Real & >=0.0
 
         # The signal. The unit price upon which resource decisions should be based.
-        self.marginalPrice = marginal_price  # [$/kWh] Real & >=0.0
+        self.marginalPrice = float(marginal_price)  # [$/kWh] Real & >=0.0
 
         # The averaged interval power
         # POWER > 0: generation or importation of real power
         # POWER > 0: consumption or exportation
-        self.power = power  # [avg.kW] Real
+        self.power = float(power)  # [avg.kW] Real
 
         # Relative uncertainty of the included power value. This is not a required property, but it will be useful in
         # future versions for the treatment of reliability and resiliency. [dimensionless, 0.01 = 1#]
-        self.powerUncertainty = power_uncertainty  # Real & >=0.0
+        self.powerUncertainty = float(power_uncertainty)  # Real & >=0.0
 
         # Logical continuity flag. This flag should be true if a continuum of power generation, importation,
         # consumption, or importation exists on both sides of the vertex, or if there is only one vertex. Set false if
         # production is disallowed between this vertex and either of its neighbor vertices. (This property is not
         # required and may not be used in early implementations.)
-        self.continuity = continuity  # boolean
+        self.continuity = validate_bool(continuity, 'continuity')  # boolean
 
-        self.record = record  # an integer
+        self.record = int(record)  # an integer
+
+    @classmethod
+    def vertex_list(cls, vertices):
+        if all([isinstance(vertex, cls) for vertex in vertices]):
+            return vertices
+        elif all([isinstance(vertex, list) for vertex in vertices]):
+            return [cls(*[float(i) for i in vertex]) for vertex in vertices]
+        elif all([isinstance(vertex, dict) for vertex in vertices]):
+            return [cls(**vertex) for vertex in vertices]
+        else:
+            raise ValueError(f'All vertices in a vertex list must all be vertices, lists, or dicts.'
+                             f' Received: {vertices}')

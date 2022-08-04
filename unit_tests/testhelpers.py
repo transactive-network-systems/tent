@@ -94,7 +94,7 @@ def test_order_vertices():
     try:
         from tent.vertex import Vertex
     except (SystemError, ImportError):
-        from .vertex import Vertex
+        from tent.vertex import Vertex
 
     p = [-100, 0, 100, 0]  # power vector
     c = [0.4, 0.3, 0.3, 0.2]  # marginal price vector
