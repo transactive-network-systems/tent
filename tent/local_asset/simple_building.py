@@ -42,11 +42,12 @@ under Contract DE-AC05-76RL01830
 """
 
 from datetime import timedelta
+
 from tent.interval_value import IntervalValue
-from tent.local_asset_model import LocalAsset
+from tent.local_asset import LocalAsset
 from tent.market_state import MarketState
 from tent.measurement_type import MeasurementType
-from vertex import Vertex
+from tent.vertex import Vertex
 
 
 off_peak_vertex = Vertex(marginal_price=float('Inf'),

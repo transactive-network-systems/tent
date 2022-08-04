@@ -112,7 +112,7 @@ def test_order_vertices():
 
 
 def test_production():
-    from tent.local_asset_model import LocalAsset
+    from tent.local_asset.__init__ import LocalAsset
     from tent.market import Market
 
     print('Running test_production()')
@@ -197,7 +197,7 @@ def test_production():
 
 
 def test_prod_cost_from_formula():
-    from tent.local_asset_model import LocalAsset
+    from tent.local_asset.__init__ import LocalAsset
     from tent.market import Market
 
     print('Running test_prod_cost_from_formula()')
@@ -260,7 +260,7 @@ def test_prod_cost_from_formula():
 
 
 def test_prod_cost_from_vertices():
-    from tent.local_asset_model import LocalAsset
+    from tent.local_asset.__init__ import LocalAsset
     from tent.market import Market
 
     # TEST_PROD_COST_FROM_VERTICES - tests function prod_cost_from_vertices()

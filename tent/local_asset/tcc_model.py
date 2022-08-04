@@ -42,12 +42,12 @@ under Contract DE-AC05-76RL01830
 """
 
 
-from vertex import Vertex
+from tent.vertex import Vertex
 from tent.interval_value import IntervalValue
 from tent.measurement_type import MeasurementType
 from tent.helpers import *
-from tent.local_asset_model import LocalAsset
-from timer import Timer
+from tent.local_asset import LocalAsset
+from tent.timer import Timer
 from tent.market_state import MarketState
 from tent.log import LogLevels, log_statement
 

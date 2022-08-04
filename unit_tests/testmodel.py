@@ -46,7 +46,7 @@ from datetime import datetime, timedelta, date, time
 
 from tent.vertex import Vertex
 from tent.neighbor_model import Neighbor
-from tent.local_asset_model import LocalAsset
+from tent.local_asset import LocalAsset
 from tent.market import Market
 from tent.time_interval import TimeInterval
 from tent.interval_value import IntervalValue

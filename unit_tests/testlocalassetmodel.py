@@ -50,7 +50,7 @@ from tent.measurement_type import MeasurementType
 from tent.helpers import *
 from tent.market import Market
 from tent.time_interval import TimeInterval
-from tent.local_asset_model import LocalAsset
+from tent.local_asset import LocalAsset
 from tent.TransactiveNode import TransactiveNode
 
 
