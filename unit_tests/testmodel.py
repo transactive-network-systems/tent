@@ -45,7 +45,7 @@ under Contract DE-AC05-76RL01830
 from datetime import datetime, timedelta, date, time
 
 from tent.vertex import Vertex
-from tent.neighbor_model import Neighbor
+from tent.neighbor import Neighbor
 from tent.local_asset import LocalAsset
 from tent.market import Market
 from tent.time_interval import TimeInterval

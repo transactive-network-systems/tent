@@ -52,7 +52,7 @@ from tent.time_interval import TimeInterval
 # from neighbor_model import Neighbor
 # from local_asset_model import LocalAsset
 # from TransactiveNode import TransactiveNode
-from tent.bulk_supplier_dc import BulkSupplier_dc
+from tent.neighbor.bulk_supplier_dc import BulkSupplier_dc
 # from const import *
 
 

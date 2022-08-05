@@ -47,7 +47,7 @@ from tent.local_asset import LocalAsset
 from tent.TransactiveNode import TransactiveNode
 from tent.time_interval import TimeInterval
 from tent.market_state import MarketState
-from tent.neighbor_model import Neighbor
+from tent.neighbor import Neighbor
 from tent.direction import Direction
 from tent.vertex import Vertex
 from tent.interval_value import IntervalValue

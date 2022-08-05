@@ -41,20 +41,20 @@ operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
 
+import logging
 
+from tent.const import bpa_demand_rate, bpa_energy_rate
+from tent.data_manager import append_table
+from tent.helpers import get_duration_in_hour, is_heavyloadhour
+from tent.interval_value import IntervalValue
+from tent.market_state import MarketState
+from tent.measurement_type import MeasurementType
+from tent.neighbor import Neighbor
+from tent.utils.log import setup_logging
+from tent.vertex import Vertex
 
-
-from helpers import *
-from measurement_type import MeasurementType
-from interval_value import IntervalValue
-from neighbor_model import Neighbor
-from const import *
-from vertex import Vertex
-from timer import Timer
-from market_state import MarketState
-from data_manager import append_table
-from log import LogLevels, log_statement
-
+setup_logging()
+_log = logging.getLogger(__name__)
 
 
 class BulkSupplier_dc(Neighbor):
@@ -65,8 +65,8 @@ class BulkSupplier_dc(Neighbor):
     # - Calls on a new function to determine hour type (HLH or LLH).
     # - Mines tables to determine monthly electricity and demand rates in HLH and LLH hour types.
 
-    def __init__(self):
-        super(BulkSupplier_dc, self).__init__()
+    def __init__(self, *args, **kwargs):
+        super(BulkSupplier_dc, self).__init__(*args, **kwargs)
         self.transactive = False
 
     def update_vertices(self, market):
@@ -97,8 +97,8 @@ class BulkSupplier_dc(Neighbor):
         # formulation is intended for importation (power>0) from an electricity supplier. Warn the user and return if
         # the maximum power is negative.
         if maximum_power < 0 or minimum_power < 0:
-            log_statement(f'You should not use neighbor object {self.name} '
-                          f'with class BulkSupplier_DC that represents a bulk supplier.', LogLevels.warning)
+            _log.warning(f'You should not use neighbor object {self.name}'
+                         f' with class BulkSupplier_DC that represents a bulk supplier.')
             return
 
         # Cost coefficient a0. This is unavailable from a supply curve, so it must be determined directly from the
@@ -119,11 +119,7 @@ class BulkSupplier_dc(Neighbor):
         new_active_vertices = []
 
         # Index through active time intervals.
-        for i in range(len(time_intervals)):
-
-            # Pick out the indexed time interval.
-            time_interval = time_intervals[i]
-
+        for time_interval in time_intervals:
             # 210331DJH: This initialization fixes a logic error for markets that have multiple market time intervals.
             #            The initialization belongs *INSIDE* teh time interval loop.
             #            BTW, the mistake was not found during unit testing because unit testing did not challenge the
@@ -222,8 +218,8 @@ class BulkSupplier_dc(Neighbor):
         # importation (power>0) from an electricity supplier. Warn the user and
         # return if the maximum power is negative.
         if maximum_power < 0:
-            log_statement('Maximum power must be positive in BulkSupplier_dc.m', LogLevels.warning)
-            log_statement('Returning without creating active vertices for ' + self.name, LogLevels.warning)
+            _log.warning('Maximum power must be positive in BulkSupplier_dc.m')
+            _log.warning(f'Returning without creating active vertices for {self.name}')
             return
 
         # Get the minimum power for this neighbor.
@@ -231,8 +227,8 @@ class BulkSupplier_dc(Neighbor):
 
         # Only importation is supported from this non-transactive neighbor.
         if minimum_power < 0:
-            log_statement('Minimum power must be positive in "BulkSupplier_dc.m', LogLevels.warning)
-            log_statement('Returning without creating active vertices for ' + self.name, LogLevels.warning)
+            _log.warning('Minimum power must be positive in "BulkSupplier_dc.m')
+            _log.warning(f'Returning without creating active vertices for {self.name}')
             return
 
         # Cost coefficient a0. This is unavailable from a supply curve, so it must be determined directly from the
@@ -247,16 +243,16 @@ class BulkSupplier_dc(Neighbor):
         minimum_power_loss = (minimum_power / maximum_power) ** 2 * full_power_loss  # [avg.kW]
 
         # Index through active time intervals.
-        for i in range(len(time_intervals)):
+        for interval_index, time_interval in enumerate(time_intervals):
 
             # Find and delete active vertices in the indexed time interval. These vertices shall be recreated.
-            self.activeVertices = [x for x in self.activeVertices if x != time_intervals[i]]
+            self.activeVertices = [x for x in self.activeVertices if x != time_interval]
 
             # Find the month number for the indexed time interval start time. The month is needed for rate lookup
             # tables.
-            month_number = time_intervals[i].startTime.month
+            month_number = time_interval.startTime.month
 
-            if is_heavyloadhour(time_intervals[i].startTime):
+            if is_heavyloadhour(time_interval.startTime):
 
                 # The indexed time interval is an HLH hour. The electricity rate is a little higher during HLH hours,
                 # and demand-charges may apply. Look up the BPA energy rate for month_number. The second parameter is
@@ -304,7 +300,7 @@ class BulkSupplier_dc(Neighbor):
 
                     # Powers have been scheduled, order the scheduled powers by their start time
                     ordered_scheduled_powers = sorted(self.scheduledPowers, key=lambda x: x.timeInterval.startTime)
-                    ordered_scheduled_powers = ordered_scheduled_powers[:i + 1]
+                    ordered_scheduled_powers = ordered_scheduled_powers[:interval_index + 1]
 
                     # The peak demand determinant is the greater of the monthly peak threshold or the prior scheduled
                     # powers.
@@ -318,8 +314,7 @@ class BulkSupplier_dc(Neighbor):
 
                 # Vertex 2: Marginal price of Vertex 2 is augmented by the value of energy from the neighbor that is
                 # lost.
-                vertices[1].marginalPrice = a1 * (
-                            1 + self.lossFactor * vertices[1].power / maximum_power)  # [$/kWh]
+                vertices[1].marginalPrice = a1 * (1 + self.lossFactor * vertices[1].power / maximum_power)  # [$/kWh]
 
                 # Evaluate the third of four vertices Look up the demand rate for the month_number. The second
                 # parameter is HLH = 1 (i.e., the first column of the table).
@@ -393,7 +388,7 @@ class BulkSupplier_dc(Neighbor):
                 # Convert the costs to raw dollars
                 # NOTE: This usage of Matlab hours() toggles a duration back
                 # into a numerical representation, which is correct here.
-                interval_duration = get_duration_in_hour(time_intervals[i].duration)
+                interval_duration = get_duration_in_hour(time_interval.duration)
 
                 vertices[0].cost = vertices[0].cost * interval_duration  # [$]
                 vertices[1].cost = vertices[1].cost * interval_duration  # [$]
@@ -402,10 +397,10 @@ class BulkSupplier_dc(Neighbor):
 
                 # Create interval values for the active vertices
                 interval_values = [
-                    IntervalValue(self, time_intervals[i], mkt, MeasurementType.ActiveVertex, vertices[0]),
-                    IntervalValue(self, time_intervals[i], mkt, MeasurementType.ActiveVertex, vertices[1]),
-                    IntervalValue(self, time_intervals[i], mkt, MeasurementType.ActiveVertex, vertices[2]),
-                    IntervalValue(self, time_intervals[i], mkt, MeasurementType.ActiveVertex, vertices[3])]
+                    IntervalValue(self, time_interval, mkt, MeasurementType.ActiveVertex, vertices[0]),
+                    IntervalValue(self, time_interval, mkt, MeasurementType.ActiveVertex, vertices[1]),
+                    IntervalValue(self, time_interval, mkt, MeasurementType.ActiveVertex, vertices[2]),
+                    IntervalValue(self, time_interval, mkt, MeasurementType.ActiveVertex, vertices[3])]
 
                 # Append the active vertices to the list of active vertices
                 # in the indexed time interval
@@ -465,14 +460,14 @@ class BulkSupplier_dc(Neighbor):
                     vertices[1].power) ** 2  # production cost [$/h]
 
                 # Convert the costs to raw dollars
-                interval_duration = get_duration_in_hour(time_intervals[i].duration)
+                interval_duration = get_duration_in_hour(time_interval.duration)
                 vertices[0].cost = vertices[0].cost * interval_duration  # [$]
                 vertices[1].cost = vertices[1].cost * interval_duration  # [$]
 
                 # Create interval values for the active vertices
                 interval_values = [
-                    IntervalValue(self, time_intervals[i], mkt, MeasurementType.ActiveVertex, vertices[0]),
-                    IntervalValue(self, time_intervals[i], mkt, MeasurementType.ActiveVertex, vertices[1])
+                    IntervalValue(self, time_interval, mkt, MeasurementType.ActiveVertex, vertices[0]),
+                    IntervalValue(self, time_interval, mkt, MeasurementType.ActiveVertex, vertices[1])
                 ]
 
                 # Append the active vertices to the list of active vertices

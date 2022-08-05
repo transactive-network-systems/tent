@@ -53,10 +53,10 @@ from tent.transactive_record import TransactiveRecord
 from tent.meter_point import MeterPoint
 from tent.market import Market
 from tent.time_interval import TimeInterval
-from tent.neighbor_model import Neighbor
+from tent.neighbor import Neighbor
 from tent.local_asset import LocalAsset
 from tent.TransactiveNode import TransactiveNode
-from tent.bulk_supplier_dc import BulkSupplier_dc
+from tent.neighbor.bulk_supplier_dc import BulkSupplier_dc
 
 
 def test_calculate_reserve_margin():
@@ -620,7 +620,7 @@ def test_receive_transactive_signal():
 
     test_model.mySignal = [test_record1, test_record2]
 
-    test_model.send_transactive_signal(this_transactive_node=test_myTransactiveNode, topic=[])
+    test_model.send_transactive_signal(this_transactive_node=test_myTransactiveNode)
     print('  - this test depends on method send_transactive_signal() to create a file')
 
     # Clear the mySignal property that will be used to receive the records.

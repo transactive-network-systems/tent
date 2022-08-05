@@ -41,23 +41,29 @@ operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
 
+import logging
+import weakref
 
-# from datetime import datetime, timedelta, date, time
-# import csv
-
-from data_manager import *
-from helpers import *
-from measurement_type import MeasurementType
-from interval_value import IntervalValue
-from transactive_record import TransactiveRecord
-from vertex import Vertex
-from timer import Timer
-from direction import Direction
 from copy import copy, deepcopy
+from datetime import datetime, timedelta
 from operator import attrgetter
-from market_state import MarketState
-from log import log_statement, LogLevels, VOLTTRON_ENV
+from typing import Union
 
+from tent.data_manager import append_table
+from tent.direction import Direction
+from tent.helpers import (are_different1, are_different2, find_obj_by_ti, find_objs_by_ti, format_ts,
+    get_duration_in_hour, order_vertices, production, prod_cost_from_vertices, validate_bool)
+from tent.interval_value import IntervalValue
+from tent.market_state import MarketState
+from tent.measurement_type import MeasurementType
+from tent.meter_point import MeterPoint
+from tent.timer import Timer
+from tent.transactive_record import TransactiveRecord
+from tent.utils.log import setup_logging
+from tent.vertex import Vertex
+
+setup_logging()
+_log = logging.getLogger(__name__)
 
 # 191217DJH: This class had originally inherited from class Model. Model will be deleted.
 
@@ -68,7 +74,8 @@ class Neighbor:
 
     def __init__(self,
                  convergence_threshold=0.05,
-                 cost_parameters=(0.0, 0.0, 0.0),
+                 cost_parameters=None,
+                 default_vertices=None,
                  demand_month=datetime.today().month,
                  demand_rate=4.5,
                  demand_threshold=1e9,
@@ -80,36 +87,62 @@ class Neighbor:
                  loss_factor=0.01,
                  maximum_power=0.0,
                  mechanism='consensus',
+                 meter_points=None,
                  minimum_power=0.0,
                  name='',
                  subclass=None,
                  transactive=False,
-                 up_or_down=Direction.unknown):
+                 transactive_node=None,
+                 up_or_down: Union[Direction, int, str] = Direction.unknown):
 
         super(Neighbor, self).__init__()
 
-        self.convergenceThreshold = convergence_threshold   # [Small positive fraction]: May affect negotiations
-        self.costParameters = cost_parameters               # 3x[float]: Parameters of quadratic production cost
-        self.demandMonth = demand_month                     # [month number]: Used to reset demand charges
-        self.demandRate = demand_rate                       # [$ / kW (/h)]: rate determinant
-        self.demandThreshold = demand_threshold             # [kW]; current power above which demand charges accrue
-        self.demandThresholdCoef = demand_threshold_coef    # Factor by which threshold is reduced in new month
-        self.description = description                      # [text]
-        self.effectiveImpedance = effective_impedance       # [Ohms]: (future) may be used for loss effects
-        self.friend = friend                                # [boolean]: True for collaborative, friendly Neighbor
-        self.location = location                            # [text]
-        self.lossFactor = loss_factor                       # [dimensionless] 0.01 = 1% full-load loss
-        self.maximumPower = maximum_power                   # [avg.kW, signed] Object's physical "hard" constraint
-        self.mechanism = mechanism                          # future, unused
-        self.minimumPower = minimum_power                   # [avg.kW, signed] Object's physical "hard" constraint
-        self.name = name                                    # [text]
-        self.subclass = subclass                            # future, unused
-        self.transactive = transactive                      # [boolean]: True for transactive neighbor
-        self.upOrDown = up_or_down                          # 'upstream' or 'downstream' direction of this neighbor
+        self.tn = None if transactive_node is None else weakref.ref(transactive_node)
 
+        self.convergenceThreshold = float(convergence_threshold)      # [Small positive fraction]: May affect negotiations
+        if cost_parameters is None:
+            cost_parameters = [0.0, 0.0, 0.0]
+        self.costParameters = [float(cp) for cp in cost_parameters]   # 3x[float]: Parameters of quadratic production cost
+        self.demandMonth = int(demand_month)                          # [month number]: Used to reset demand charges
+        self.demandRate = float(demand_rate)                          # [$ / kW (/h)]: rate determinant
+        self.demandThreshold = float(demand_threshold)                # [kW]; current power above which demand charges accrue
+        self.demandThresholdCoef = float(demand_threshold_coef)       # Factor by which threshold is reduced in new month
+        self.description = str(description)                           # [text]
+        self.effectiveImpedance = float(effective_impedance)          # [Ohms]: (future) may be used for loss effects
+        self.friend = validate_bool(friend, 'friend')                 # [boolean]: True for collaborative, friendly Neighbor
+        self.location = str(location)                                 # [text]
+        self.lossFactor = float(loss_factor)                          # [dimensionless] 0.01 = 1% full-load loss
+        self.maximumPower = float(maximum_power)                      # [avg.kW, signed] Object's physical "hard" constraint
+        self.mechanism = mechanism                                    # future, unused
+        self.minimumPower = float(minimum_power)                      # [avg.kW, signed] Object's physical "hard" constraint
+        self.name = str(name)                                         # [text]
+        self.subclass = subclass                                      # future, unused
+        self.transactive = validate_bool(transactive, 'transactive')  # [boolean]: True for transactive neighbor
+        if isinstance(up_or_down, Direction):  # 'upstream' or 'downstream' direction of this neighbor
+            self.upOrDown = up_or_down
+        elif isinstance(up_or_down, int):
+            self.upOrDown = Direction(up_or_down)
+        else:
+            self.upOrDown = Direction[up_or_down]
+
+        #########
         # These static lists are maintained by each neighbor object:
-        self.defaultVertices = [Vertex(float("inf"), 0.0, 1)]  # [IntervalValue] Values are [Vertices]
-        self.meterPoints = []                               # [MeterPoint] See class MeterPoint
+        #########
+
+        # [IntervalValue] Values are [Vertices]
+        self.defaultVertices = [Vertex(float("inf"), 0.0, 1)] if default_vertices is None \
+            else Vertex.vertex_list(default_vertices)
+
+        # [MeterPoint] See class MeterPoint
+        if meter_points is None:
+            self.meterPoints = []
+        elif all([isinstance(mp, MeterPoint) for mp in meter_points]):
+            self.meterPoints = [weakref.ref(mp) for mp in meter_points]
+        elif all([isinstance(mp, str) for mp in meter_points]) and self.tn and self.tn():
+            self.meterPoints = [weakref.ref(mp) for mp in self.tn().get_meter_points_by_name(meter_points)]
+        else:
+            raise ValueError(f'All meter points assigned to Neighbor {self.name} must be an instance of class'
+                             f' MeterPoint or the name of a MeterPoint held by the TransactiveNode.')
 
         # These properties and lists are to be dynamically assigned. An implementer would usually not manually assign
         # these properties.
@@ -125,7 +158,6 @@ class Neighbor:
         self.sentSignal = []                                # [TransactiveRecord] Last records sent
         self.totalDualCost = 0.0                            # [float] [$]
         self.totalProductionCost = 0.0                      # [float] [$]
-        self.publishTopic = None
         self.receivedCurves = None
 
     def calculate_reserve_margin(self, market):
@@ -206,7 +238,8 @@ class Neighbor:
         # 200929DJH: Trim any reserve margins that lie in expired markets.
         self.reserveMargins = [x for x in self.reserveMargins if x.market.marketState != MarketState.Expired]
 
-    def find_last_message_ts(self, signals, ti_name, fallback_value):
+    @staticmethod
+    def find_last_message_ts(signals, ti_name, fallback_value):
 
         # Create a logical array: true if the received TransactiveRecord is in the indexed active time interval.
         ti_signals = [s for s in signals if s.timeInterval == ti_name]
@@ -222,7 +255,7 @@ class Neighbor:
         return ts, ti_signals
 
     def check_for_convergence(self, market):
-        # Qualifies state of convergence with a transactive Neighor object by active time interval and globally.
+        # Qualifies state of convergence with a transactive Neighbor object by active time interval and globally.
         #
         # In respect to the coordination sub-problem, a Neighbor is not converged for a given time interval and a signal
         # should be sent to the transactive Neighbor if
@@ -268,7 +301,7 @@ class Neighbor:
             if len(ss) == 0:
                 # No signal has been sent in this time interval. This is the first convergence requirement. Set the
                 # convergence flag false.
-                log_statement("Signal for time interval {} ({}). Enable send flag.".format(i, time_intervals[i].name), LogLevels.debug)
+                _log.debug(f"Signal for time interval {i} ({time_intervals[i].name}). Enable send flag.")
                 flag = False
 
             # received and received AFTER last sent and there is a big diff b/w ss and rs
@@ -278,12 +311,10 @@ class Neighbor:
                 # requirement. Function are_different1() checks whether the sent and received signals differ
                 # significantly. If all these conditions are true, the Neighbor is not converged.
 
-                log_statement("TCC for {} are_different1 returned True? Check: rs={}, ss={}, "
-                                "rs_ts={}, ss_ts={}, threshold={}".format(
-                                self.name,
-                                [(x.timeInterval, x.record, x.power, x.marginalPrice) for x in rs],
-                                [(x.timeInterval, x.record, x.power, x.marginalPrice) for x in ss],
-                                rs_ts, ss_ts, self.convergenceThreshold), LogLevels.debug)
+                _log.debug(f"TCC for {self.name} are_different1 returned True? Check:"
+                           f" rs={[(x.timeInterval, x.record, x.power, x.marginalPrice) for x in rs]},"
+                           f" ss={[(x.timeInterval, x.record, x.power, x.marginalPrice) for x in ss]},"
+                           f" rs_ts={rs_ts}, ss_ts={ss_ts}, threshold={self.convergenceThreshold}")
 
                 flag = False
 
@@ -295,12 +326,10 @@ class Neighbor:
                 # mySignal (ms) and the sentSignal (ss) differ significantly, meaning that local conditions have changed
                 # enough that a new, revised signal should be sent.
 
-                log_statement("TCC for {} are_different2 returned True? Check: ms={}, ss={}, "
-                           "rs_ts={}, ss_ts={}, threshold={}".format(
-                    self.name,
-                    [(x.timeInterval, x.record, x.power, x.marginalPrice) for x in ms],
-                    [(x.timeInterval, x.record, x.power, x.marginalPrice) for x in ss],
-                    rs_ts, ss_ts, self.convergenceThreshold), LogLevels.debug)
+                _log.debug(f"TCC for {self.name} are_different2 returned True? Check:"
+                           f" ms={[(x.timeInterval, x.record, x.power, x.marginalPrice) for x in ms]},"
+                           f" ss={[(x.timeInterval, x.record, x.power, x.marginalPrice) for x in ss]},"
+                           f" rs_ts={rs_ts}, ss_ts={ss_ts}, threshold={self.convergenceThreshold}")
 
                 flag = False
 
@@ -325,12 +354,12 @@ class Neighbor:
         else:
             self.converged = True
 
-        log_statement("TCC convergence flags for {} are {}".format(
-            self.name, [(format_ts(f.timeInterval.startTime), f.value) for f in self.convergenceFlags]), LogLevels.debug)
-        log_statement("TCC convergence flag for {} is {}.".format(self.name, self.converged), LogLevels.debug)
+        _log.debug(f"TCC convergence flags for {self.name} are "
+                   f"{[(format_ts(f.timeInterval.startTime), f.value) for f in self.convergenceFlags]}")
+        _log.debug(f"TCC convergence flag for {self.name} is {self.converged}.")
 
-
-    def marginal_price_from_vertices(self, power, vertices):
+    @staticmethod
+    def marginal_price_from_vertices(power, vertices):
         # Given a power, determine the corresponding marginal price from a set of supply- or demand-curve vertices.
         #
         # INPUTS:
@@ -369,7 +398,7 @@ class Neighbor:
 
                     # The segment is horizontal. Marginal price is indefinite. Assign the marginal price of the second
                     # vertex and return.
-                    log_statement('segment is horizontal', LogLevels.warning)
+                    _log.warning('segment is horizontal')
                     marginal_price = vertices[i + 1].marginalPrice
                     return marginal_price
                 else:
@@ -461,7 +490,7 @@ class Neighbor:
         self.scheduledPowers = [x for x in self.scheduledPowers if x.market.marketState != MarketState.Expired]
 
         sp = [(x.timeInterval.name, x.value) for x in self.scheduledPowers]
-        log_statement("{} neighbor model scheduledPowers are: {}".format(self.name, sp), LogLevels.debug)
+        _log.debug(f"{self.name} neighbor model scheduledPowers are: {sp}")
 
     def schedule_engagement(self):
         # Required from AbstractModel, but not particularly useful for any Neighbor.
@@ -481,7 +510,7 @@ class Neighbor:
 
         # Find the MeterPoint that is configured to measure average demand for this Neighbor. The determination is
         # based on the meter's MeasurementType.
-        mtr = [x for x in self.meterPoints if x.measurementType == MeasurementType.AverageDemandkW]
+        mtr = [x() for x in self.meterPoints if x().measurementType == MeasurementType.AverageDemandkW]
         mtr = mtr[0] if len(mtr) > 0 else None
 
         if mtr is None:
@@ -518,17 +547,17 @@ class Neighbor:
                 self.demandThreshold = max([0, self.demandThreshold, prior_peak])
             else:
                 self.demandThreshold = float('inf')
-            #log_statement("measurement: {} threshold: {}".format(d, self.demandThreshold), LogLevels.debug)
+            # _log.debug(f"measurement: {d} threshold: {self.demandThreshold}")
+
         else:
             # An appropriate MeterPoint was found. The demand threshold may be updated from the MeterPoint.
 
             # Update the demand threshold.
-            self.demandThreshold = max([0, self.demandThreshold, mtr.currentMeasurement])  # [avg.kW]
-
-            log_statement("Meter: {} measurement: {} threshold: {}".format(mtr.name,
-                                                                        mtr.current_measurement,
-                                                                        self.demandThreshold), LogLevels.debug)
-
+            self.demandThreshold = max([0, self.demandThreshold, mtr.current_measurement])  # [avg.kW]
+            # self.demandThreshold = max([0, self.demandThreshold, mtr.currentMeasurement])  # [avg.kW]before 2022-03-28
+            # _log.debug("Meter: {} measurement: {} threshold: {}".format(mtr.name,
+            #                                                            mtr.current_measurement,
+            #                                                            self.demandThreshold))
 
         # The demand threshold should be reset in a new month. First find the current month number mon.
         mon = Timer.get_cur_time().month
@@ -602,7 +631,7 @@ class Neighbor:
         self.totalDualCost = sum([x.value for x in self.dualCosts if x.market.marketState != MarketState.Expired])
 
         dc = [(x.timeInterval.name, x.value) for x in self.dualCosts]
-        log_statement("{} neighbor model dual costs are: {}".format(self.name, dc), LogLevels.debug)
+        _log.debug(f"{self.name} neighbor model dual costs are: {dc}")
 
     def update_production_costs(self, market):
         time_intervals = market.timeIntervals
@@ -654,7 +683,7 @@ class Neighbor:
         self.totalProductionCost = sum([x.value for x in self.productionCosts if x.market == market])
 
         pc = [(x.timeInterval.name, x.value) for x in self.productionCosts]
-        log_statement("{} neighbor model production costs are: {}".format(self.name, pc), LogLevels.debug)
+        _log.debug(f"{self.name} neighbor model production costs are: {pc}")
 
     def update_vertices(self, market):
         # Update the active vertices that define Neighbors' residual flexibility in the form of supply or demand curves.
@@ -912,9 +941,8 @@ class Neighbor:
 
             if len(default_vertices) == 0:
                 # No default vertices are found. Warn and return.
-                log_statement('At least one default vertex must be defined for neighbor model %s. '
-                             'Scheduling was not performed' % (self.name), LogLevels.warning)
-
+                _log.warning(f'At least one default vertex must be defined for neighbor model {self.name}. '
+                             f'Scheduling was not performed')
                 return
 
             if not self.transactive:
@@ -1015,7 +1043,7 @@ class Neighbor:
                                 power = power / factor2
                                 marginal_price = marginal_price * factor2
                                 '''
-                                if (self.this_transactive_node is not None
+                                if (self.tn is not None
                                     and self.system_loss_topic != ''
                                     and received_vertices[k].record == 0):
                                     msg = {
@@ -1027,9 +1055,10 @@ class Neighbor:
                                         'vertex_record': received_vertices[k].record,
                                         'demand_charge_threshold': demand_charge_threshold
                                     }
-                                    self.this_transactive_node.vip.pubsub.publish(peer='pubsub',
-                                                                topic=self.system_loss_topic,
-                                                                message=msg)
+                                    # If this is uncommented, publication should be handled in a subclass or callback!
+                                    self.publish_system(peer='pubsub',
+                                                        topic=self.system_loss_topic,
+                                                        message=msg)
                                 '''
 
                                 # If there are multiple transactive records in the indexed time interval, we don't need
@@ -1046,7 +1075,7 @@ class Neighbor:
 
                                 # Publish to db
                                 '''
-                                if self.this_transactive_node is not None and self.dc_threshold_topic != '' \
+                                if self.tn is not None and self.dc_threshold_topic != '' \
                                         and k == len(received_vertices)-1:
                                     dc_flag = "has demand charge"
                                     if not demand_charge_flag:
@@ -1058,24 +1087,20 @@ class Neighbor:
                                         'predicted_power_peak': predicted_prior_peak,
                                         'max_predicted_power': power
                                     }
-                                    self.this_transactive_node.vip.pubsub.publish(peer='pubsub',
+                                    # If this is uncommented, publication should be handled in a subclass or callback!
+                                    self.publish_demand_charges(peer='pubsub',
                                                                 topic=self.dc_threshold_topic,
                                                                 message=dc_msg)
                                 '''
                                 # Debug negative price & demand charge
-
-                                log_statement("power: {} - demand charge threshold: {} - predicted power peak: {}"
-                                           .format(power, demand_charge_threshold, predicted_prior_peak), LogLevels.debug)
-                                log_statement("prior power: {}".format(prior_power), LogLevels.debug)
-                                log_statement("received vertices: {}"
-                                           .format([(v.timeInterval, v.power) for v in received_vertices]), LogLevels.debug)
-
+                                _log.debug(f"power: {power} - demand charge threshold:"
+                                           f" {demand_charge_threshold} - predicted power peak: {predicted_prior_peak}")
+                                _log.debug(f"prior power: {prior_power}")
+                                _log.debug(f"received vertices:"
+                                           f" {[(v.timeInterval, v.power) for v in received_vertices]}")
                             except:
-                                log_statement("{} has power {} AND object ({}) maxPower {} and minPower {}"
-                                           .format(self.name, power,
-                                                   self.name,
-                                                   self.maximumPower,
-                                                   self.minimumPower), LogLevels.error)
+                                _log.error(f"{self.name} has power {power} AND object ({self.name})"
+                                           f" maxPower {self.maximumPower} and minPower {self.minimumPower}")
                                 raise
                         # Create a corresponding (price,power) pair (aka "active vertex") using the received power and
                         # marginal price. See struct Vertex().
@@ -1153,17 +1178,16 @@ class Neighbor:
                                 interval_values[k].value = vertex  # an IntervalValue
 
                     else:
-
                         pass
-                        log_statement("NO DEMAND CHARGE 1")
+                        _log.debug("NO DEMAND CHARGE 1")
 
             else:
 
                 # Logic should not arrive here. Error.
-                raise ('Neighbor %s must be either transactive or not.' % (self.name))
+                raise f'Neighbor {self.name} must be either transactive or not.'
 
         av = [(x.timeInterval.name, x.value.marginalPrice, x.value.power) for x in self.activeVertices]
-        log_statement("{} neighbor model active vertices are: {}".format(self.name, av))
+        _log.debug(f"{self.name} neighbor model active vertices are: {av}")
 
     def prep_transactive_signal(self, market, this_transactive_node):
         # Prepare transactive records to send to a transactive neighbor. The prepared transactive signal should
@@ -1288,8 +1312,8 @@ class Neighbor:
                                     )
 
             else:
-                assert len(vertices) == 1, (['Unexpected flexibility logic in module ' + self.name
-                                                 + ' method prep_transactive_signal()'])
+                assert len(vertices) == 1, ([f'Unexpected flexibility logic in module {self.name}'
+                                             f' method prep_transactive_signal()'])
                 vertices[0].marginalPrice = float('inf')
                 vertices[0].record = 0
 
@@ -1368,7 +1392,7 @@ class Neighbor:
         self.mySignal = [x for x in self.mySignal
                                             if x.timeInterval in valid_time_interval_names]
 
-    def send_transactive_signal(self, market, this_transactive_node, topic, start_of_cycle=False, fail_to_converged=False):
+    def send_transactive_signal(self, market, this_transactive_node):
         # Send transactive records to a transactive neighbor.
         #
         # Retrieves the current transactive records, formats them into a table, and "sends" them to a text file for the
@@ -1402,7 +1426,7 @@ class Neighbor:
         transactive_records = [x for x in self.mySignal if x.market == market.name]
 
         if len(transactive_records) == 0:  # No signal records are ready to send
-            log_statement("No transactive records were found. No transactive signal can be sent to %s." % self.name, LogLevels.warning)
+            _log.warning(f"No transactive records were found. No transactive signal can be sent to {self.name}.")
             return
 
         # 210127DJH: These new parameters will help us keep track of record provenance.
@@ -1411,27 +1435,8 @@ class Neighbor:
             transactive_record.neighborName = self.name
             transactive_record.marketName = market.name
 
-        msg = json.dumps(transactive_records, default=json_econder)
-        msg = json.loads(msg)
-
-        log_statement("At {}, {} sends signal from {} on topic {} message {}"
-                   .format(Timer.get_cur_time(),
-                           self.name,
-                           self.location, topic, msg))
-        if topic:
-            this_transactive_node.vip.pubsub.publish(peer='pubsub',
-                                                 topic=topic,
-                                                 message={'source': self.location,
-                                                          'curves': msg,
-                                                          'start_of_cycle': start_of_cycle,
-                                                          'fail_to_converged': fail_to_converged,
-                                                          'tnt_market_name': market.name})
-
-        topic = this_transactive_node.transactive_record_topic
-
-        headers = {headers_mod.DATE: format_timestamp(Timer.get_cur_time())}
-        this_transactive_node.vip.pubsub.publish(peer='pubsub', topic=topic,
-                                                     headers=headers, message=msg)
+        # Publish the signal (if subclass implements messaging).
+        self.publish_signal(transactive_records)
 
         # Save the sent TransactiveRecord messages (i.e., sentSignal) as a copy of the calculated set that was drawn
         # upon by this method (i.e., mySignal).
@@ -1449,6 +1454,15 @@ class Neighbor:
         active_time_interval_names = [x.name for x in active_time_intervals]
         self.sentSignal = [x for x in self.sentSignal if x.timeInterval in active_time_interval_names]
 
+        # Return transactive records to allow further processing by subclasses.
+        return transactive_records
+
+    def publish_signal(self, transactive_records):
+        """
+        Subclasses which implement messaging should extend this method to send the signals.
+        """
+        pass
+
     def receive_transactive_signal(self, this_transactive_node, market, curves=None):
         # Receive and save transactive records from a transactive Neighbor.
         # this_transactive_node = Agent's TransactiveNode object
@@ -1459,12 +1473,12 @@ class Neighbor:
 
         # If trying to receive a transactive signal from a non-transactive neighbor, create a warning and return.
         if not self.transactive:
-            log_statement('Transactive signals are not expected to be received from non-transactive neighbors. '
-                         'No signal is read.', LogLevels.warning)
+            _log.warning('Transactive signals are not expected to be received from non-transactive neighbors. '
+                         'No signal is read.')
             return
 
         if curves is None:
-            log_statement(f'{market.name} Received Transactive signal is None. {this_transactive_node.name}', LogLevels.warning)
+            _log.warning(f'{market.name}  Received Transactive signal is None. {this_transactive_node.name}')
             return
 
         # 201013DJH: The neighbor's list of received transactive records must be reinitialized so that it will not grow
@@ -1695,6 +1709,7 @@ class Neighbor:
 
         # Regardless, the default condition is that the other threshold price is the same as the first. (The other
         # threshold price may be needed for the second vertex that may become created at the threshold.)
+        # TODO: There is no guarantee above that threshold_price has been set. Handle any other cases.
         other_threshold_price = threshold_price
 
         # Find the active supply vertices (i.e., p > 0) in this time interval that lie ABOVE the threshold. Simply add
