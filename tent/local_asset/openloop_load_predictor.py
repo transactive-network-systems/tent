@@ -50,7 +50,7 @@ from tent.helpers import find_obj_by_ti
 from tent.interval_value import IntervalValue
 from tent.local_asset import LocalAsset
 from tent.measurement_type import MeasurementType
-from tent.temperature_forecast_model import TemperatureForecastModel
+from tent.information_service_model.temperature_forecast_model import TemperatureForecastModel
 from tent.market_state import MarketState
 from tent.utils.log import setup_logging
 

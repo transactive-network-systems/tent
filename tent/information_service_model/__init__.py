@@ -41,47 +41,77 @@ operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
 
+import weakref
 
+from datetime import datetime, timedelta
+from dateutil import parser
+from typing import Union
 
-from datetime import timedelta
-
-from measurement_type import MeasurementType
-from measurement_unit import MeasurementUnit
-from interval_value import IntervalValue
-from market_state import MarketState
+from tent.measurement_type import MeasurementType
+from tent.measurement_unit import MeasurementUnit
+from tent.interval_value import IntervalValue
+from tent.market_state import MarketState
 
 
 class InformationServiceModel:
     # InformationServiceModel Base Class
     # An InformationServiceModel manages an InformationService and predicts or interpolates the information it provides.
 
-    def __init__(self):
-        # InformationService
-        self.address = ''  # perhaps a web address storage
-        self.description = ''
-        self.informationType = MeasurementType.Unknown
-        self.informationUnits = MeasurementUnit.Unknown
-        self.license = ''
-        self.nextQueryTime = None  # datetime.empty
-        self.serviceExpirationDate = None  # datetime.empty
-        self.updatePeriod = timedelta(hours=1)  # [h]
+    def __init__(self,
+                 address='',
+                 description='',
+                 information_type: Union[int, str, MeasurementType] = MeasurementType.Unknown,
+                 information_units: Union[int, str, MeasurementUnit] = MeasurementUnit.Unknown,
+                 license_key='',
+                 next_query_time=None,
+                 service_expiration_date=None,
+                 update_period: Union[float, timedelta] = timedelta(hours=1),
+                 file='',
+                 name='',
+                 next_scheduled_update=None,
+                 update_interval: Union[float, timedelta] = timedelta(hours=1),
+                 transactive_node=None
+                 ):
 
-        # InformationServiceModel properties
-        self.file = ''  # filename having entries for time intervals
-        self.name = ''
-        self.nextScheduledUpdate = None  # datetime.empty
+        self.tn = weakref.ref(transactive_node) if transactive_node else None
+        # InformationService properties:
+        self.address = str(address)  # perhaps a web address storage
+        self.description = str(description)
+        self.file = str(file)  # filename having entries for time intervals
+        self.informationType = information_type if isinstance(information_type, MeasurementType)\
+            else MeasurementType[information_type]
+        self.informationUnits = information_units if isinstance(information_units, MeasurementUnit)\
+            else MeasurementUnit[information_units]
+        self.license = str(license_key)
+        self.name = str(name)
+        if not next_query_time:
+            next_query_time = datetime.now()
+        self.nextQueryTime = next_query_time if isinstance(next_query_time, datetime)\
+            else parser.parse(next_query_time)  # datetime.empty
+        if not service_expiration_date:
+            service_expiration_date = datetime.now() + timedelta(days=10000)
+        self.serviceExpirationDate = service_expiration_date if isinstance(service_expiration_date, datetime)\
+            else parser.parse(service_expiration_date)  # datetime.empty
+        self.updateInterval = update_interval if isinstance(update_interval, timedelta) \
+            else timedelta(seconds=update_interval)  # [h]
+        self.updatePeriod = update_period if isinstance(update_period, timedelta)\
+            else timedelta(seconds=update_period) # [h]
+
+        if not next_scheduled_update:
+            next_scheduled_update = datetime.now() + self.updatePeriod
+        self.nextScheduledUpdate = next_scheduled_update if isinstance(next_scheduled_update, datetime) \
+            else parser.parse(next_scheduled_update)  # datetime.empty
+
+        # These are dynamic properties that are assigned in code and should not be manually configured:
+        self.last_modified = None
         self.predictedValues = []  # IntervalValue.empty
-        self.updateInterval = timedelta(hours=1)  # [h]
 
     # This template is available to conduct the forecasting of useful information.
     # 200928DJH: Changing back to a conventional object method. I think Hung must have made this a class method to defer
     # fixing it.
     # @classmethod
     def update_information(self, market):
-        time_intervals = market.timeIntervals
-
-        for i in range(len(time_intervals)):
-            time_interval = time_intervals[i]
+        for time_interval in market.timeIntervals:
 
             start_time = time_interval.startTime
 
