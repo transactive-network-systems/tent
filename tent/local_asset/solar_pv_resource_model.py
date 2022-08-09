@@ -46,7 +46,7 @@ import math
 from tent.utils.helpers import find_obj_by_ti
 from tent.enumerations.measurement_type import MeasurementType
 from tent.local_asset import LocalAsset
-from tent.interval_value import IntervalValue
+from tent.containers.interval_value import IntervalValue
 from tent.enumerations.market_state import MarketState
 from tent.utils.log import setup_logging
 

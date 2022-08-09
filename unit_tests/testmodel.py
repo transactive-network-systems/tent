@@ -44,12 +44,12 @@ under Contract DE-AC05-76RL01830
 
 from datetime import datetime, timedelta, date, time
 
-from tent.vertex import Vertex
+from tent.containers.vertex import Vertex
 from tent.neighbor import Neighbor
 from tent.local_asset import LocalAsset
 from tent.market import Market
-from tent.time_interval import TimeInterval
-from tent.interval_value import IntervalValue
+from tent.containers.time_interval import TimeInterval
+from tent.containers.interval_value import IntervalValue
 from tent.enumerations.measurement_type import MeasurementType
 from tent.TransactiveNode import TransactiveNode
 

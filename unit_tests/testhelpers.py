@@ -42,9 +42,9 @@ under Contract DE-AC05-76RL01830
 """
 
 from tent.utils.helpers import *
-from tent.vertex import Vertex
-from tent.time_interval import TimeInterval
-from tent.interval_value import IntervalValue
+from tent.containers.vertex import Vertex
+from tent.containers.time_interval import TimeInterval
+from tent.containers.interval_value import IntervalValue
 from tent.enumerations.measurement_type import MeasurementType
 from tent.market import Market
 
@@ -92,9 +92,9 @@ def test_is_hlh():
 
 def test_order_vertices():
     try:
-        from tent.vertex import Vertex
+        from tent.containers.vertex import Vertex
     except (SystemError, ImportError):
-        from tent.vertex import Vertex
+        from tent.containers.vertex import Vertex
 
     p = [-100, 0, 100, 0]  # power vector
     c = [0.4, 0.3, 0.3, 0.2]  # marginal price vector
@@ -363,7 +363,7 @@ def test_prod_cost_from_vertices():
 
 def test_are_different2():
     # 210127DJH: TODO: I observe many errors in this test today, but the method is not currently being used in auctions.
-    from tent.transactive_record import TransactiveRecord
+    from tent.containers.transactive_record import TransactiveRecord
 
     print('Running test_are_different2()')
     pf = 'pass'

@@ -49,7 +49,7 @@ from typing import Union
 
 from tent.enumerations.measurement_type import MeasurementType
 from tent.enumerations.measurement_unit import MeasurementUnit
-from tent.interval_value import IntervalValue
+from tent.containers.interval_value import IntervalValue
 from tent.enumerations.market_state import MarketState
 
 

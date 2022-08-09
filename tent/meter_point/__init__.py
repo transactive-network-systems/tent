@@ -52,7 +52,7 @@ import sqlite3
 import weakref
 
 from datetime import timedelta
-from tent.interval_value import IntervalValue
+from tent.containers.interval_value import IntervalValue
 from tent.market import Market
 from tent.enumerations.market_state import MarketState
 from math import ceil

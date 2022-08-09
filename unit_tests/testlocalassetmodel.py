@@ -44,12 +44,12 @@ under Contract DE-AC05-76RL01830
 from datetime import date, time
 # from dateutil import relativedelta    # NOT AVAILABLE??
 
-from tent.vertex import Vertex
-from tent.interval_value import IntervalValue
+from tent.containers.vertex import Vertex
+from tent.containers.interval_value import IntervalValue
 from tent.enumerations.measurement_type import MeasurementType
 from tent.utils.helpers import *
 from tent.market import Market
-from tent.time_interval import TimeInterval
+from tent.containers.time_interval import TimeInterval
 from tent.local_asset import LocalAsset
 from tent.TransactiveNode import TransactiveNode
 

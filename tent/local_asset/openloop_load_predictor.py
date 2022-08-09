@@ -47,7 +47,7 @@ from datetime import timedelta
 from typing import List
 
 from tent.utils.helpers import find_obj_by_ti
-from tent.interval_value import IntervalValue
+from tent.containers.interval_value import IntervalValue
 from tent.local_asset import LocalAsset
 from tent.enumerations.measurement_type import MeasurementType
 from tent.information_service_model.temperature_forecast_model import TemperatureForecastModel
@@ -215,7 +215,7 @@ class OpenLoopLoadPredictor(LocalAsset):
     @classmethod
     def test_schedule_power(cls):
         from tent.market import Market
-        from tent.time_interval import TimeInterval
+        from tent.containers.time_interval import TimeInterval
         print('Running test_schedule_power()')
         pf = 'pass'
 

@@ -47,7 +47,7 @@ from warnings import warn
 
 from tent.enumerations.direction import Direction
 from tent.utils.helpers import production
-from tent.interval_value import IntervalValue
+from tent.containers.interval_value import IntervalValue
 from tent.market import Market
 from tent.enumerations.market_types import MarketTypes
 from tent.enumerations.measurement_type import MeasurementType

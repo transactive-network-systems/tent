@@ -48,7 +48,7 @@ under Contract DE-AC05-76RL01830
 from tent.utils.helpers import *
 # from transactive_record import TransactiveRecord
 from tent.market import Market
-from tent.time_interval import TimeInterval
+from tent.containers.time_interval import TimeInterval
 # from neighbor_model import Neighbor
 # from local_asset_model import LocalAsset
 # from TransactiveNode import TransactiveNode

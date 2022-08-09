@@ -44,7 +44,7 @@ under Contract DE-AC05-76RL01830
 from datetime import datetime
 
 from tent.enumerations.measurement_type import MeasurementType
-from tent.vertex import Vertex
+from tent.containers.vertex import Vertex
 
 VERBOSE = True
 METHOD = 1  # Comma-Separated Value method

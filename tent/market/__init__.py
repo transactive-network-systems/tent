@@ -55,14 +55,14 @@ from tent.utils.data_manager import append_table
 from tent.utils.helpers import (find_obj_by_ti, find_objs_by_ti, order_vertices, production, prod_cost_from_vertices,
                                 validate_bool)
 from tent.enumerations.measurement_type import MeasurementType
-from tent.interval_value import IntervalValue
+from tent.containers.interval_value import IntervalValue
 from tent.enumerations.market_state import MarketState
 from tent.enumerations.market_types import MarketTypes
 from tent.enumerations.method import Method
-from tent.time_interval import TimeInterval
+from tent.containers.time_interval import TimeInterval
 from tent.utils.timer import Timer
 from tent.utils.log import setup_logging
-from tent.vertex import Vertex
+from tent.containers.vertex import Vertex
 
 setup_logging()
 _log = logging.getLogger(__name__)

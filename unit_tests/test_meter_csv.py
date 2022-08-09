@@ -44,7 +44,7 @@ import os
 import unittest
 import pandas as pd
 from tent.meter_point.csv_meter_point import CSVMeterPoint
-from tent.interval_value import IntervalValue
+from tent.containers.interval_value import IntervalValue
 from datetime import timedelta
 from tent.market import Market
 from tent.utils.data_manager import *

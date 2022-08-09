@@ -41,7 +41,7 @@ operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
 
-from tent.time_interval import TimeInterval
+from tent.containers.time_interval import TimeInterval
 from tent.utils.timer import Timer
 
 

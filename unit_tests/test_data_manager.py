@@ -40,11 +40,11 @@ PACIFIC NORTHWEST NATIONAL LABORATORY
 operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
-from tent.interval_value import IntervalValue
+from tent.containers.interval_value import IntervalValue
 from tent.neighbor import Neighbor
-from tent.time_interval import TimeInterval
+from tent.containers.time_interval import TimeInterval
 from datetime import timedelta
-from tent.transactive_record import TransactiveRecord
+from tent.containers.transactive_record import TransactiveRecord
 from tent.market import Market
 from tent.utils.data_manager import *
 

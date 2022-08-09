@@ -54,14 +54,14 @@ from tent.enumerations.direction import Direction
 from tent.utils.helpers import (are_different1, are_different2, find_obj_by_ti, find_objs_by_ti, format_ts,
                                 get_duration_in_hour, order_vertices, production, prod_cost_from_vertices,
                                 validate_bool)
-from tent.interval_value import IntervalValue
+from tent.containers.interval_value import IntervalValue
 from tent.enumerations.market_state import MarketState
 from tent.enumerations.measurement_type import MeasurementType
 from tent.meter_point import MeterPoint
 from tent.utils.timer import Timer
-from tent.transactive_record import TransactiveRecord
+from tent.containers.transactive_record import TransactiveRecord
 from tent.utils.log import setup_logging
-from tent.vertex import Vertex
+from tent.containers.vertex import Vertex
 
 setup_logging()
 _log = logging.getLogger(__name__)

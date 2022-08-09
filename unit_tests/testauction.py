@@ -45,13 +45,13 @@ from datetime import datetime, timedelta
 from tent.market.auction import Auction
 from tent.local_asset import LocalAsset
 from tent.TransactiveNode import TransactiveNode
-from tent.time_interval import TimeInterval
+from tent.containers.time_interval import TimeInterval
 from tent.enumerations.market_state import MarketState
 from tent.neighbor import Neighbor
 from tent.enumerations.direction import Direction
-from tent.vertex import Vertex
-from tent.interval_value import IntervalValue
-from tent.transactive_record import TransactiveRecord
+from tent.containers.vertex import Vertex
+from tent.containers.interval_value import IntervalValue
+from tent.containers.transactive_record import TransactiveRecord
 
 
 def test_while_in_negotiation():
