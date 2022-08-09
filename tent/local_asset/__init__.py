@@ -50,8 +50,8 @@ from typing import Union
 from tent.helpers import find_obj_by_ti, find_objs_by_ti, prod_cost_from_vertices, validate_bool
 from tent.information_service_model import InformationServiceModel
 from tent.interval_value import IntervalValue
-from tent.measurement_type import MeasurementType
-from tent.market_state import MarketState
+from tent.enumerations.measurement_type import MeasurementType
+from tent.enumerations.market_state import MarketState
 from tent.meter_point import MeterPoint
 from tent.time_interval import TimeInterval
 from tent.timer import Timer

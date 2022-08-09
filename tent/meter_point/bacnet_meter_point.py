@@ -57,7 +57,7 @@ from tent.async_ import AsyncCall
 from tent.interval_value import IntervalValue
 from tent.helpers import format_timestamp
 from tent.meter_point.pull_meter_point import PullMeterPoint
-from tent.measurement_type import MeasurementType
+from tent.enumerations.measurement_type import MeasurementType
 
 from bacpypes.task import RecurringTask
 import bacpypes.core

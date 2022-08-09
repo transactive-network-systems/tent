@@ -44,10 +44,10 @@ import logging
 import math
 
 from tent.helpers import find_obj_by_ti
-from tent.measurement_type import MeasurementType
+from tent.enumerations.measurement_type import MeasurementType
 from tent.local_asset import LocalAsset
 from tent.interval_value import IntervalValue
-from tent.market_state import MarketState
+from tent.enumerations.market_state import MarketState
 from tent.utils.log import setup_logging
 
 setup_logging()

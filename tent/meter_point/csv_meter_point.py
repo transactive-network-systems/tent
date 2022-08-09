@@ -50,7 +50,7 @@ under Contract DE-AC05-76RL01830
 import pandas as pd
 
 from tent.interval_value import IntervalValue
-from tent.measurement_type import MeasurementType
+from tent.enumerations.measurement_type import MeasurementType
 from tent.meter_point.pull_meter_point import PullMeterPoint
 
 

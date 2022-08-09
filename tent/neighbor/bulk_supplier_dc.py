@@ -47,8 +47,8 @@ from tent.const import bpa_demand_rate, bpa_energy_rate
 from tent.data_manager import append_table
 from tent.helpers import get_duration_in_hour, is_heavyloadhour
 from tent.interval_value import IntervalValue
-from tent.market_state import MarketState
-from tent.measurement_type import MeasurementType
+from tent.enumerations.market_state import MarketState
+from tent.enumerations.measurement_type import MeasurementType
 from tent.neighbor import Neighbor
 from tent.utils.log import setup_logging
 from tent.vertex import Vertex

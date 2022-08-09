@@ -47,10 +47,10 @@ from datetime import datetime, timedelta
 from dateutil import parser
 from typing import Union
 
-from tent.measurement_type import MeasurementType
-from tent.measurement_unit import MeasurementUnit
+from tent.enumerations.measurement_type import MeasurementType
+from tent.enumerations.measurement_unit import MeasurementUnit
 from tent.interval_value import IntervalValue
-from tent.market_state import MarketState
+from tent.enumerations.market_state import MarketState
 
 
 class InformationServiceModel:

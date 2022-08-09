@@ -45,8 +45,8 @@ from datetime import timedelta
 
 from tent.interval_value import IntervalValue
 from tent.local_asset import LocalAsset
-from tent.market_state import MarketState
-from tent.measurement_type import MeasurementType
+from tent.enumerations.market_state import MarketState
+from tent.enumerations.measurement_type import MeasurementType
 from tent.vertex import Vertex
 
 

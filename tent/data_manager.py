@@ -45,6 +45,7 @@ from vertex import Vertex
 from datetime import datetime, date
 from measurement_type import MeasurementType
 
+from tent.enumerations.measurement_type import MeasurementType
 
 VERBOSE = True
 METHOD = 1  # Comma-Separated Value method

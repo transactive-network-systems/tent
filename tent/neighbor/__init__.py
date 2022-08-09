@@ -50,12 +50,12 @@ from operator import attrgetter
 from typing import Union
 
 from tent.data_manager import append_table
-from tent.direction import Direction
+from tent.enumerations.direction import Direction
 from tent.helpers import (are_different1, are_different2, find_obj_by_ti, find_objs_by_ti, format_ts,
     get_duration_in_hour, order_vertices, production, prod_cost_from_vertices, validate_bool)
 from tent.interval_value import IntervalValue
-from tent.market_state import MarketState
-from tent.measurement_type import MeasurementType
+from tent.enumerations.market_state import MarketState
+from tent.enumerations.measurement_type import MeasurementType
 from tent.meter_point import MeterPoint
 from tent.timer import Timer
 from tent.transactive_record import TransactiveRecord

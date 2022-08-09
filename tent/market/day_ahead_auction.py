@@ -46,7 +46,7 @@ from datetime import timedelta
 from tent.data_manager import append_table
 from tent.market.auction import Auction
 from tent.market.real_time_auction import RealTimeAuction
-from tent.market_state import MarketState
+from tent.enumerations.market_state import MarketState
 
 
 class DayAheadAuction(Auction):

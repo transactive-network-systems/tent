@@ -53,7 +53,7 @@ from typing import Union
 
 from tent.helpers import format_timestamp
 from tent.information_service_model import InformationServiceModel
-from tent.measurement_type import MeasurementType
+from tent.enumerations.measurement_type import MeasurementType
 from tent.interval_value import IntervalValue
 from tent.utils.log import setup_logging
 

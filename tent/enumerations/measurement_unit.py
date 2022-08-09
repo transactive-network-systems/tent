@@ -44,6 +44,7 @@ under Contract DE-AC05-76RL01830
 
 from enum import Enum
 
+
 class MeasurementUnit(Enum):
     # MeasurementUnit enumeration - confirm allowed unit of measure is being
     # used
@@ -53,7 +54,7 @@ class MeasurementUnit(Enum):
     # measurement type.
     #
     # NOTE: perhaps this approach should be revised to ensure the proper
-    # pairing of measurment types and their unit of measure.
+    # pairing of measurement types and their unit of measure.
 
     degF = 1
     kVAR = 2

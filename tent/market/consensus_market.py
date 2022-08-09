@@ -43,8 +43,8 @@ under Contract DE-AC05-76RL01830
 
 from tent.helpers import find_obj_by_ti, order_vertices
 from tent.market import Market
-from tent.market_types import MarketTypes
-from tent.method import Method
+from tent.enumerations.market_types import MarketTypes
+from tent.enumerations.method import Method
 
 
 class ConsensusMarket(Market):

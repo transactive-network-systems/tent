@@ -43,7 +43,7 @@ under Contract DE-AC05-76RL01830
 
 from datetime import datetime, timedelta
 
-from tent.market_state import MarketState
+from tent.enumerations.market_state import MarketState
 from tent.helpers import format_ts
 from timer import Timer
 

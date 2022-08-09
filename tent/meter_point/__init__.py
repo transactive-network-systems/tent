@@ -54,14 +54,14 @@ import weakref
 from datetime import timedelta
 from tent.interval_value import IntervalValue
 from tent.market import Market
-from tent.market_state import MarketState
+from tent.enumerations.market_state import MarketState
 from math import ceil
 from statistics import mean
 from typing import Union
 
 from tent.helpers import find_obj_by_ti
-from tent.measurement_type import MeasurementType
-from tent.measurement_unit import MeasurementUnit
+from tent.enumerations.measurement_type import MeasurementType
+from tent.enumerations.measurement_unit import MeasurementUnit
 from tent.timer import Timer
 from tent.utils.time_series_buffer import TimeSeriesBuffer
 
