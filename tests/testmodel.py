@@ -51,7 +51,7 @@ from tent.market import Market
 from tent.containers.time_interval import TimeInterval
 from tent.containers.interval_value import IntervalValue
 from tent.enumerations.measurement_type import MeasurementType
-from tent.TransactiveNode import TransactiveNode
+from tent.transactive_node import TransactiveNode
 
 
 def test_schedule():

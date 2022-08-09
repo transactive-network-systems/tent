@@ -52,7 +52,7 @@ from tent.enumerations.market_state import MarketState
 from tent.containers.time_interval import TimeInterval
 from tent.neighbor import Neighbor
 from tent.local_asset import LocalAsset
-from tent.TransactiveNode import TransactiveNode
+from tent.transactive_node import TransactiveNode
 from tent.enumerations.method import Method
 
 

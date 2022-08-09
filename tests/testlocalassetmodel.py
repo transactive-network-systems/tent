@@ -51,7 +51,7 @@ from tent.utils.helpers import *
 from tent.market import Market
 from tent.containers.time_interval import TimeInterval
 from tent.local_asset import LocalAsset
-from tent.TransactiveNode import TransactiveNode
+from tent.transactive_node import TransactiveNode
 
 
 def test_assign_transition_costs():

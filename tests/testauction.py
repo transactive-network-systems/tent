@@ -44,7 +44,7 @@ from datetime import datetime, timedelta
 
 from tent.market.auction import Auction
 from tent.local_asset import LocalAsset
-from tent.TransactiveNode import TransactiveNode
+from tent.transactive_node import TransactiveNode
 from tent.containers.time_interval import TimeInterval
 from tent.enumerations.market_state import MarketState
 from tent.neighbor import Neighbor

@@ -42,7 +42,7 @@ under Contract DE-AC05-76RL01830
 """
 from tent.market.day_ahead_auction import DayAheadAuction
 from datetime import datetime, timedelta
-from tent.TransactiveNode import TransactiveNode
+from tent.transactive_node import TransactiveNode
 from tent.enumerations.market_types import MarketTypes
 
 
