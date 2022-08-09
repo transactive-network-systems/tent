@@ -41,19 +41,21 @@ operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
 
-from helpers import find_obj_by_ti, order_vertices
-from market import Market
-from market_types import MarketTypes
-from method import Method
+from tent.helpers import find_obj_by_ti, order_vertices
+from tent.market import Market
+from tent.market_types import MarketTypes
+from tent.method import Method
+
 
 class ConsensusMarket(Market):
 
-    def __init__(self):
+    def __init__(self, market_series_name='Consensus_Market_Series', *args, **kwargs):
         super(ConsensusMarket, self).__init__(
-                            market_series_name='Consensus_Market_Series',
-                            market_type=MarketTypes.consensus,
-                            method=2
-                            )
+            market_series_name=market_series_name,
+            market_type=MarketTypes.consensus,
+            method='Interpolation',
+            *args, **kwargs
+        )
 
     def while_in_negotiation(self, my_transactive_node):
         # Almost all consensus balancing activities will occur while the market is in its negotiation state.
@@ -173,7 +175,7 @@ class ConsensusMarket(Market):
                         if power_range == 0:
                             err_msg = "At {}, power range is 0".format(time_intervals[i].name)
                         cleared_marginal_price = - marginal_price_range * lower_vertex.power / power_range \
-                                                                                        + lower_vertex.marginalPrice
+                                                 + lower_vertex.marginalPrice
                     except RuntimeWarning as warning:
                         Warning('Failed to find balance point: ', warning)
                         """

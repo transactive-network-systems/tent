@@ -41,15 +41,21 @@ operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
 
+import logging
 
-from market import Market
-from direction import Direction
-from market_types import MarketTypes
 from warnings import warn
-from helpers import production
-from interval_value import IntervalValue
-from measurement_type import MeasurementType
-from log import LogLevels, log_statement
+
+from tent.direction import Direction
+from tent.helpers import production
+from tent.interval_value import IntervalValue
+from tent.market import Market
+from tent.market_types import MarketTypes
+from tent.measurement_type import MeasurementType
+from tent.utils.log import setup_logging
+
+setup_logging()
+_log = logging.getLogger(__name__)
+
 
 class Auction(Market):
     """
@@ -57,9 +63,9 @@ class Auction(Market):
     An Auction object may be a formal driver of myTransactiveNode's responsibilities within a formal auction. At least
     one Market must exist (see the firstMarket object) to drive the timing with which new TimeIntervals are created.
     """
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         # Properties and methods inherited from Market class:
-        super(Auction, self).__init__(market_type=MarketTypes.auction)
+        super(Auction, self).__init__(market_type=MarketTypes.auction, *args, **kwargs)
 
     def transition_from_active_to_negotiation(self, my_transactive_node):
         """
@@ -92,7 +98,7 @@ class Auction(Market):
         return None
 
     def while_in_negotiation(self, my_transactive_node):
-        """"
+        """
         The result of scheduling is that each local asset will create Vertex structs representing its inelastic or
         elastic power consumption. It may further provide at least two additional vertices that represent its price
         elasticity. In an auction, this scheduling is performed for only local assets. Exchanges with neighbor
@@ -104,8 +110,7 @@ class Auction(Market):
 
             # An Auction should check that all LocalAsset objects have finished scheduling their powers.
             all_calculated = True
-            for x in range(len(my_transactive_node.localAssets)):
-                local_asset = my_transactive_node.localAssets[x]
+            for local_asset in my_transactive_node.localAssets:
                 if not local_asset.scheduleCalculated:
                     all_calculated = False
                     break
@@ -136,14 +141,14 @@ class Auction(Market):
         downstream_agents = [x for x in my_transactive_node.neighbors if x.upOrDown == Direction.downstream]
 
         unassigned_agents = [x for x in my_transactive_node.neighbors if x.upOrDown != Direction.upstream
-                                                                        and x.upOrDown != Direction.downstream]
+                             and x.upOrDown != Direction.downstream]
 
         for x in range(len(unassigned_agents)):
-            log_statement('Warning: Assigning neighbor ' + unassigned_agents[x].name + ' the downstream direction', LogLevels.warning)
+            _log.warning(f'Warning: Assigning neighbor {unassigned_agents[x].name} the downstream direction')
             unassigned_agents[x].upOrDown = Direction.downstream
 
         if len(upstream_agents) != 1:
-            log_statement('Warning: There should be precisely one upstream neighbor for an auction market', LogLevels.warning)
+            _log.warning('Warning: There should be precisely one upstream neighbor for an auction market')
             raise RuntimeWarning('There should be precisely one upstream neighbor for an auction market')
 
         # Initialize a flag true if all downstream bids have been received. An aggregate auction bid can be constructed
@@ -171,8 +176,7 @@ class Auction(Market):
                 all_received = False
 
                 # and call on the downstream agent model to try and receive the signal again:
-                # 210303DJH: Pass parameter market to receive_transactive_signal().
-                downstream_agent.receive_transactive_signal(my_transactive_node, self, downstream_agents.receivedCurves)
+                downstream_agent.receive_transactive_signal(my_transactive_node, self, downstream_agent.receivedCurves)
 
         # If all expected bids have been received from downstream agents, have the downstream neighbor models update
         # their vertices and schedule themselves. The result of this will be an updated set of active vertices for each
@@ -191,22 +195,17 @@ class Auction(Market):
             # transactive,
 
             if upstream_agents is None or len(upstream_agents) == 0:
-                print('Warning: There must exist one upstream neighbor agent in an auction.')
+                _log.warning('Warning: There must exist one upstream neighbor agent in an auction.')
                 raise Warning('There must exist one upstream neighbor agent in an auction.')
-
             else:
-
                 upstream_agent = upstream_agents[0]                             # Clear indexing of lone upstream agent
 
                 if upstream_agent.transactive is True:
-
                     # Call on the upstream agent model  to prepare its transactive signal.
-                    upstream_agent.prep_transactive_signal(my_transactive_node,
-                                                           self)
+                    upstream_agent.prep_transactive_signal(self, my_transactive_node)
 
-                # Send the transactive signal (i.e., aggregated bid) to the upstream agent if it is a transactive agent.
-                    upstream_agent.send_transactive_signal(my_transactive_node,
-                                                           self)
+                    # Send transactive signal (i.e., aggregated bid) to the upstream agent if it is a transactive agent.
+                    upstream_agent.send_transactive_signal(self, my_transactive_node, upstream_agent.publishTopic)
 
             # 210208DJH: This new flag must be set true to leave this state and allow the next transition.
             #            TODO: We don't have foolproof verification that the upstream agent was sent this signal,
@@ -222,22 +221,18 @@ class Auction(Market):
         """
         # Identify the set of neighbor agents that is identified as "downstream" (i.e., toward demand side) and the set
         # that is "upstream" (i.e., toward generation).
-        downstream_agents = []
-        upstream_agents = []
-
         downstream_agents = [x for x in my_transactive_node.neighbors if x.upOrDown == Direction.downstream]
         upstream_agents = [x for x in my_transactive_node.neighbors if x.upOrDown == Direction.upstream]
         unassigned_agents = [x for x in my_transactive_node.neighbors if x.upOrDown != Direction.upstream
-                                                                                and x.upOrDown != Direction.downstream]
+                             and x.upOrDown != Direction.downstream]
 
         for x in range(len(unassigned_agents)):
-            log_statement('Warning: Assigning neighbor ' + unassigned_agents[x].name + ' the downstream direction', LogLevels.debug)
-            log_statement('Assigning neighbor ' + unassigned_agents[x].name + ' the downstream direction', LogLevels.warning)
+            _log.warning('Warning: Assigning neighbor ' + unassigned_agents[x].name + ' the downstream direction')
+            _log.warning('Assigning neighbor ' + unassigned_agents[x].name + ' the downstream direction')
             unassigned_agents[x].upOrDown = Direction.downstream
 
         if len(upstream_agents) != 1:
-            log_statement('Warning: There should be precisely one upstream neighbor for an auction market', LogLevels.warning)
-            log_statement('There should be precisely one upstream neighbor for an auction market', LogLevels.warning)
+            _log.warning('Warning: There should be precisely one upstream neighbor for an auction market')
 
         # Initialize a flag true if all downstream bids have been received. An aggregate auction bid can be constructed
         # only after all bids have been received from downstream agents (and from local assets, of course):
@@ -247,7 +242,6 @@ class Auction(Market):
         upstream_agent = upstream_agents[0]
 
         if upstream_agent.transactive is True:
-
             # Create a list of the time interval names among the received transactive signal:
             received_time_intervals = []
 
@@ -263,20 +257,16 @@ class Auction(Market):
 
             # If time intervals are missing among the upstream agent's transactive records,
             if missing_time_intervals:
-
                 all_received = False
 
                 # Call on the upstream agent model to try and receive the signal again.
-                # 210303DJH: Pass parameter market to receive_transactive_signal.
-                upstream_agent.receive_transactive_signal(my_transactive_node,
-                                                          self, upstream_agent.receivedCurves)
+                upstream_agent.receive_transactive_signal(my_transactive_node, self, upstream_agent.receivedCurves)
 
         # If offers have been received for all active market time intervals from the upstream agent,
         # 200618DJH: I think this is correct up to this point, but I had left out some very important steps of the
         #            auction market balancing.
 
         if all_received is True:
-
             # Update this Neighbor's active vertices, which is entirely completed from its recently received transactive
             # signal and its records.
             # 200702DJH: Why is this misspelling of "vertices" permitted here???????????????
@@ -307,14 +297,10 @@ class Auction(Market):
                     #            simply have its value changed.
                     scheduled_power = [x for x in local_asset.scheduledPowers if x.timeInterval == time_interval]
                     if len(scheduled_power) == 0:
-                        local_asset.scheduledPowers.append(IntervalValue(calling_object=self,
-                                                                         time_interval=time_interval,
-                                                                         market=self,
-                                                                         measurement_type=
-                                                                            MeasurementType.ScheduledPower,
-                                                                         value=power
-                                                                         )
-                                                           )
+                        local_asset.scheduledPowers.append(
+                            IntervalValue(calling_object=self, time_interval=time_interval, market=self,
+                                          measurement_type=MeasurementType.ScheduledPower, value=power)
+                        )
                     elif len(scheduled_power) == 1:
                         scheduled_power[0].value = power
                     else:
@@ -324,10 +310,10 @@ class Auction(Market):
 
             # For each downstream agent,
             for x in range(len(downstream_agents)):
-                downstream_agent = downstream_agents[x] # the indexed downstream agent
+                downstream_agent = downstream_agents[x]  # the indexed downstream agent
 
                 # 201731DJH: Now that the LMP has been determined, power may be scheduled for this downstream neighbor.
-                downstream_agent.schedulePower(self)
+                downstream_agent.schedule_power(self)
 
                 # prepare an aggregated offer for the downstream agent,
                 downstream_agent.prep_transactive_signal(self, my_transactive_node)

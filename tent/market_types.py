@@ -41,8 +41,10 @@ operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
 
+from enum import Enum
 
-class MarketTypes:
+
+class MarketTypes(Enum):
     auction = 1
     consensus = 2
     unknown = 3

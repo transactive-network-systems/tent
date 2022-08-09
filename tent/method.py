@@ -41,6 +41,9 @@ operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
 
-class Method:
+from enum import Enum
+
+
+class Method(Enum):
     Subgradient = 1
     Interpolation = 2

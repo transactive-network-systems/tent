@@ -40,7 +40,7 @@ PACIFIC NORTHWEST NATIONAL LABORATORY
 operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
-from tent.day_ahead_auction import DayAheadAuction
+from tent.market.day_ahead_auction import DayAheadAuction
 from datetime import datetime, timedelta
 from tent.TransactiveNode import TransactiveNode
 from tent.market_types import MarketTypes

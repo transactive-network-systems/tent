@@ -41,15 +41,19 @@ operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
 
-from tent.auction import Auction
-from timer import Timer
-from tent.log import VOLTTRON_ENV, log_statement
+import logging
+
+from tent.market.auction import Auction
+from tent.utils.log import setup_logging
+
+setup_logging()
+_log = logging.getLogger(__name__)
 
 
 class RealTimeAuction(Auction):
 
-    def __init__(self):
-        super(RealTimeAuction, self).__init__()
+    def __init__(self, *args, **kwargs):
+        super(RealTimeAuction, self).__init__(*args, **kwargs)
 
     def spawn_markets(self, this_transactive_node=None, new_market_clearing_time=None):
         # In this case, the real-time auctions are spawned by the day-ahead markets. Therefore, the real-time markets
@@ -71,19 +75,8 @@ class RealTimeAuction(Auction):
         for x in range(len(final_prices)):
             self.model_prices(final_prices[x].timeInterval.startTime, final_prices[x].value, k=k)
 
-        self.deliverylead_schedule_power = False
+        self.delivery_lead_schedule_power = False
 
-        log_statement(f"{self.name}: transition_from_delivery_lead_to_delivery")
+        _log.debug(f"{self.name}: transition_from_delivery_lead_to_delivery")
 
-        if VOLTTRON_ENV:
-            from volttron.platform.messaging import headers as headers_mod
-            from volttron.platform.agent.utils import format_timestamp
-            headers = {headers_mod.DATE: format_timestamp(Timer.get_cur_time())}
-            msg = dict('')
-            msg['tnt_market_name'] = self.name
-            my_transactive_node.vip.pubsub.publish(peer='pubsub',
-                                                   topic=my_transactive_node.market_balanced_price_topic,
-                                                   headers=headers,
-                                                   message=msg)
-            self.publish_records(my_transactive_node)
         return None

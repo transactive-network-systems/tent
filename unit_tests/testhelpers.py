@@ -197,7 +197,7 @@ def test_production():
 
 
 def test_prod_cost_from_formula():
-    from tent.local_asset.__init__ import LocalAsset
+    from tent.local_asset import LocalAsset
     from tent.market import Market
 
     print('Running test_prod_cost_from_formula()')

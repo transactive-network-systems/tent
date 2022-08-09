@@ -41,23 +41,23 @@ operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
 
-
-from auction import Auction
-from market_state import MarketState
 from datetime import timedelta
-from real_time_auction import RealTimeAuction
-from data_manager import *
+
+from tent.data_manager import append_table
+from tent.market.auction import Auction
+from tent.market.real_time_auction import RealTimeAuction
+from tent.market_state import MarketState
 
 
 class DayAheadAuction(Auction):
 
-    def __init__(self):
-        super(DayAheadAuction, self).__init__()
+    def __init__(self, *args, **kwargs):
+        super(DayAheadAuction, self).__init__(*args, **kwargs)
 
     def spawn_markets(self, this_transactive_node, new_market_clearing_time):
 
         # 200910DJH: This is where you may change between 15-minute and 60-minute real-time refinement intervals.
-        real_time_market_duration = timedelta(minutes=60)
+        real_time_market_duration = self.real_time_duration
 
         # First, go ahead and use the base method and current market to create the next member of this market series,
         # as was intended. This should instantiate the new market,  create its time intervals, and initialize marginal
@@ -68,7 +68,7 @@ class DayAheadAuction(Auction):
         # intervals. There are several ways to retrieve the market that was just created, but this approach should be
         # pretty foolproof.
         market = [x for x in this_transactive_node.markets if x.marketClearingTime == self.nextMarketClearingTime and
-                      x.marketSeriesName == self.marketSeriesName][0]
+                  x.marketSeriesName == self.marketSeriesName][0]
 
         # Something is seriously wrong if the recently instantiated market cannot be found. Raise an error and stop.
         # if market is None or len(market) == 0:
@@ -93,69 +93,60 @@ class DayAheadAuction(Auction):
             #            Time markets to be captured as CSV records.
             # new_market_list = []
             while interval_start < interval_end:
-
-                # Instantiate a new real-time market.
-                new_market = RealTimeAuction()
-
-                new_market.marketToBeRefined = market
-                new_market.intervalToBeRefined = [x for x in market.timeIntervals
-                                                  if x.startTime == market_interval_start_times[i]]
-
-                # Set the lead times. This is done explicitly.
-                # 200910DJH: Please use real_time_market_duration to change between real-time market interval durations.
-                #  new_market.marketClearingInterval = timedelta(minutes=15)
-                new_market.marketClearingInterval = real_time_market_duration
-
-                new_market.marketSeriesName = "Real-Time Auction"
-                new_market.deliveryLeadTime = timedelta(minutes=5)
-                new_market.marketLeadTime = timedelta(minutes=5)
-                new_market.negotiationLeadTime = timedelta(minutes=5)
-
                 # Find the prior market in this series. It should be the one that shares the same market series name and
                 # is, until now, the newest market in the series.
                 prior_market = [x for x in this_transactive_node.markets
-                                if x.marketSeriesName == new_market.marketSeriesName
+                                if x.marketSeriesName == "Real-Time Auction"
                                 and x.isNewestMarket is True]
 
                 if prior_market is None or len(prior_market) == 0:
-
                     # This is most likely a startup issue when the prior market in the series cannot be found.
-                    Warning('No prior markets were found in market series: ' + new_market.marketSeriesName)
-                    new_market.priceModel = self.priceModel
-                    new_market.defaultPrice = self.defaultPrice
-                    new_market.futureHorizon = new_market.marketClearingInterval
+                    Warning('No prior markets were found in market series: Real-Time Auction')
+                    price_model = self.priceModel
+                    default_price = self.defaultPrice
+                    future_horizon = real_time_market_duration
+                    prior_market_in_series = None
 
                 else:
-
                     # The prior market was found. These attributes may be adopted from the prior market in the series.
                     prior_market = prior_market[0]
                     prior_market.isNewestMarket = False
-                    new_market.priceModel = prior_market.priceModel
-                    new_market.defaultPrice = prior_market.defaultPrice
-                    new_market.futureHorizon = prior_market.futureHorizon
-                    new_market.priorMarketInSeries = prior_market
+                    price_model = prior_market.priceModel
+                    default_price = prior_market.defaultPrice
+                    future_horizon = prior_market.futureHorizon
+                    prior_market_in_series = prior_market
 
-                new_market.commitment = False
-                new_market.initialMarketState = MarketState.Inactive
+                # TODO: Many of these (lead times, for instance) are hard-coded. Perhaps this should come from updating
+                #  a stored config and passing it to the constructor as **config?
+                # Instantiate a new real-time market.
+                new_market = RealTimeAuction(
+                    market_to_be_refined=market,
+                    market_clearing_interval=real_time_market_duration,
+                    market_series_name="Real-Time Auction",
+                    delivery_lead_time=timedelta(minutes=5),
+                    market_lead_time=timedelta(minutes=5),
+                    negotiation_lead_time=timedelta(minutes=5),
+                    default_price=default_price,
+                    future_horizon=future_horizon,
+                    prior_market_in_series=prior_market_in_series,
+                    commitment=False,
+                    initial_market_state=MarketState.Inactive,
+                    interval_duration=real_time_market_duration,
+                    intervals_to_clear=1,
+                    market_order=2,
+                    method='Interpolation',
+                    market_clearing_time=interval_start - timedelta(minutes=5),
+                )
 
-                # 200910DJH: Please use the real-time_market_duration constant to modify real-time market intervals.
-                # new_market.intervalDuration = timedelta(minutes=15)
-                new_market.intervalDuration = real_time_market_duration
-
-                new_market.intervalsToClear = 1
-                new_market.marketOrder = 2
-                new_market.method = 2
-                new_market.marketState = new_market.initialMarketState
-                new_market.marketClearingTime = interval_start - new_market.deliveryLeadTime
-                new_market.nextMarketClearingTime = new_market.marketClearingTime + new_market.marketClearingInterval
-
-                # The market instance is named by concatenating the market name and its market clearing time.
-                dt = str(new_market.marketClearingTime)
-                new_market.name = new_market.marketSeriesName.replace(' ', '_') + '_' + dt[:19]
+                new_market.priceModel = price_model
+                # TODO: This intervalToBeRefined does not seem to be used anywhere....
+                new_market.intervalToBeRefined = [x for x in market.timeIntervals
+                                                  if x.startTime == market_interval_start_times[i]]
 
                 # Pass the flag for the newest market in the market series. This important flag will be needed
                 # to find this new market when the succeeding one is being instantiated and configured.
                 new_market.isNewestMarket = True  # This new market now assumes the flag as newest market
+                new_market.marketState = new_market.initialMarketState
 
                 # Initialize the new market object's time intervals.
                 new_market.check_intervals()

@@ -99,7 +99,7 @@ class LocalAsset(object):
                  # 200520DJH - The following Boolean property is added to give complex assets like TCC time to schedule
                  # their powers.
                  schedule_calculated=False,
-                 scheduling_horizon: Union[timedelta, float] = timedelta(hours=24),
+                 scheduling_horizon: Union[timedelta, float, int] = timedelta(hours=24),
                  subclass=None,
                  transactive_node=None):
 
