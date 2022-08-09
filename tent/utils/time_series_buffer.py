@@ -18,7 +18,7 @@ from typing import Union, Iterable
 import pytz
 from datetime import datetime, timedelta, tzinfo
 
-from tent.timer import Timer
+from tent.utils.timer import Timer
 
 
 PointRecord = namedtuple('PointRecord', ['value', 'd_time'])

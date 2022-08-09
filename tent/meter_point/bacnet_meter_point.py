@@ -52,10 +52,10 @@ from datetime import datetime
 from gevent.event import AsyncResult
 from queue import Queue, Empty
 
-from tent import headers
-from tent.async_ import AsyncCall
+from tent.utils import headers
+from tent.utils.async_ import AsyncCall
 from tent.interval_value import IntervalValue
-from tent.helpers import format_timestamp
+from tent.utils.helpers import format_timestamp
 from tent.meter_point.pull_meter_point import PullMeterPoint
 from tent.enumerations.measurement_type import MeasurementType
 

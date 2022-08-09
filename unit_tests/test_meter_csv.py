@@ -47,7 +47,7 @@ from tent.meter_point.csv_meter_point import CSVMeterPoint
 from tent.interval_value import IntervalValue
 from datetime import timedelta
 from tent.market import Market
-from tent.data_manager import *
+from tent.utils.data_manager import *
 
 
 def divider():

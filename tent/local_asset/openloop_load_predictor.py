@@ -46,7 +46,7 @@ import logging
 from datetime import timedelta
 from typing import List
 
-from tent.helpers import find_obj_by_ti
+from tent.utils.helpers import find_obj_by_ti
 from tent.interval_value import IntervalValue
 from tent.local_asset import LocalAsset
 from tent.enumerations.measurement_type import MeasurementType

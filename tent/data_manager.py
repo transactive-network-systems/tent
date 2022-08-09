@@ -41,11 +41,10 @@ operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
 
-from vertex import Vertex
-from datetime import datetime, date
-from measurement_type import MeasurementType
+from datetime import datetime
 
 from tent.enumerations.measurement_type import MeasurementType
+from tent.vertex import Vertex
 
 VERBOSE = True
 METHOD = 1  # Comma-Separated Value method

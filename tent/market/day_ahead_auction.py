@@ -43,7 +43,7 @@ under Contract DE-AC05-76RL01830
 
 from datetime import timedelta
 
-from tent.data_manager import append_table
+from tent.utils.data_manager import append_table
 from tent.market.auction import Auction
 from tent.market.real_time_auction import RealTimeAuction
 from tent.enumerations.market_state import MarketState

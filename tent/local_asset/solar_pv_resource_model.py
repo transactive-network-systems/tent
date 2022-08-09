@@ -43,7 +43,7 @@ under Contract DE-AC05-76RL01830
 import logging
 import math
 
-from tent.helpers import find_obj_by_ti
+from tent.utils.helpers import find_obj_by_ti
 from tent.enumerations.measurement_type import MeasurementType
 from tent.local_asset import LocalAsset
 from tent.interval_value import IntervalValue

@@ -44,8 +44,8 @@ under Contract DE-AC05-76RL01830
 from datetime import datetime, timedelta
 
 from tent.enumerations.market_state import MarketState
-from tent.helpers import format_ts
-from timer import Timer
+from tent.utils.helpers import format_ts
+from tent.utils.timer import Timer
 
 # import logging
 """
@@ -99,8 +99,8 @@ class TimeInterval:
         # MARKET STATE - an enumeration of market states, concerning the
         #                status of negotiations on this time interval.
         # ACTIVE - logical true during negotiations, delivery, and
-        #          reconcilliation of the time interval
-        # TIME STAMP - the time the the time interval is created or modified
+        #          reconciliation of the time interval
+        # TIME STAMP - the time when the time interval is created or modified
         # NOTE 1911DJH: The market state of an interval is no longer relevant. A Market owns its market state, and the
         # market state is relevant to all of its included market time intervals.
         # self.assign_state(market)
@@ -108,7 +108,7 @@ class TimeInterval:
     def assign_state(self, market):
         # assign_state - assign state of the TimeInterval in its Market.
         # Enumeration MarketState has all the allowed market state names.
-        # obj - a TimeInterval oject. Invoke as "self.assign_state(market)".
+        # obj - a TimeInterval object. Invoke as "self.assign_state(market)".
         # market - Market object (see class Market).
 
         dt = Timer.get_cur_time()

@@ -59,10 +59,10 @@ from math import ceil
 from statistics import mean
 from typing import Union
 
-from tent.helpers import find_obj_by_ti
+from tent.utils.helpers import find_obj_by_ti
 from tent.enumerations.measurement_type import MeasurementType
 from tent.enumerations.measurement_unit import MeasurementUnit
-from tent.timer import Timer
+from tent.utils.timer import Timer
 from tent.utils.time_series_buffer import TimeSeriesBuffer
 
 

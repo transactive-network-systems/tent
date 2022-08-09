@@ -44,9 +44,10 @@ from tent.interval_value import IntervalValue
 from tent.neighbor import Neighbor
 from tent.time_interval import TimeInterval
 from datetime import timedelta
-from tent.market import Market
-from tent.data_manager import *
 from tent.transactive_record import TransactiveRecord
+from tent.market import Market
+from tent.utils.data_manager import *
+
 
 
 def DIVIDER():

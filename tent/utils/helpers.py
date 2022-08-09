@@ -48,7 +48,8 @@ import math
 import pytz
 
 from datetime import datetime, timedelta
-from .utils.log import setup_logging
+
+from tent.utils.log import setup_logging
 
 setup_logging()
 _log = logging.getLogger(__name__)
@@ -145,7 +146,7 @@ def parse_timestamp_string(time_stamp_str):
     return dateutil.parser.parse(time_stamp_str)
 
 
-def json_econder(obj):
+def json_encoder(obj):
     if isinstance(obj, datetime):
         return format_ts(obj)
     else:
@@ -415,7 +416,8 @@ def production(obj, price, ti, market=None):
         if market is None:
             raise Exception(f'No active vertices were found for {obj.name} in time interval {ti.name}')
         else:
-            raise Exception(f'No active vertices were found for {obj.name} in time interval {ti.name} for market: {market.name}')
+            raise Exception(f'No active vertices were found for {obj.name} in time interval {ti.name}'
+                            f' for market: {market.name}')
 
     # Ensure that the production vertices are ordered by increasing price.
     # Vertices having same price are ordered by power.
@@ -481,7 +483,7 @@ def are_different1(s, r, threshold, calling_neighbor=''):
     # scheduled points (i.e., Record 0) differ by more than this
     # threshold.
     #
-    # OUTPUS:
+    # OUTPUTS:
     # tf - Boolean: true if relative distance between scheduled (i.e., Record
     # 0) (price,quantity) pairs in the two messages exceeds the threshold.
 
@@ -497,7 +499,7 @@ def are_different1(s, r, threshold, calling_neighbor=''):
     # Calculate the average mp_avg of the two scheduled marginal prices.
     mp_avg = 0.5 * abs(s0.marginalPrice + r0.marginalPrice)  # [$/kWh]
 
-    # Calculate the difference dq betweent the scheduled powers.
+    # Calculate the difference dq between the scheduled powers.
     dq = abs(-s0.power - r0.power)  # [avg. kW]
 
     # Calculate the average q_avg of the two scheduled average powers.
@@ -516,7 +518,7 @@ def are_different1(s, r, threshold, calling_neighbor=''):
     _log.debug("TCC neighbor {} has q_avg {}, r0.power {}, s0.power {}, dq {}, dmp {}".format(
          calling_neighbor, q_avg, r0.power, s0.power, dq, dmp))
     _log.debug("TCC neighbor {} s is: {}".format(
-         calling_neighbor,[(x.timeInterval, x.record, x.power, x.marginalPrice) for x in s]))
+         calling_neighbor, [(x.timeInterval, x.record, x.power, x.marginalPrice) for x in s]))
     _log.debug("TCC neighbor {} r is: {}".format(
          calling_neighbor, [(x.timeInterval, x.record, x.power, x.marginalPrice) for x in r]))
 
@@ -547,11 +549,11 @@ def are_different1(s, r, threshold, calling_neighbor=''):
 def are_different2(m, s, threshold, calling_neighbor=''):
     # Assess whether two TransactiveRecord messages, representing the calculated and sent messages in an active time
     # interval are significantly different from one another. If the signals are different, this indicates that local
-    # conditions have changed, and a revised, updated transactive message shoudl be sent to the Neighbor.
+    # conditions have changed, and a revised, updated transactive message should be sent to the Neighbor.
     #
     # INPUTS:
     # m - TransactiveRecord message representing the mySignal, the last message calculated for this transactiveNeighbor.
-    # s - TransactiveRecord messge representing the sentSignal, the last message that was sent to this transactive
+    # s - TransactiveRecord message representing the sentSignal, the last message that was sent to this transactive
     #     Neighbor.
     # threshold - a dimensionless, relative error that is used as a convergence
     # criterion.

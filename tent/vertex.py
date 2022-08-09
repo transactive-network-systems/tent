@@ -42,7 +42,8 @@ under Contract DE-AC05-76RL01830
 """
 
 
-from tent.helpers import validate_bool
+from tent.utils.helpers import validate_bool
+
 
 class Vertex:
     def __init__(self, marginal_price, prod_cost, power, continuity=True, power_uncertainty=0.0, record=0):

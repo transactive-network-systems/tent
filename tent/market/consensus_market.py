@@ -41,7 +41,7 @@ operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
 
-from tent.helpers import find_obj_by_ti, order_vertices
+from tent.utils.helpers import find_obj_by_ti, order_vertices
 from tent.market import Market
 from tent.enumerations.market_types import MarketTypes
 from tent.enumerations.method import Method

@@ -46,7 +46,7 @@ from datetime import date, time, datetime, timedelta
 # from dateutil import relativedelta
 
 from tent.vertex import Vertex
-from tent.helpers import format_ts, order_vertices
+from tent.utils.helpers import format_ts, order_vertices
 from tent.enumerations.measurement_type import MeasurementType
 from tent.interval_value import IntervalValue
 from tent.transactive_record import TransactiveRecord

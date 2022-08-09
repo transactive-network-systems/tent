@@ -47,7 +47,7 @@ from datetime import date, time
 from tent.vertex import Vertex
 from tent.interval_value import IntervalValue
 from tent.enumerations.measurement_type import MeasurementType
-from tent.helpers import *
+from tent.utils.helpers import *
 from tent.market import Market
 from tent.time_interval import TimeInterval
 from tent.local_asset import LocalAsset

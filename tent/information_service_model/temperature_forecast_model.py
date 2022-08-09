@@ -51,7 +51,7 @@ from datetime import datetime, timedelta
 from dateutil import parser
 from typing import Union
 
-from tent.helpers import format_timestamp
+from tent.utils.helpers import format_timestamp
 from tent.information_service_model import InformationServiceModel
 from tent.enumerations.measurement_type import MeasurementType
 from tent.interval_value import IntervalValue
@@ -213,7 +213,7 @@ class TemperatureForecastModel(InformationServiceModel):
 
 if __name__ == '__main__':
     from tent.market import Market
-    from tent.helpers import format_ts
+    from tent.utils.helpers import format_ts
 
     # TODO: Move to tests directory and provide a valid path for configuration.
     forecaster = TemperatureForecastModel(

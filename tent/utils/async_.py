@@ -40,20 +40,17 @@
 
 Supports killing threads and executing callbacks from other threads.
 '''
-
-
-
 import functools
-import sys
-import threading
-
 import gevent
+import sys
+
 from gevent import GreenletExit
 
 
 __all__ = ['AsyncCall', 'GreenletExit']
 
 __author__ = 'Brandon Carpenter <brandon.carpenter@pnnl.gov>'
+
 
 class AsyncCall(object):
     '''Send functions to another thread's gevent hub for execution.'''
