@@ -41,11 +41,11 @@ operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
 import unittest
-from tent.meter_point.bacnet_meter_point import BACnetMeterPoint
-from tent.market import Market
-
 import os
 import socket
+
+from tent.meter_point.bacnet_meter_point import BACnetMeterPoint
+from tent.market import Market
 
 BACNET_DEVICE_TOPIC = "devices/bacnet"
 BACNET_TEST_IP = "BACNET_TEST_IP"
@@ -75,7 +75,7 @@ class TestBACnetMeterPoint(unittest.TestCase):
             'target_address': os.environ.get(BACNET_TEST_IP),
             'description': "BACnet Meter Device"
         }
-        
+
         # Mock market object creation
         self.test_market = Market(intervals_to_clear=(self.test_csv_length-1), market_clearing_time=self.test_date)
         self.test_market.check_intervals()

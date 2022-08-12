@@ -41,6 +41,7 @@ operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
 
+import weakref
 
 from datetime import date, time, datetime, timedelta
 # from dateutil import relativedelta
@@ -874,8 +875,8 @@ def test_update_dc_threshold():
     # Create and store a MeterPoint test object
     test_mtr = MeterPoint()
     test_mtr.measurementType = MeasurementType.AverageDemandkW  # 'average_demand_kW'
-    test_mtr.currentMeasurement = 900
-    test_obj.meterPoints = [test_mtr]
+    test_mtr.set_meter_value(900)
+    test_obj.meterPoints = [weakref.ref(test_mtr)]
 
     # Reconfigure the test object for this test:
     iv1 = IntervalValue(test_obj, ti[0], prior_market, MeasurementType.ScheduledPower, 900)

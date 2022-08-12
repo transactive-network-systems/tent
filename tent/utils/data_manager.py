@@ -109,7 +109,7 @@ def append_interval_value_table(method=METHOD, objects=None):
         MARKET_CLEARING_TIME = obj.market.marketClearingTime.strftime(TIME_FORMAT)
         INTERVAL_STARTING_DATE = obj.timeInterval.startTime.strftime(DATE_FORMAT)
         INTERVAL_STARTING_TIME = obj.timeInterval.startTime.strftime(TIME_FORMAT)
-        MEASUREMENT_TYPE = MeasurementType.get(obj.measurementType)
+        MEASUREMENT_TYPE = MeasurementType.get(obj.measurementType.value)
         value_type = type(obj.value)
         if value_type != Vertex:
             VALUE_1 = obj.value

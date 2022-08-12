@@ -193,7 +193,7 @@ def test_production():
 
     #   Success
     print('- the test function ran to completion')
-    print('Result: #s\n\n', pf)
+    print(f'Result: {pf}\n\n')
 
 
 def test_prod_cost_from_formula():
@@ -256,7 +256,7 @@ def test_prod_cost_from_formula():
 
     #   Success
     print('- the test ran to completion')
-    print('Result: #s\n\n', pf)
+    print(f'Result: {pf}\n\n')
 
 
 def test_prod_cost_from_vertices():
@@ -358,7 +358,7 @@ def test_prod_cost_from_vertices():
 
     #   Success
     print('- the test function ran to completion')
-    print('Result: #s\n\n', pf)
+    print(f'Result: {pf}\n\n')
 
 
 def test_are_different2():
@@ -487,7 +487,7 @@ def test_are_different2():
 
     # Success
     print('- the test ran to completion')
-    print('Result: {}\n\n'.format(pf))
+    print(f'Result: {pf}\n\n')
 
 
 if __name__ == "__main__":

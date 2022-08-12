@@ -98,7 +98,7 @@ class LocalAsset(object):
                  name='',
                  # 200520DJH - The following Boolean property is added to give complex assets like TCC time to schedule
                  # their powers.
-                 schedule_calculated=False,
+                 schedule_calculated=False, # TODO: Should this be settable in the constructor?
                  scheduling_horizon: Union[timedelta, float, int] = timedelta(hours=24),
                  subclass=None,
                  transactive_node=None):
@@ -288,6 +288,8 @@ class LocalAsset(object):
 
         sp = [(x.timeInterval.name, x.value) for x in self.scheduledPowers]
         _log.debug(f"{self.name} asset model scheduledPowers are: {sp}")
+
+        self.scheduleCalculated = True  # TODO: Added this so that vertices will be updated in schedule(). Correct?
 
     def schedule_engagement(self, market):
         # To assign engagement, or commitment, which is relevant to some local assets (supports future capabilities).

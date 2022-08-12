@@ -43,6 +43,7 @@ under Contract DE-AC05-76RL01830
 
 import logging
 import os
+import sys
 import weakref
 
 from copy import deepcopy
@@ -733,7 +734,7 @@ class Market:
                      x.value]
             price_data.append(datum)
 
-        filename = self.name + ".csv"
+        filename = self.name.replace(':', '_') + ".csv" if sys.platform == 'win32' else self.name + '.csv'
         full_filename = data_folder + filename
 
         my_file = open(full_filename, 'w+')

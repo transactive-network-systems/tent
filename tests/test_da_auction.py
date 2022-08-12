@@ -70,13 +70,15 @@ def test_spawn_markets():
 
     # 200910DJH: If the real-time markets are defined as 15-minutes, this should be 98 markets; if 60 minutes, 26
     #            markets.
-    assert len(test_node.markets) == 26, 'An unexpected market count happened: ' + str(len(test_node.markets))
+    real_time_count = prior_da_auction.marketClearingInterval / prior_da_auction.real_time_duration
+    assert len(test_node.markets) == real_time_count + 2,\
+        'An unexpected market count happened: ' + str(len(test_node.markets))
     assert sum(x.marketSeriesName == 'Day-Ahead Auction' for x in test_node.markets) == 2, \
         'There were an unexpected number of Day-Ahead markets: ' \
         + str(sum(x.marketSeriesName == "Day-Ahead Auction" for x in test_node.markets))
     # 200910DJH: If the real-time markets are defined as 15-minutes, this should be 96 markets; if 60 minutes, 24
     #            markets.
-    assert sum(x.marketSeriesName == 'Real-Time Auction' for x in test_node.markets) == 24, \
+    assert sum(x.marketSeriesName == 'Real-Time Auction' for x in test_node.markets) == real_time_count, \
         'There were an unexpected number of Real-Time markets: ' \
         + str(sum(x.marketSeriesName == "Real-Time Auction" for x in test_node.markets))
 

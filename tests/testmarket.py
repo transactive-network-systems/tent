@@ -40,6 +40,8 @@ PACIFIC NORTHWEST NATIONAL LABORATORY
 operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
+import weakref
+
 from datetime import datetime, timedelta
 
 from tent.containers.vertex import Vertex
@@ -252,7 +254,7 @@ def test_check_marginal_prices():
     test_mkt.marketSeriesName = "Test Market"
 
     test_mkt.intervalsToClear = 2
-    test_mkt.priorMarketInSeries = prior_mkt  # Important pointer to the prior market in the series
+    test_mkt.priorMarketInSeries = weakref.ref(prior_mkt)  # Important pointer to the prior market in the series
 
     test_ti = TimeInterval(datetime.now(), timedelta(hours=1), test_mkt, datetime.now(), datetime.now())
 
@@ -302,7 +304,7 @@ def test_check_marginal_prices():
     test_mkt.marketSeriesName = "Test Market"  # This points to the market series that is to be corrected.
     test_mkt.marketClearingTime = prior_mkt.marketClearingTime + timedelta(hours=1)  # Must be after prior market.
     test_mkt.marketToBeRefined = prior_mkt.marketSeriesName  # Assuming here this is not a list.
-    test_mkt.marketToBeRefined = prior_mkt  # Important pointer to market that is being refined
+    test_mkt.marketToBeRefined = weakref.ref(prior_mkt)  # Important pointer to market that is being refined
 
     test_ti = TimeInterval(datetime.now(), timedelta(hours=1), test_mkt, datetime.now(), datetime.now())
 
@@ -324,12 +326,12 @@ def test_check_marginal_prices():
     assert len(test_mtn.markets) == 2, "Two active markets should exist"
     assert prior_mkt.marketSeriesName != test_mkt.marketSeriesName, \
         "Prior market and current market should not have the same market name"
-    assert test_mkt.marketToBeRefined is prior_mkt, \
+    assert test_mkt.marketToBeRefined() is prior_mkt, \
         "The current market must identify its prior market object that is being corrected"
     assert prior_mkt.marketClearingTime < test_mkt.marketClearingTime, \
         "The prior market must clear before the current one"
     assert test_mkt.priorMarketInSeries is None, "An attempt to use current market series must fail"
-    assert test_mkt.marketToBeRefined == prior_mkt, "The test market must point to refined market"
+    assert test_mkt.marketToBeRefined() == prior_mkt, "The test market must point to refined market"
 
     try:
         test_mkt.check_marginal_prices(test_mtn)
