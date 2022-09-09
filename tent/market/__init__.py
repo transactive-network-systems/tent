@@ -590,6 +590,8 @@ class Market:
         :return: None
         """
         pass
+        for local_asset in my_transactive_node.localAssets:
+            local_asset.setup_actuation()
         # 210118DJH: NOTE: Flag "_stateIsComplete" must be set true after the market's responsibilities have been
         #            completed in this next method or its replacements.
         self._stateIsCompleted = True

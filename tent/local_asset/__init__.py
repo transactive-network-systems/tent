@@ -870,3 +870,10 @@ class LocalAsset(object):
         # Sum total production and dual costs through all time intervals.
         self.totalProductionCost = sum([x.value for x in self.productionCosts])
         self.totalDualCost = sum([x.value for x in self.dualCosts])
+
+    def setup_actuation(self):
+        """
+        Can be used by subclasses to set the actuation of scheduled powers when called from market.
+        This is called in the base Market base class from while_in_delivery_lead().
+        """
+        pass

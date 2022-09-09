@@ -307,6 +307,7 @@ class Auction(Market):
                         scheduled_power[0].value = power
                         warn('A duplicate scheduled power was found for asset ' + str(local_asset.name)
                              + ' in time interval ' + str(time_interval.name))
+                local_asset.setup_actuation()
 
             # For each downstream agent,
             for x in range(len(downstream_agents)):
