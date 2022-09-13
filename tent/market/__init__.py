@@ -590,8 +590,6 @@ class Market:
         :return: None
         """
         pass
-        for local_asset in my_transactive_node.localAssets:
-            local_asset.setup_actuation()
         # 210118DJH: NOTE: Flag "_stateIsComplete" must be set true after the market's responsibilities have been
         #            completed in this next method or its replacements.
         self._stateIsCompleted = True
@@ -610,6 +608,10 @@ class Market:
         final_prices = self.marginalPrices
         for x in range(len(final_prices)):
             self.model_prices(final_prices[x].timeInterval.startTime, final_prices[x].value)
+
+        # Tell Local Assets it is time to actuate.
+        for local_asset in my_transactive_node.localAssets:
+            local_asset.actuate()
 
         self.delivery_lead_schedule_power = False
         return None
