@@ -50,8 +50,5 @@ if __name__ == '__main__':
         description='Transactive Energy Network Template',
         author='',
         url='',
-        packages=find_packages('PyCode'),
-        #package_dir={'tent': ''},
-        install_requires=[],
-        zip_safe=False,
+        packages=find_packages('.'),
     )
