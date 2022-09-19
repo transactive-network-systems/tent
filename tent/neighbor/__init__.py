@@ -511,7 +511,7 @@ class Neighbor:
 
         # Find the MeterPoint that is configured to measure average demand for this Neighbor. The determination is
         # based on the meter's MeasurementType.
-        mtr = [x() for x in self.meterPoints if x().measurementType == MeasurementType.AverageDemandkW]
+        mtr = [x() for x in self.meterPoints if x() and x().measurementType == MeasurementType.AverageDemandkW]
         mtr = mtr[0] if len(mtr) > 0 else None
 
         if mtr is None:
