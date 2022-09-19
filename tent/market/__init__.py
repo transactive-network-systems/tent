@@ -474,7 +474,6 @@ class Market:
             prior_market_in_series=self
         )  # This uses a constructor, but most properties must be redefined.
 
-        # TODO: Added deepcopy, because of note on next line. Is this correct?
         new_market.priceModel = deepcopy(self.priceModel)  # It must be clear that this is a copy, not a reference.
         new_market.marketState = MarketState.Active  # TODO: initial_market_state seems to be ignored by constructor....
         new_market.isNewestMarket = True  # This new market now assumes the flag as newest market
