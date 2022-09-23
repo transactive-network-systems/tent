@@ -103,8 +103,6 @@ class LocalAsset(object):
                  subclass=None,
                  transactive_node=None):
 
-        super(LocalAsset, self).__init__()     # Inherit from any parent class
-
         self.tn = weakref.ref(transactive_node) if transactive_node else None
         # These following static properties may be assigned as parameters:
         self.costParameters = [float(cp) for cp in cost_parameters]  # [float, float, float] Coefficients of quadratic cost function
