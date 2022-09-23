@@ -140,7 +140,7 @@ class Neighbor:
         elif all([isinstance(mp, MeterPoint) for mp in meter_points]):
             self.meterPoints = [weakref.ref(mp) for mp in meter_points]
         elif all([isinstance(mp, str) for mp in meter_points]) and self.tn and self.tn():
-            self.meterPoints = [weakref.ref(mp) for mp in self.tn().get_meter_points_by_name(meter_points)]
+            self.meterPoints = [weakref.ref(mp) for mp in self.tn().get_meters_by_attribute('name', meter_points)]
         else:
             raise ValueError(f'All meter points assigned to Neighbor {self.name} must be an instance of class'
                              f' MeterPoint or the name of a MeterPoint held by the TransactiveNode.')

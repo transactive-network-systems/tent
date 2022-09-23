@@ -62,3 +62,30 @@ class TransactiveNode(object):
         self.markets = []
         self.meterPoints = []
         self.neighbors = []
+
+    def get_meters_by_attribute(self, attribute, match, first_only=False):
+        return self.get_objects_by_attribute(self.meterPoints, attribute, match, first_only)
+
+    def get_isms_by_attribute(self, attribute, match, first_only=False):
+        return self.get_objects_by_attribute(self.informationServiceModels, attribute, match, first_only)
+
+    def get_markets_by_attribute(self, attribute, match, first_only=False):
+        return self.get_objects_by_attribute(self.markets, attribute, match, first_only)
+
+    def get_assets_by_attribute(self, attribute, match, first_only=False):
+        return self.get_objects_by_attribute(self.localAssets, attribute, match, first_only)
+
+    def get_neighbors_by_attribute(self, attribute, match, first_only=False):
+        return self.get_objects_by_attribute(self.neighbors, attribute, match, first_only)
+
+    @staticmethod
+    def get_objects_by_attribute(object_list, attribute, match, first_only=False):
+        if not isinstance(match, (list, tuple, str)):
+            raise ValueError('Match must be a list, tuple or string.')
+        elif isinstance(match, str):
+            match = [match]
+        matches = [o for o in object_list if getattr(o, attribute, False) in match]
+        if first_only and len(matches) > 0:
+            return matches[0]
+        else:
+            return matches

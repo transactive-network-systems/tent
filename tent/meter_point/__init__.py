@@ -246,19 +246,3 @@ class MeterPoint(TimeSeriesBuffer):
         else:
             mini_df = pd.read_sql("SELECT * FROM meter", conn)
             return mini_df["VALUE_1"].to_list()
-
-    @classmethod
-    def get_meters_by_name(cls, meter_list, name):
-        return [m for m in meter_list if m.name == name and isinstance(m, cls)]
-
-    @classmethod
-    def get_meter_by_name(cls, meter_list, name):
-        return MeterPoint.get_meters_by_name(meter_list, name)[0]
-
-    @classmethod
-    def get_meters_by_measurement_type(cls, meter_list, measurement_type):
-        return [m for m in meter_list if m.measurement_type == measurement_type and isinstance(m, cls)]
-
-    @classmethod
-    def get_meter_by_measurement_type(cls, meter_list, measurement_type):
-        return MeterPoint.get_meters_by_measurement_type(meter_list, measurement_type)[0]
