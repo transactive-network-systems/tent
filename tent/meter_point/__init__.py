@@ -246,3 +246,15 @@ class MeterPoint(TimeSeriesBuffer):
         else:
             mini_df = pd.read_sql("SELECT * FROM meter", conn)
             return mini_df["VALUE_1"].to_list()
+
+    def get_dict(self):
+        meter_point_dict = {
+            "current_measurement": self.current_measurement,
+            "description": self.description,
+            "measurementInterval": self.measurementInterval,
+            "measurementType": self.measurementType,
+            "measurementUnit": self.measurementUnit,
+            "meter_point_name": self.name,
+            "lastUpdates": self.last_updated
+        }
+        return meter_point_dict

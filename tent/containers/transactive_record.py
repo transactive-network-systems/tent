@@ -103,3 +103,10 @@ class TransactiveRecord:
         #            emerged to name Market objects by prepending the clearing time with the market series name.
         self.marketName = market_name
 
+    def get_dict(self):
+        transactive_record_dict = {
+            "timeInterval": self.timeInterval,
+            "marginalPrice": self.marginalPrice,
+            "power": self.power
+        }
+        return transactive_record_dict

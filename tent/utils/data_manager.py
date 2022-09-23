@@ -342,11 +342,9 @@ def append_table(method=METHOD, obj=None):
                 object_bases = []
                 for object_class in object_classes:
                     object_bases.extend(object_class.__bases__)
-                object_classes = [x.__class__ for x in object_bases]
-                selection = [x.__name__ for x in object_classes if x.__name__ in tables]
+                selection = [x.__name__ for x in object_bases if x.__name__ in tables]
                 if len(selection) == 0:
                     raise RuntimeWarning('No base class was identified.')
-                    return
                 return
             else:
                 func = tables[selection[0]]

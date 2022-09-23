@@ -52,8 +52,8 @@ from typing import Union
 from tent.utils.data_manager import append_table
 from tent.enumerations.direction import Direction
 from tent.utils.helpers import (are_different1, are_different2, find_obj_by_ti, find_objs_by_ti, format_ts,
-                                get_duration_in_hour, order_vertices, production, prod_cost_from_vertices,
-                                validate_bool)
+                                format_timestamp, get_duration_in_hour, order_vertices, production,
+                                prod_cost_from_vertices, validate_bool)
 from tent.containers.interval_value import IntervalValue
 from tent.enumerations.market_state import MarketState
 from tent.enumerations.measurement_type import MeasurementType
@@ -1864,6 +1864,21 @@ class Neighbor:
                             )
 
         return vertices
+
+    def get_dict(self):
+        scheduled_powers = [(format_timestamp(x.timeInterval.startTime), x.value) for x in self.scheduledPowers]
+        received_signal = [(x.timeInterval, x.marginalPrice, x.power) for x in self.receivedSignal]
+        sent_signal = [(x.timeInterval, x.marginalPrice, x.power) for x in self.sentSignal]
+
+        neighbor_dict = {
+            "isTransactive": self.transactive,
+            "name": self.name,
+            "scheduled_power": scheduled_powers,
+            "received_signal": received_signal,
+            "sent_signal": sent_signal
+        }
+
+        return neighbor_dict
 
 
 if __name__ == '__main__':

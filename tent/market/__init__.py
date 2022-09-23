@@ -1829,3 +1829,32 @@ class Market:
 
         if show is True:
             plt.show()
+
+    def get_dict(self):
+        market_dict = {
+            "market_name": self.name,
+            "marketSeriesId": self.marketSeriesName,
+            "totalDemand": self.totalDemand,
+            "totalDualCost": self.totalDualCost,
+            "totalGeneration": self.totalGeneration,
+            "totalProductionCost": self.totalProductionCost
+        }
+        return market_dict
+
+    def get_market_series_dict(self):
+        market_series_dict = {
+            "market_name": self.name,
+            "marketSeriesId": self.marketSeriesName,
+            "method": self.method,
+            "commitment": self.commitment,
+            "duration": self.duration,
+            "initialMarketState": self.initialMarketState,
+            "totalProductionCost": self.totalProductionCost,
+            "dualityGapThreshold": self.dualityGapThreshold,
+            "marketClearingInterval": self.marketClearingInterval,
+            "futureHorizon": self.futureHorizon,
+            "intervalDuration": self.intervalDuration,
+            "intervalsToClear": self.intervalsToClear,
+            "marketOrder": self.marketOrder
+        }
+        return market_series_dict

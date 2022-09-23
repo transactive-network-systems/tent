@@ -47,7 +47,7 @@ import weakref
 from datetime import timedelta
 from typing import Union
 
-from tent.utils.helpers import find_obj_by_ti, find_objs_by_ti, prod_cost_from_vertices, validate_bool
+from tent.utils.helpers import find_obj_by_ti, find_objs_by_ti, format_timestamp, prod_cost_from_vertices, validate_bool
 from tent.information_service_model import InformationServiceModel
 from tent.containers.interval_value import IntervalValue
 from tent.enumerations.measurement_type import MeasurementType
@@ -877,3 +877,14 @@ class LocalAsset(object):
         This is called in the base Market base class from while_in_delivery_lead().
         """
         pass
+
+    def get_dict(self):
+        scheduled_powers = [(format_timestamp(x.timeInterval.startTime), x.value) for x in self.scheduledPowers]
+        vertices = [(format_timestamp(x.timeInterval.startTime), x.value.marginalPrice, x.value.power) for x in
+                    self.activeVertices]
+        local_asset_dict = {
+            "name": self.name,
+            "scheduled_power": scheduled_powers,
+            "vertices": vertices
+        }
+        return local_asset_dict

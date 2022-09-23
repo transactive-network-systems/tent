@@ -86,3 +86,11 @@ class Vertex:
         else:
             raise ValueError(f'All vertices in a vertex list must all be vertices, lists, or dicts.'
                              f' Received: {vertices}')
+
+    def get_dict(self):
+        vertex_dict = {
+            "marginalPrice": self.marginalPrice,
+            "power": self.power,
+            "record": self.record
+        }
+        return vertex_dict

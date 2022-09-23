@@ -70,6 +70,17 @@ class IntervalValue:
     def subdivide(self):
         pass
 
+    def get_dict(self):
+        interval_value_dict = {
+            "scheduled": self.scheduled,
+            "associatedClass": self.associatedClass,
+            "associatedObject": self.associatedObject,
+            "timeIntervalId": self.id,
+            "timeInterval": self.timeInterval,
+            "measurementType": self.measurementType,
+            "value": self.value
+        }
+        return interval_value_dict
 
 if __name__ == '__main__':
     iv = IntervalValue()

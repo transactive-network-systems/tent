@@ -165,6 +165,13 @@ class TimeInterval:
             """
 #            _log.log(logging.ERROR, 'Invalid TimeInterval market state: TimeInterval ' + self.name)
 
+    def get_dict(self):
+        time_interval_dict = {
+            "startTime": self.startTime,
+            "name": self.name,
+            "duration": self.duration
+        }
+        return time_interval_dict
 
 if __name__ == '__main__':
     # Dummy values for testing
