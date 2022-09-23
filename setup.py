@@ -51,4 +51,7 @@ if __name__ == '__main__':
         author='',
         url='',
         packages=find_packages('.'),
+        install_requires=[
+            'matplotlib'
+        ]
     )
