@@ -53,6 +53,7 @@ class MarketState(Enum):
     events(), which is a state machine that transitions between a set of these enumerated states. Implementers may
     modify the actions taken during transitions between these states and while in the various states.
     """
+    Initial = 0         # First run of a market in a new market series
     Active = 1          #
     Inactive = 2        # Unneeded, inactive
     Delivery = 3        # The system is currently in the interval period

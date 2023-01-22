@@ -81,6 +81,7 @@ class Market:
                  delivery_anchor_time=None,
                  delivery_lead_time: Union[timedelta, float, int] = timedelta(hours=0),
                  duality_gap_threshold=0.01,
+                 first_market_in_series: bool = False,
                  future_horizon: Union[timedelta, float, int] = timedelta(hours=24),
                  initial_market_state: Union[MarketState, str, int] = MarketState.Inactive,
                  interval_duration: Union[timedelta, float, int] = timedelta(hours=1),
@@ -157,8 +158,8 @@ class Market:
         self.converged = False
         self.dualCosts = []  # [IntervalValue]; Values are [$]
         # TODO: Does isNewestMarket need a setting for instantiation of some markets at startup?
-        self.isNewestMarket = False  # [Boolean] Flag held by only newest market in market series
-        self.marketState = MarketState.Inactive  # [MarketState] Current market state
+        self.isNewestMarket = True  # [Boolean] Flag held by only newest market in market series
+        self.marketState = MarketState.Initial if first_market_in_series else self.initialMarketState
         self.marginalPrices = []  # [IntervalValue]; Values are [$/kWh]
         # This market object's name. Use market series name as root
         self.name = self.marketSeriesName.replace(' ', '_') + '_' + str(self.marketClearingTime)[:19]
@@ -178,6 +179,15 @@ class Market:
 
         self.new_data_signal = False
         self.delivery_lead_schedule_power = False
+
+        # Set up market
+        self.check_intervals()
+        if self.tn and self.tn():
+            tn = self.tn()
+            self.check_marginal_prices(tn)
+            for neighbor in tn.neighbors:
+                neighbor.schedule(self)
+
         # 210118DJH: Must introduce a flag to end activities after various market states. This flag should be made
         #            false in each transition and made true after all the tasks have been completed in the ensuing
         #            market state.
@@ -202,7 +212,16 @@ class Market:
         :param: my_transactive_node: transactive node--this agent--that keeps track of market objects
         :return: None
         """
-        current_time = Timer.get_cur_time()
+        current_time = Timer.now()
+
+        # EVENT 0: % FIRST INSTANTIATION OF A MARKET SERIES ************************************************************
+        # First time setup of a new market series.
+        if self.marketState == MarketState.Initial:
+            self.transition_from_initial_to_inactive(my_transactive_node)
+            self.marketState = MarketState.Inactive
+
+            # 210118DJH: New flag. Set false upon transition to new market state.
+            self._stateIsCompleted = False
 
         # EVENT 1A: % A NEW MARKET OBJECT BECOMES ACTIVE ***************************************************************
         # This is the instantiation of a market object in market state "Active." This transition occurs at a time when
@@ -220,12 +239,12 @@ class Market:
             if self.nextMarketClearingTime < future_clearing_time:
                 self.spawn_markets(my_transactive_node, self.nextMarketClearingTime)
                 self.isNewestMarket = False
-                # 210118DJH: New flag. Set true when responsibilities in market state are completed.
-                self._stateIsCompleted = True
+                # # 210118DJH: New flag. Set true when responsibilities in market state are completed.
+                # self._stateIsCompleted = True
 
         # EVENT 1B: TRANSITION FROM INACTIVE TO ACTIVE STATE ***********************************************************
         # 210118DJH: Adding flag. No state transition should be allowed unless the prior state is done.
-        if self.marketState == MarketState.Inactive and self._stateIsCompleted is True:
+        if self.marketState == MarketState.Inactive:  # and self._stateIsCompleted is True:
 
             activation_start_time = self.marketClearingTime - self.marketLeadTime - self.negotiationLeadTime \
                                     - self.activationLeadTime
@@ -475,20 +494,28 @@ class Market:
         )  # This uses a constructor, but most properties must be redefined.
 
         new_market.priceModel = deepcopy(self.priceModel)  # It must be clear that this is a copy, not a reference.
-        new_market.marketState = MarketState.Active  # TODO: initial_market_state seems to be ignored by constructor....
-        new_market.isNewestMarket = True  # This new market now assumes the flag as newest market
+        # new_market.marketState = MarketState.Active  # TODO: initial_market_state seems to be ignored by constructor....
+        # # TODO: Shouldn't the initial market state generally be Inactive?
 
         # Append the new market object to the list of market objects that is maintained by the agent.
         my_transactive_node.markets.append(new_market)
 
-        # Initialize the Market object's time intervals.
-        new_market.check_intervals()
-
-        # Initialize the marginal prices in the Market object's time intervals.
-        new_market.check_marginal_prices(my_transactive_node)
-
         # 210127DJH: Save information about the new Market object into a formatted csv file.
-        append_table(obj=new_market)
+        try:
+            append_table(obj=new_market)
+        except Exception as e:
+            _log.warning('Exception in append_table:')
+            _log.warning(e)
+
+    def transition_from_initial_to_inactive(self, my_transactive_node):
+        """
+        Steps for initialization of the first market in a new market series which cannot be completed by __init__()
+        :param my_transactive_node: TransactiveNode object--this agent
+        :return: None
+        """
+        _log.debug(f'MARKET: {self.name} STATE IS NOW TRANSITIONING: Initial to Inactive')
+        pass
+        return None
 
     def transition_from_inactive_to_active(self, my_transactive_node):
         """
@@ -1335,15 +1362,16 @@ class Market:
                 # METHOD #4. Use the price model to predict marginal price. See method Market.model_prices().
                 # 200902DJH: Change elif to if with continue statement.
                 if self.priceModel is not None and marginal_price is None:
-                    marginal_price = self.model_prices(time_interval.startTime)[0]
-                    self.marginalPrices.append(IntervalValue(calling_object=self,
-                                                             time_interval=time_interval,
-                                                             market=self,
-                                                             measurement_type=MeasurementType.MarginalPrice,
-                                                             value=marginal_price
-                                                             )
-                                               )
-                    continue  # 200902DJH: elif logic removed.
+                    marginal_price = self.priceModel.get(time_interval.startTime)[0]
+                    if marginal_price:
+                        self.marginalPrices.append(IntervalValue(calling_object=self,
+                                                                 time_interval=time_interval,
+                                                                 market=self,
+                                                                 measurement_type=MeasurementType.MarginalPrice,
+                                                                 value=marginal_price
+                                                                 )
+                                                   )
+                        continue  # 200902DJH: elif logic removed.
 
                 # METHOD 5. If all above methods fail, market periods should be assigned the market's default price.
                 # 200902DJH: Change elif to if with continue statement.

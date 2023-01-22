@@ -205,7 +205,7 @@ class Auction(Market):
                     upstream_agent.prep_transactive_signal(self, my_transactive_node)
 
                     # Send transactive signal (i.e., aggregated bid) to the upstream agent if it is a transactive agent.
-                    upstream_agent.send_transactive_signal(self, my_transactive_node, upstream_agent.publishTopic)
+                    upstream_agent.send_transactive_signal(self, my_transactive_node)
 
             # 210208DJH: This new flag must be set true to leave this state and allow the next transition.
             #            TODO: We don't have foolproof verification that the upstream agent was sent this signal,
@@ -260,7 +260,7 @@ class Auction(Market):
                 all_received = False
 
                 # Call on the upstream agent model to try and receive the signal again.
-                upstream_agent.receive_transactive_signal(my_transactive_node, self, upstream_agent.receivedCurves)
+                # upstream_agent.receive_transactive_signal(my_transactive_node, self, upstream_agent.receivedCurves)
 
         # If offers have been received for all active market time intervals from the upstream agent,
         # 200618DJH: I think this is correct up to this point, but I had left out some very important steps of the
@@ -319,6 +319,6 @@ class Auction(Market):
                 downstream_agent.prep_transactive_signal(self, my_transactive_node)
 
                 # and send it a transactive signal (i.e., an offer).
-                downstream_agent.send_transactive_signal(self, my_transactive_node, downstream_agent.publishTopic)
+                downstream_agent.send_transactive_signal(self, my_transactive_node)
             # 210208DJH: This new flag must be set true to leave this state and allow the next transition.
             self._stateIsCompleted = True

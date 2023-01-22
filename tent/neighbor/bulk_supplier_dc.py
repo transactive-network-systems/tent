@@ -160,7 +160,7 @@ class BulkSupplier_dc(Neighbor):
 
             # Demand Charges only apply to HLH hours.
             if is_heavyloadhour(time_interval.startTime) and self.demandRate != 0:
-                scheduled_power = [x.power for x in self.scheduledPowers if x.timeInterval == time_interval]
+                scheduled_power = [x.value for x in self.scheduledPowers if x.timeInterval == time_interval]
                 if scheduled_power is not None and len(scheduled_power) != 0:
                     active_threshold = max(active_threshold, scheduled_power[0])
                 vertices = self.include_demand_charges(vertices=vertices, threshold=active_threshold)

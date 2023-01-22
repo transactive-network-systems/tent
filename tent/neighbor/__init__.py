@@ -1313,6 +1313,7 @@ class Neighbor:
                                     )
 
             else:
+                # TODO: Is it intended for this assertion to stop execution of the agent? It ends progress, but not execution.
                 assert len(vertices) == 1, ([f'Unexpected flexibility logic in module {self.name}'
                                              f' method prep_transactive_signal()'])
                 vertices[0].marginalPrice = float('inf')
@@ -1424,7 +1425,7 @@ class Neighbor:
         #            make sure that only transactive records that are relevant to the current market are sent.
         # 210303DJH: How on earth did this pass unit testing with a reference to undefined marketName???
         # transactive_records = [x for x in self.mySignal if x.market == market.marketName]
-        transactive_records = [x for x in self.mySignal if x.market == market.name]
+        transactive_records = [x for x in self.mySignal if x.marketName == market.name]
 
         if len(transactive_records) == 0:  # No signal records are ready to send
             _log.warning(f"No transactive records were found. No transactive signal can be sent to {self.name}.")
@@ -1464,7 +1465,8 @@ class Neighbor:
         """
         pass
 
-    def receive_transactive_signal(self, this_transactive_node, market, curves=None):
+    # def receive_transactive_signal(self, this_transactive_node, market, curves=None):
+    def receive_transactive_signal(self, this_transactive_node, curves=None):
         # Receive and save transactive records from a transactive Neighbor.
         # this_transactive_node = Agent's TransactiveNode object
         #
@@ -1485,7 +1487,7 @@ class Neighbor:
         # 201013DJH: The neighbor's list of received transactive records must be reinitialized so that it will not grow
         #            indefinitely. Only the latest records are relevant. See the end of method prep_transactive_signal()
         #            if more sophistication is warranted.
-        #self.receivedSignal = []
+        self.receivedSignal = []
         # 210126DJH: TODO: Robert or Shwetha, class curves must be updated with the new properties of TransactiveRecord
         #            class, please, to keep data collection straight. The new properties are
         #             (1) TransactiveRecord.neighborName  # text name of Neighbor object
@@ -1500,7 +1502,7 @@ class Neighbor:
             #            directly.
             # market_name = curve['timeInterval'].split(':')
             # market_name = market_name[0]
-            if curve['marketName'] == market.name:
+            if curve['marketName'] in [m.name for m in this_transactive_node.markets]:
                 new_record = TransactiveRecord(time_interval=curve['timeInterval'],
                                                record=int(curve['record']),
                                                 marginal_price=float(curve['marginalPrice']),
