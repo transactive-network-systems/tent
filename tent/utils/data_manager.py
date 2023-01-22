@@ -40,13 +40,18 @@ PACIFIC NORTHWEST NATIONAL LABORATORY
 operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
+import logging
 
 from datetime import datetime
 
-from tent.enumerations.measurement_type import MeasurementType
 from tent.containers.vertex import Vertex
+from tent.enumerations.measurement_type import MeasurementType
+from tent.utils.log import setup_logging
 
-VERBOSE = True
+setup_logging()
+_log = logging.getLogger(__name__)
+
+VERBOSE = False
 METHOD = 1  # Comma-Separated Value method
 # METHOD = 2  # Database methods
 MAX_ROWS = 1000  # Maximum number of table rows allowed. Old rows are removed. Use float('Inf') for unlimited rows.
@@ -57,7 +62,7 @@ TIME_FORMAT = "%H:%M:%S"  # Simple time format like '13:14:15'.
 
 def append_information_service_table(method=METHOD, obj=None):
     if VERBOSE:
-        print("Made it to append_information_service_table().")
+        pass #_log.debug("Made it to append_information_service_table().")
 
 
 def append_interval_value_table(method=METHOD, objects=None):
@@ -70,7 +75,7 @@ def append_interval_value_table(method=METHOD, objects=None):
     import csv
     import os
     if VERBOSE:
-        print("Made it to append_interval_value_table().")
+        pass #_log.debug("Made it to append_interval_value_table().")
     if not isinstance(objects, list):
         objects = [objects]
     header = ['TIMESTAMP', 'SOURCE_TYPE', 'SOURCE_NAME', 'MARKET_SERIES', 'MARKET_CLEARING_DATE',
@@ -83,22 +88,22 @@ def append_interval_value_table(method=METHOD, objects=None):
     if not os.path.isfile(datafile):
         # The data file does not exist.
         if VERBOSE:
-            print("File './CSV_DATA/IntervalValues.csv' does not exist.")
+            pass #_log.debug("File './CSV_DATA/IntervalValues.csv' does not exist.")
         if not os.path.isdir(data_folder):
             # The data directory does not exist either.
             if VERBOSE:
-                print("Directory './CSV_DATA' does not exist. Create it.")
+                pass #_log.debug("Directory './CSV_DATA' does not exist. Create it.")
             os.mkdir(data_folder)
         with open(datafile, 'w', newline='') as write_obj:  # Open the new file and write its header row.
             if VERBOSE:
-                print("Creating the file './CSV_DATA/IntervalValues.csv' with header.")
+                pass #_log.debug("Creating the file './CSV_DATA/IntervalValues.csv' with header.")
             csv_writer = csv.writer(write_obj, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
             csv_writer.writerow(header)
             write_obj.close()
 
     file = open(datafile, 'a', newline='')
     if VERBOSE:
-        print("Opening './CSV_DATA/IntervalValues.csv' to append row(s).")
+        pass #_log.debug("Opening './CSV_DATA/IntervalValues.csv' to append row(s).")
     appender = csv.writer(file)
 
     for obj in objects:
@@ -124,17 +129,17 @@ def append_interval_value_table(method=METHOD, objects=None):
 
         appender.writerow(record)
         if VERBOSE:
-            print('Appending record.')
+            pass #_log.debug('Appending record.')
 
     file.close()
     if VERBOSE:
-        print('Closing file.')
+        pass #_log.debug('Closing file.')
     return None
 
 
 def append_local_asset_table(method=METHOD, obj=None):
     if VERBOSE:
-        print("Made it to append_local_asset_table().")
+        pass #_log.debug("Made it to append_local_asset_table().")
 
 
 def append_market_object_table(method=METHOD, objects=None):
@@ -148,7 +153,7 @@ def append_market_object_table(method=METHOD, objects=None):
     import os
     VERBOSE = True
     if VERBOSE:
-        print("Made it to append_market_object_table().")
+        pass #_log.debug("Made it to append_market_object_table().")
     if not isinstance(objects, list):
         objects = [objects]
     header = ['TIMESTAMP', 'MARKET_NAME', 'MARKET_SERIES', 'NUMBER_INTERVALS', 'MARKET_CLEARING_DATE',
@@ -162,22 +167,22 @@ def append_market_object_table(method=METHOD, objects=None):
     if not os.path.isfile(datafile):
         # The data file does not exist.
         if VERBOSE:
-            print('File ' + datafile + ' does not exist.')
+            pass #_log.debug('File ' + datafile + ' does not exist.')
         if not os.path.isdir(data_folder):
             # The data directory does not exist either.
             if VERBOSE:
-                print('Directory ' + data_folder + ' does not exist. Creating it.')
+                pass #_log.debug('Directory ' + data_folder + ' does not exist. Creating it.')
             os.mkdir(data_folder)
         with open(datafile, 'w', newline='') as write_obj:  # Open the new file and write its header row.
             if VERBOSE:
-                print('Creating the file ' + datafile + ' with header.')
+                pass #_log.debug('Creating the file ' + datafile + ' with header.')
             csv_writer = csv.writer(write_obj, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
             csv_writer.writerow(header)
             write_obj.close()
 
     file = open(datafile, 'a', newline='')
     if VERBOSE:
-        print('Opening ' + datafile + ' to append row(s).')
+        pass #_log.debug('Opening ' + datafile + ' to append row(s).')
     appender = csv.writer(file)
 
     for obj in objects:
@@ -201,27 +206,27 @@ def append_market_object_table(method=METHOD, objects=None):
 
         appender.writerow(record)
         if VERBOSE:
-            print('Appending record.')
+            pass #_log.debug('Appending record.')
 
     file.close()
     if VERBOSE:
-        print('Closing file.')
+        pass #_log.debug('Closing file.')
     return None
 
 
 def append_meter_point_table(method=METHOD, obj=None):
     if VERBOSE:
-        print("Made it to append_meter_point_table().")
+        pass #_log.debug("Made it to append_meter_point_table().")
 
 
 def append_neighbor_table(method=METHOD, obj=None):
     if VERBOSE:
-        print("Made it to append_neighbor_table().")
+        pass #_log.debug("Made it to append_neighbor_table().")
 
 
 def append_time_interval_table(method=METHOD, obj=None):
     if VERBOSE:
-        print("Made it to append_time_interval_table().")
+        pass #_log.debug("Made it to append_time_interval_table().")
 
 
 def append_transactive_record_table(method=METHOD, objects=None):
@@ -235,7 +240,7 @@ def append_transactive_record_table(method=METHOD, objects=None):
     import os
     VERBOSE = True
     if VERBOSE:
-        print("Made it to append_transactive_record_table().")
+        pass #_log.debug("Made it to append_transactive_record_table().")
     if not isinstance(objects, list):
         objects = [objects]
     header = ['TIMESTAMP', 'NEIGHBOR_NAME', 'DIRECTION', 'MARKET_SERIES', 'MARKET_CLEARING_DATE',
@@ -249,22 +254,22 @@ def append_transactive_record_table(method=METHOD, objects=None):
     if not os.path.isfile(datafile):
         # The data file does not exist.
         if VERBOSE:
-            print('File ' + datafile + ' does not exist.')
+            pass #_log.debug('File ' + datafile + ' does not exist.')
         if not os.path.isdir(data_folder):
             # The data directory does not exist either.
             if VERBOSE:
-                print('Directory ' + data_folder + ' does not exist. Creating it.')
+                pass #_log.debug('Directory ' + data_folder + ' does not exist. Creating it.')
             os.mkdir(data_folder)
         with open(datafile, 'w', newline='') as write_obj:  # Open the new file and write its header row.
             if VERBOSE:
-                print('Creating the file ' + datafile + ' with header.')
+                pass #_log.debug('Creating the file ' + datafile + ' with header.')
             csv_writer = csv.writer(write_obj, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
             csv_writer.writerow(header)
             write_obj.close()
 
     file = open(datafile, 'a', newline='')
     if VERBOSE:
-        print('Opening ' + datafile + ' to append row(s).')
+        pass #_log.debug('Opening ' + datafile + ' to append row(s).')
     appender = csv.writer(file)
 
     for obj in objects:
@@ -287,22 +292,22 @@ def append_transactive_record_table(method=METHOD, objects=None):
 
         appender.writerow(record)
         if VERBOSE:
-            print('Appending record.')
+            pass #_log.debug('Appending record.')
 
     file.close()
     if VERBOSE:
-        print('Closing file.')
+        pass #_log.debug('Closing file.')
     return None
 
 
 def append_vertex_table(method=METHOD, obj=None):
     if VERBOSE:
-        print("Made it to append_vertex_table().")
+        pass #_log.debug("Made it to append_vertex_table().")
 
 
 def append_table(method=METHOD, obj=None):
     if VERBOSE:
-        print("Made it to append_table method.")
+        pass #_log.debug("Made it to append_table method.")
     if obj is None:
         RuntimeWarning("No object was passed.")
         return

@@ -250,6 +250,7 @@ class Market:
             if current_time >= activation_start_time:
                 # Change the market state to "Active."
                 self.marketState = MarketState.Active
+                _log.debug(f'MARKET: {self.name} STATE IS NOW: MarketState.Active')
 
                 # Call this replaceable method where appropriate actions can be taken.
                 self.transition_from_inactive_to_active(my_transactive_node)
@@ -280,6 +281,7 @@ class Market:
             if current_time >= negotiation_start_time:
                 # Change the market state to "Negotiation."
                 self.marketState = MarketState.Negotiation
+                _log.debug(f'MARKET: {self.name} STATE IS NOW: MarketState.Negotiation')
 
                 # Place other transition actions in this following method. The method may be replaced.
                 # of class Market.
@@ -312,6 +314,7 @@ class Market:
             if current_time >= market_lead_start_time:
                 # Change the market state to "MarketLead."
                 self.marketState = MarketState.MarketLead
+                _log.debug(f'MARKET: {self.name} STATE IS NOW: MarketState.MarketLead')
 
                 #  Place other transition actions in this following method. The method may be replaced.
                 #  of class Market.
@@ -341,6 +344,7 @@ class Market:
             if current_time >= delivery_lead_start_time:
                 # Set the market state to "DeliveryLead."
                 self.marketState = MarketState.DeliveryLead
+                _log.debug(f'MARKET: {self.name} STATE IS NOW: MarketState.DeliveryLead')
 
                 # Place other transition actions here. This following method may be replaced.
                 self.transition_from_market_lead_to_delivery_lead(my_transactive_node)
@@ -370,6 +374,7 @@ class Market:
             if current_time >= delivery_start_time:
                 # Change the market state from "DeliverLead" to "Delivery."
                 self.marketState = MarketState.Delivery
+                _log.debug(f'MARKET: {self.name} STATE IS NOW: MarketState.Delivery')
 
                 # Other actions for this transition should be placed in the following method, which can be replaced.
                 self.transition_from_delivery_lead_to_delivery(my_transactive_node)
@@ -401,6 +406,7 @@ class Market:
 
                 # Change the market state to "Reconcile."
                 self.marketState = MarketState.Reconcile
+                _log.debug(f'MARKET: {self.name} STATE IS NOW: MarketState.Reconcile')
 
                 # Other transition actions may be placed in this method.
                 self.transition_from_delivery_to_reconcile(my_transactive_node)
@@ -429,6 +435,7 @@ class Market:
             if self.reconciled is True:
                 # Change the market state to "Expired".
                 self.marketState = MarketState.Expired
+                _log.debug(f'MARKET: {self.name} STATE IS NOW: MarketState.Expired')
 
                 # Replace this method for other transitional actions.
                 self.transition_from_reconcile_to_expired(my_transactive_node)
@@ -469,7 +476,7 @@ class Market:
         :param: new_market_clearing_time: new market objects market clearing time
         :return: None
         """
-
+        _log.debug(f'{self.name} IS IN SPAWN_MARKETS')
         # A new market object must be instantiated. Many of its properties are the same as that of the called market
         # or can be derived therefrom. The new market should typically be initialized from the same class as the calling
         # market (i.e., self).
@@ -521,6 +528,8 @@ class Market:
         :param my_transactive_node: TransactiveNode object--this agent
         :return: None
         """
+        _log.debug(f'MARKET: {self.name} STATE IS NOW TRANSITIONING: Inactive to Active')
+
         pass
         return None
 
@@ -533,6 +542,8 @@ class Market:
         :param my_transactive_node: transactive node object--this agent
         :return: None
         """
+        #_log.debug(f'{self.name} IS IN W_IN_ACTIVE')
+
         # pass
         # 210118DJH: NOTE: Flag "_stateIsComplete" must be set true after the market's responsibilities have been
         #            completed in this next method or its replacements.
@@ -547,6 +558,7 @@ class Market:
         :param my_transactive_node: my transactive node agent object
         :return: None
         """
+        _log.debug(f'MARKET: {self.name} STATE IS NOW TRANSITIONING: Active to Negotiation')
         pass
         return None
 
@@ -557,6 +569,7 @@ class Market:
         :param my_transactive_node: my transactive node agent object
         :return: None
         """
+        #_log.debug(f'{self.name} IS IN W_IN_NEGOTIATION')
 
         # A convergence flag is available to distinguish actions to be undertaken while actively negotiating and others
         # while convergence has been obtained.
@@ -579,6 +592,7 @@ class Market:
         :param my_transactive_node: transactive node object--this agent
         :return: None
         """
+        _log.debug(f'MARKET: {self.name} STATE IS NOW TRANSITIONING: Negotiation to Market Lead')
         pass
         return None
 
@@ -589,6 +603,7 @@ class Market:
         :param my_transactive_node: transactive node object--this agent
         :return: None
         """
+        #_log.debug(f'{self.name} IS IN W_IN_MARKET_LEAD')
         pass
         # 210118DJH: NOTE: Flag "_stateIsComplete" must be set true after the market's responsibilities have been
         #            completed in this next method or its replacements.
@@ -603,6 +618,7 @@ class Market:
         :param my_transactive_node: transactive node object--this agent
         :return: None
         """
+        _log.debug(f'MARKET: {self.name} STATE IS NOW TRANSITIONING: Market Lead to Delivery Lead')
         pass
         return None
 
@@ -613,6 +629,7 @@ class Market:
         :param my_transactive_node: transactive node object--this agent
         :return: None
         """
+        #_log.debug(f'{self.name} IS IN W_IN_DELIVERY_LEAD')
         pass
         # 210118DJH: NOTE: Flag "_stateIsComplete" must be set true after the market's responsibilities have been
         #            completed in this next method or its replacements.
@@ -627,9 +644,11 @@ class Market:
         :param my_transactive_node: transactive node object--this agent
         :return: None
         """
+        _log.debug(f'{self.name} IS IN T_F_DELIVERY_LEAD_TO_DELIVERY')
         # A good practice upon entering the delivery period is to update the market's price model using the final
         # marginal prices.
         final_prices = self.marginalPrices
+        _log.debug(f'Final prices are: {[p.value for p in final_prices]}')
         for x in range(len(final_prices)):
             self.priceModel.update(final_prices[x].timeInterval.startTime, final_prices[x].value)
 
@@ -651,7 +670,7 @@ class Market:
         :param my_transactive_node: transactive node object--this agent
         :return: None
         """
-
+        #_log.debug(f'{self.name} IS IN W_IN_DELIVERY')
         # TBD: These actions will be common to most transactive systems during the delivery market state:
         # - monitor and meter assets and power exchanges
         # - control assets to negotiated average power
@@ -669,6 +688,7 @@ class Market:
         :param my_transactive_node: transactive node object--the agent
         :return: None
         """
+        _log.debug(f'MARKET: {self.name} STATE IS NOW TRANSITIONING: Delivery to Reconcile')
         pass
         return None
 
@@ -679,6 +699,7 @@ class Market:
         :param my_transactive_node: transactive node object--this agent
         :return: None
         """
+        #_log.debug(f'{self.name} IS IN W_IN_RECONCILE')
         # 201013DJH: Moving code that stored a file of various market, asset, and neighbor interval values from this
         #            method to transition_from_reconcile_to_expired(). There was a risk that many duplicate file records
         #            would have been created. Now the file is created once for this market just before it expires.
@@ -701,6 +722,7 @@ class Market:
         :param my_transactive_node: transactive node object--the agent
         :return: None
         """
+        _log.debug(f'MARKET: {self.name} STATE IS NOW TRANSITIONING: Reconcile to Expired')
         # 201013DJH: Moved code that stored a file of various market, asset, and neighbor interval values from
         #            while_in_reconciliation() to here. There was a risk that many duplicate file records would have
         #            been created. Now, a file is created once for this market just before it expires.

@@ -74,7 +74,7 @@ class Auction(Market):
         :param my_transactive_node: my transactive node agent object
         :return: None
         """
-
+        _log.debug(f'{self.name} IS IN AUCTION.T_F_ACTIVE_TO_NEGOTIATION')
         # 200730DJH: This will initialize all the marginal price for each time interval using the best available
         #            strategy. I would have preferred not doing so, but so many logic exceptions have been created by
         #            not having existing marginal prices. Point 1: The auction object owns prices only for its active
@@ -105,6 +105,7 @@ class Auction(Market):
         agents are determined in later states using time-coordinated transactive signals.
         These actions are conducted only until a satisfactory converged auction has been found.
         """
+        #_log.debug(f'{self.name} IS IN AUCTION.W_I_NEGOTIATION')
         # This logic is only meaningful before the market convergence flag is set true.
         if self.converged is False:
 
@@ -133,6 +134,7 @@ class Auction(Market):
         :param my_transactive_node: my transactive node agent object
         :return: None
         """
+        #_log.debug(f'{self.name} IS IN AUCTION.W_I_MARKET_LEAD')
         # TODO: This could use a convergence flag logic to assert that all bids are received and offers sent.
         # Identify the set of neighbor agents that are identified as "upstream" and "downstream".
 
@@ -154,7 +156,7 @@ class Auction(Market):
         # Initialize a flag true if all downstream bids have been received. An aggregate auction bid can be constructed
         # only after all bids have been received from downstream agents (and from local assets, of course):
         all_received = True                                                 # a local flag to this method
-
+        missing_report = []
         # Index through the downstream agents.
         for da in range(len(downstream_agents)):
             downstream_agent = downstream_agents[da]                        # the indexed downstream agent
@@ -171,10 +173,11 @@ class Auction(Market):
             # If any time intervals are found to be missing for this downstream agent,
             if len(missing_interval_names):
                 all_received = False
-
+                missing_report.append((downstream_agent.name, missing_interval_names))
                 # and call on the downstream agent model to try and receive the signal again:
-                downstream_agent.receive_transactive_signal(my_transactive_node, self, downstream_agent.receivedCurves)
-
+                # downstream_agent.receive_transactive_signal(my_transactive_node, self, downstream_agent.receivedCurves)
+        _log.debug(f'WHILE IN MARKET LEAD, {self.name} HAS RECEIVED ALL RECORDS: {all_received}')
+        _log.debug(f'MISSING: {missing_report}')
         # If all expected bids have been received from downstream agents, have the downstream neighbor models update
         # their vertices and schedule themselves. The result of this will be an updated set of active vertices for each
         # downstream agent.
@@ -216,6 +219,7 @@ class Auction(Market):
         be overwritten by child classes of Market to create alternative market behaviors during this market state.
         mtn: my transactive node agent object
         """
+        #_log.debug(f'{self.name} AUCTION.W_IN_DELIVERY_LEAD')
         # Identify the set of neighbor agents that is identified as "downstream" (i.e., toward demand side) and the set
         # that is "upstream" (i.e., toward generation).
         downstream_agents = [x for x in my_transactive_node.neighbors if x.upOrDown == Direction.downstream]
@@ -262,6 +266,7 @@ class Auction(Market):
         # 200618DJH: I think this is correct up to this point, but I had left out some very important steps of the
         #            auction market balancing.
         if all_received is True:
+            _log.debug(f'WHILE IN DELIVERY LEAD, {self.name} HAS RECEIVED ALL UPSTREAM SIGNALS')
             # Update this Neighbor's active vertices, which is entirely completed from its recently received transactive
             # signal and its records.
             # 200702DJH: Why is this misspelling of "vertices" permitted here???????????????

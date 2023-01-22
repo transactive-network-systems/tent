@@ -68,6 +68,7 @@ class RealTimeAuction(Auction):
         :param my_transactive_node: transactive node object--this agent
         :return: None
         """
+        _log.debug(f'MARKET: {self.name} STATE IS NOW TRANSITIONING: Delivery Lead to Delivery')
         k = 4*14
         # A good practice upon entering the delivery period is to update the market's price model using the final
         # marginal prices.

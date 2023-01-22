@@ -491,7 +491,7 @@ class Neighbor:
         self.scheduledPowers = [x for x in self.scheduledPowers if x.market.marketState != MarketState.Expired]
 
         sp = [(x.timeInterval.name, x.value) for x in self.scheduledPowers]
-        _log.debug(f"{self.name} neighbor model scheduledPowers are: {sp}")
+        #_log.debug(f"{self.name} neighbor model scheduledPowers are: {sp}")
 
     def schedule_engagement(self):
         # Required from AbstractModel, but not particularly useful for any Neighbor.
@@ -766,7 +766,7 @@ class Neighbor:
                                                              value=default_vertex
                                                              )
                                                )
-
+                    _log.debug(self.activeVertices)
             elif self.transactive:
 
                 # The neighbor is transactive. Check for transactive records in the indexed time interval and market.
@@ -1474,7 +1474,8 @@ class Neighbor:
                          'No signal is read.')
             return
         if curves is None:
-            _log.warning(f'{market.name}  Received Transactive signal is None. {this_transactive_node.name}')
+            # _log.warning(f'{market.name}  Received Transactive signal is None. {this_transactive_node.name}')
+            _log.warning(f'Received Transactive signal is None. {this_transactive_node.name}')
             return
 
         # 201013DJH: The neighbor's list of received transactive records must be reinitialized so that it will not grow
