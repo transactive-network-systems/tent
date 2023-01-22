@@ -62,7 +62,7 @@ from tent.containers.vertex import Vertex
 from tent.enumerations.market_state import MarketState
 from tent.enumerations.market_types import MarketTypes
 from tent.enumerations.method import Method
-from tent.containers.time_interval import TimeInterval
+from tent.price_models.hourly_average_price_model import HourlyAveragePriceModel
 from tent.utils.timer import Timer
 from tent.utils.log import setup_logging
 
@@ -166,10 +166,7 @@ class Market:
         self.name = self.marketSeriesName.replace(' ', '_') + '_' + str(self.marketClearingTime)[:19]
         self.netPowers = []  # [IntervalValue]; Values are [avg.kW]
         self.nextMarketClearingTime = self.marketClearingTime + self.marketClearingInterval
-        # TODO: volttron_pnnl_applications uses 0.035 for average price initialization. Should this be a setting?
-        average_price = 0.06  # Initialization [$/kWh]
-        st_dev_price = 0.01  # Initialization [$/kWh]
-        self.priceModel = [average_price, st_dev_price] * 24  # Each hour's tuplet average and st. dev. price.
+        self.priceModel = HourlyAveragePriceModel(forgetting_factor=14, default_price=self.defaultPrice)
         self.productionCosts = []  # [IntervalValue]; Values are [$]
         self.reconciled = False  # [Boolean] Convergence flag
         self.timeIntervals = []  # [TimeInterval] Current list of active time intervals
@@ -634,7 +631,7 @@ class Market:
         # marginal prices.
         final_prices = self.marginalPrices
         for x in range(len(final_prices)):
-            self.model_prices(final_prices[x].timeInterval.startTime, final_prices[x].value)
+            self.priceModel.update(final_prices[x].timeInterval.startTime, final_prices[x].value)
 
         # Tell Local Assets it is time to actuate.
         self._actuate_assets(my_transactive_node)
@@ -777,42 +774,6 @@ class Market:
             writer = csv.writer(my_file)
             writer.writerows(price_data)
         return None
-
-    def model_prices(self, date_time, new_price=None, k=14.0):
-        """
-        Returns the average and standard deviation prices for the provided datetime in this market. If a new price is
-        provided, then the price model is updated using this price in the given date and time.
-        Note: In order for this to work, the Market.priceModel table must be initialized from its preceding Market
-              object of the same type, i.e., sharing the same market name.
-
-        :param date_time: The date and time of the prediction or update.
-        :param new_price: [$/kWh] (optional) price provided to update the model for the given date and time.
-        :param k: [whole number] Iteration counter.
-
-        :return avg_price: [$/kWh] average model price for the given date and time
-        :return sd_price: [$/kWh] standard price deviation for given date and time
-        """
-        # Initialize the average and standard deviation prices.
-        avg_price = None
-        sd_price = None
-
-        try:
-            h = int(date_time.hour)  # Extract the hour in [0,24] from referenced date_time.
-
-            # Find the current average and standard deviation prices for this market object.
-            avg_price = self.priceModel[2 * h]
-            sd_price = self.priceModel[2 * h + 1]
-
-            if new_price is not None:
-                avg_price = ((k - 1.0) * avg_price + new_price) / k
-                sd_price = (((k - 1.0) * sd_price ** 2 + (avg_price - new_price) ** 2) / k) ** 0.5
-                self.priceModel[2 * h] = avg_price
-                self.priceModel[2 * h + 1] = sd_price
-
-        except RuntimeWarning as warning:
-            print('A price could not be found from the price model:', warning)
-
-        return avg_price, sd_price
 
     def assign_system_vertices(self, my_transactive_node):
         """
@@ -1364,7 +1325,7 @@ class Market:
                                                        )
                             continue  # 200902DJH: elif logic removed.
 
-                # METHOD #4. Use the price model to predict marginal price. See method Market.model_prices().
+                # METHOD #4. Use the price model to predict marginal price.
                 # 200902DJH: Change elif to if with continue statement.
                 if self.priceModel is not None and marginal_price is None:
                     marginal_price = self.priceModel.get(time_interval.startTime)[0]

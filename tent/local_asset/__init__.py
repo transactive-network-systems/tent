@@ -816,7 +816,7 @@ class LocalAsset(object):
         market_prices = []
         if market.priceModel is not None:
             while end_of_scheduling_horizon > end_of_calculated_horizon:
-                price = market.model_prices(end_of_calculated_horizon)
+                price = market.priceModel.get(end_of_calculated_horizon)
                 start_time = end_of_calculated_horizon.replace(minute=0, second=0)
                 end_time = start_time + timedelta(hours=1)
                 duration = end_time - start_time
