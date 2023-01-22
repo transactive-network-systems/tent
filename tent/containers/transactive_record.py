@@ -95,9 +95,8 @@ class TransactiveRecord:
         # 210126DJH: This is a new reference to the source of a record from among ["received", "sent", "prepared"]. It
         #            is important to data collection.
         self.direction = direction
-        if self.direction != "unknown":
-            if self.direction not in ["received", "sent", "prepared"]:
-                self.direction = "unknown"
+        if self.direction not in ["unknown", "received", "sent", "prepared"]:
+            self.direction = "unknown"
 
         # 210126DJH: This is a new reference to the market in which the transactive record is relevant. A policy has
         #            emerged to name Market objects by prepending the clearing time with the market series name.

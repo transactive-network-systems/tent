@@ -77,6 +77,4 @@ class RealTimeAuction(Auction):
 
         self.delivery_lead_schedule_power = False
 
-        _log.debug(f"{self.name}: transition_from_delivery_lead_to_delivery")
-
         return None

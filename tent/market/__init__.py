@@ -57,13 +57,14 @@ from tent.utils.helpers import (find_obj_by_ti, find_objs_by_ti, order_vertices,
                                 validate_bool)
 from tent.enumerations.measurement_type import MeasurementType
 from tent.containers.interval_value import IntervalValue
+from tent.containers.time_interval import TimeInterval
+from tent.containers.vertex import Vertex
 from tent.enumerations.market_state import MarketState
 from tent.enumerations.market_types import MarketTypes
 from tent.enumerations.method import Method
 from tent.containers.time_interval import TimeInterval
 from tent.utils.timer import Timer
 from tent.utils.log import setup_logging
-from tent.containers.vertex import Vertex
 
 setup_logging()
 _log = logging.getLogger(__name__)
@@ -476,20 +477,20 @@ class Market:
         # or can be derived therefrom. The new market should typically be initialized from the same class as the calling
         # market (i.e., self).
         new_market = self.__class__(
-            market_series_name=self.marketSeriesName,
-            market_clearing_time=new_market_clearing_time,
-            delivery_lead_time=self.deliveryLeadTime,
-            market_lead_time=self.marketLeadTime,
-            negotiation_lead_time=self.negotiationLeadTime,
             commitment=self.commitment,
             default_price=self.defaultPrice,
+            delivery_lead_time=self.deliveryLeadTime,
             future_horizon=self.futureHorizon,
             initial_market_state=self.initialMarketState,
             interval_duration=self.intervalDuration,
             intervals_to_clear=self.intervalsToClear,
             market_clearing_interval=self.marketClearingInterval,
+            market_clearing_time=new_market_clearing_time,
+            market_lead_time=self.marketLeadTime,
             market_order=self.marketOrder,
+            market_series_name=self.marketSeriesName,
             method=self.method,
+            negotiation_lead_time=self.negotiationLeadTime,
             prior_market_in_series=self
         )  # This uses a constructor, but most properties must be redefined.
 

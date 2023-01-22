@@ -158,19 +158,16 @@ class Auction(Market):
         # Index through the downstream agents.
         for da in range(len(downstream_agents)):
             downstream_agent = downstream_agents[da]                        # the indexed downstream agent
-
             # Establish a list for the time intervals for which records have been received by this downstream agent.
             received_time_interval_names = []
 
             for rs in range(len(downstream_agent.receivedSignal)):
                 received_record = downstream_agent.receivedSignal[rs]       # the indexed received record
-
                 received_time_interval_names.append(received_record.timeInterval)
 
             # Seek any active market time intervals that were not among the received transactive records.
             missing_interval_names = [x.name for x in self.timeIntervals
                                       if x.name not in received_time_interval_names]
-
             # If any time intervals are found to be missing for this downstream agent,
             if len(missing_interval_names):
                 all_received = False
@@ -225,7 +222,6 @@ class Auction(Market):
         upstream_agents = [x for x in my_transactive_node.neighbors if x.upOrDown == Direction.upstream]
         unassigned_agents = [x for x in my_transactive_node.neighbors if x.upOrDown != Direction.upstream
                              and x.upOrDown != Direction.downstream]
-
         for x in range(len(unassigned_agents)):
             _log.warning('Warning: Assigning neighbor ' + unassigned_agents[x].name + ' the downstream direction')
             _log.warning('Assigning neighbor ' + unassigned_agents[x].name + ' the downstream direction')
@@ -265,14 +261,12 @@ class Auction(Market):
         # If offers have been received for all active market time intervals from the upstream agent,
         # 200618DJH: I think this is correct up to this point, but I had left out some very important steps of the
         #            auction market balancing.
-
         if all_received is True:
             # Update this Neighbor's active vertices, which is entirely completed from its recently received transactive
             # signal and its records.
             # 200702DJH: Why is this misspelling of "vertices" permitted here???????????????
             # upstream_agent.update_verices(self) #???????????????
             upstream_agent.update_vertices(self)
-
             # Sum all the agent's active local asset and neighbor vertices and determine the LMP at which local power is
             # balanced.
             self.balance(my_transactive_node)

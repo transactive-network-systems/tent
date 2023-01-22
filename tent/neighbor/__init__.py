@@ -720,7 +720,6 @@ class Neighbor:
 
         # Get the default vertices.
         default_vertices = self.defaultVertices
-
         if len(default_vertices) == 0:
             # No default vertices are found. Warn and return.
             Warning('No default vertices were found for neighbor object ' + str(self.name)
@@ -1291,7 +1290,6 @@ class Neighbor:
             # If flexibility is being offered (i.e., more than one vertex), then we must make sure there exist vertices
             # at the extrema of the flexibility range.
             if minimum_power != maximum_power:
-
                 # Find the vertex conditions at the minimum and create a vertex if none currently exists.
                 minimum_record = [x for x in vertices if x.power == minimum_power]
                 if minimum_record is None or len(minimum_record) == 0:
@@ -1321,7 +1319,6 @@ class Neighbor:
 
             # Trim the list of vertices to remove any that are outside the soft flexibility range.
             vertices = [x for x in vertices if minimum_power <= x.power <= maximum_power]
-
             # At this point, the vertices include any flexibility, stated from the perspective of the local agent.
 
             # Remove the impacts of any demand charges that were included at the local node but are not relevant at the
@@ -1365,17 +1362,14 @@ class Neighbor:
 
                 # 210126DJH: Appending Transactive Record with new properties that help with data collection provenance.
                 new_record = TransactiveRecord(time_interval=time_interval_name,
+                                               neighbor_name=self.name,
+                                               direction='prepared',
+                                               market_name=market.name,
                                                record=int(v),
                                                marginal_price=vertex.marginalPrice,
                                                power=vertex.power,
                                                cost=0
                                                )
-                # 210303DJH: These assignments are being made explicitly to ensure that the correct parameter names are
-                #            assigned. TODO: Check that class TransactiveRecord was updated.
-                new_record.neighborName = self.name
-                new_record.direction = 'prepared'
-                new_record.marketName = market.name
-
                 new_signal.append(new_record)
 
         # 210303DJH: Extend the new signal records to mySignal.
@@ -1479,7 +1473,6 @@ class Neighbor:
             _log.warning('Transactive signals are not expected to be received from non-transactive neighbors. '
                          'No signal is read.')
             return
-
         if curves is None:
             _log.warning(f'{market.name}  Received Transactive signal is None. {this_transactive_node.name}')
             return
@@ -1504,21 +1497,15 @@ class Neighbor:
             # market_name = market_name[0]
             if curve['marketName'] in [m.name for m in this_transactive_node.markets]:
                 new_record = TransactiveRecord(time_interval=curve['timeInterval'],
+                                               neighbor_name=self.name,
+                                               direction='received',
+                                               market_name=curve['marketName'],  # market.name,
                                                record=int(curve['record']),
-                                                marginal_price=float(curve['marginalPrice']),
-                                                power=float(curve['power']),
-                                                cost=float(curve['cost'])
-                                                )
-                # 210303DJH: I'm separating out this assignment because the passed parameters don't seem to be used
-                #            properly.
-                #            TODO: Please recheck the initialization of class TransactiveRecord to make sure the new
-                #             properties were included.
-                new_record.neighborName = self.name
-                new_record.direction = 'received'
-                new_record.marketName = market.name
-
+                                               marginal_price=float(curve['marginalPrice']),
+                                               power=float(curve['power']),
+                                               cost=float(curve['cost'])
+                                               )
                 newly_received_records.append(new_record)
-
         self.receivedSignal.extend(newly_received_records)
 
         # 210127DJH: Save the newly received records to a formatted csv table.
@@ -1531,7 +1518,6 @@ class Neighbor:
         for active_market in active_markets:
             active_time_intervals.extend(active_market.timeIntervals)
         active_time_interval_names = [x.name for x in active_time_intervals]
-
         self.receivedSignal = [x for x in self.receivedSignal if x.timeInterval in active_time_interval_names]
 
     def update_costs(self, market):
@@ -1879,7 +1865,6 @@ class Neighbor:
             "received_signal": received_signal,
             "sent_signal": sent_signal
         }
-
         return neighbor_dict
 
 

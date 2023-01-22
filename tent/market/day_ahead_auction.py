@@ -40,13 +40,18 @@ PACIFIC NORTHWEST NATIONAL LABORATORY
 operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
+import logging
 
 from datetime import timedelta
 
-from tent.utils.data_manager import append_table
+from tent.enumerations.market_state import MarketState
 from tent.market.auction import Auction
 from tent.market.real_time_auction import RealTimeAuction
-from tent.enumerations.market_state import MarketState
+from tent.utils.data_manager import append_table
+from tent.utils.log import setup_logging
+
+setup_logging()
+_log = logging.getLogger(__name__)
 
 
 class DayAheadAuction(Auction):
@@ -86,12 +91,10 @@ class DayAheadAuction(Auction):
         market = self
         market_interval_start_times = [x.startTime for x in market.timeIntervals]
         market_interval_start_times.sort()
-
         # 210401DJH: This initialization of new_market_list had been misplaced, thus causing only the final hour's Real-
         #            Time markets to be captured as CSV records. It should be initialized prior to looping through the
         #            Day-Ahead market hours, as placed here.
         new_market_list = []
-
         for i in range(len(market_interval_start_times)):
 
             interval_start = market_interval_start_times[i]
@@ -161,6 +164,5 @@ class DayAheadAuction(Auction):
 
                 # 210127DJH: Add the newly created market to a list.
                 new_market_list.append(new_market)
-
         # 210127DJH: Capture the new markets to a formatted csv datafile.
         append_table(obj=new_market_list)
