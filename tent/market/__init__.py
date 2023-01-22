@@ -62,7 +62,7 @@ from tent.containers.vertex import Vertex
 from tent.enumerations.market_state import MarketState
 from tent.enumerations.market_types import MarketTypes
 from tent.enumerations.method import Method
-from tent.price_models.hourly_average_price_model import HourlyAveragePriceModel
+from tent.market.price_models import HourlyAveragePriceModel
 from tent.utils.timer import Timer
 from tent.utils.log import setup_logging
 
