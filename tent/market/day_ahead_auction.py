@@ -166,3 +166,7 @@ class DayAheadAuction(Auction):
                 new_market_list.append(new_market)
         # 210127DJH: Capture the new markets to a formatted csv datafile.
         append_table(obj=new_market_list)
+
+    def _actuate_assets(self, my_transactive_node):
+        # Don't actuate from Day Ahead, Actuate from Real-Time Market.
+        pass

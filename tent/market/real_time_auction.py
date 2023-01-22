@@ -74,6 +74,8 @@ class RealTimeAuction(Auction):
         final_prices = self.marginalPrices
         for x in range(len(final_prices)):
             self.model_prices(final_prices[x].timeInterval.startTime, final_prices[x].value, k=k)
+        # Tell Local Assets it is time to actuate.
+        self._actuate_assets(my_transactive_node)
 
         self.delivery_lead_schedule_power = False
 

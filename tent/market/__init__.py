@@ -637,11 +637,15 @@ class Market:
             self.model_prices(final_prices[x].timeInterval.startTime, final_prices[x].value)
 
         # Tell Local Assets it is time to actuate.
-        for local_asset in my_transactive_node.localAssets:
-            local_asset.actuate()
+        self._actuate_assets(my_transactive_node)
 
         self.delivery_lead_schedule_power = False
         return None
+
+    def _actuate_assets(self, my_transactive_node):
+        for local_asset in my_transactive_node.localAssets:
+            _log.debug(f'MARKET {self.name} is ACTUATING: {local_asset.name}')
+            local_asset.actuate(self)
 
     def while_in_delivery(self, my_transactive_node):
         """
