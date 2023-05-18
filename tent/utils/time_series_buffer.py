@@ -31,7 +31,7 @@ class TimeSeriesBuffer(deque):
                  dt_class: Union[datetime, type(Timer)] = datetime, expiry: timedelta = None):
         super(TimeSeriesBuffer, self).__init__(iterable, maxlen)
         self.tz = tz if isinstance(tz, tzinfo) else pytz.timezone(tz)
-        self.last = None
+        self.last = PointRecord(None, None)
         self.dt_class = dt_class
         self.expiry = expiry
 

@@ -66,7 +66,7 @@ from tent.utils.timer import Timer
 from tent.utils.time_series_buffer import TimeSeriesBuffer
 
 
-class MeterPoint(TimeSeriesBuffer):
+class MeterPoint:
     def __init__(self,
                  data_period_seconds: float = 10,
                  description: str = '',
@@ -82,7 +82,7 @@ class MeterPoint(TimeSeriesBuffer):
                  transactive_node=None
                  ):
         max_len = ceil(max_buffer_seconds / data_period_seconds) + 1
-        super(MeterPoint, self).__init__(maxlen=max_len, dt_class=Timer)
+        self.buffer = TimeSeriesBuffer(maxlen=max_len, dt_class=Timer)
         self.tn = weakref.ref(transactive_node) if transactive_node else None
 
         # These are static properties that may be passed as parameters:
@@ -112,7 +112,7 @@ class MeterPoint(TimeSeriesBuffer):
     @property
     def current_interval_measurements(self) -> list:
         """Last hour of measurements."""
-        return self.get(since=(self.dt_class.now() - self.measurementInterval))
+        return self.buffer.get(since=(self.buffer.dt_class.now() - self.measurementInterval))
 
     @property
     def mean_measurement(self):
@@ -122,16 +122,16 @@ class MeterPoint(TimeSeriesBuffer):
     @property
     def last_updated(self):
         """Most recent measurement."""
-        return self.last.d_time
+        return self.buffer.last.d_time
 
     @property
     def current_measurement(self):
         """Most recent measurement."""
-        return self.last.value
+        return self.buffer.last.value
 
     def set_meter_value(self, value, last_update=None):
         last_update = last_update if last_update else Timer.get_cur_time()
-        self.append(self.scale_factor * value, last_update)
+        self.buffer.append(self.scale_factor * value, last_update)
 
     def read_meter(self, obj):
         # Read the meter point at scheduled intervals
