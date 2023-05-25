@@ -1,0 +1,1 @@
+from tent.market.price_models.hourly_average_price_model import HourlyAveragePriceModel

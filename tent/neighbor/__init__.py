@@ -554,8 +554,7 @@ class Neighbor:
             # An appropriate MeterPoint was found. The demand threshold may be updated from the MeterPoint.
 
             # Update the demand threshold.
-            self.demandThreshold = max([0, self.demandThreshold, mtr.current_measurement])  # [avg.kW]
-            # self.demandThreshold = max([0, self.demandThreshold, mtr.currentMeasurement])  # [avg.kW]before 2022-03-28
+            self.demandThreshold = max([0, self.demandThreshold, mtr.current_measurement or 0])  # [avg.kW]
             # _log.debug("Meter: {} measurement: {} threshold: {}".format(mtr.name,
             #                                                            mtr.current_measurement,
             #                                                            self.demandThreshold))
