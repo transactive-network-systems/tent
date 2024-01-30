@@ -47,6 +47,7 @@ import sys
 import weakref
 
 from copy import deepcopy
+from collections import defaultdict
 from datetime import datetime, time, timedelta
 from matplotlib import pyplot as plt
 from typing import Union
@@ -63,6 +64,7 @@ from tent.enumerations.market_state import MarketState
 from tent.enumerations.market_types import MarketTypes
 from tent.enumerations.method import Method
 from tent.market.price_models import HourlyAveragePriceModel
+from tent.utils.helpers import format_timestamp
 from tent.utils.timer import Timer
 from tent.utils.log import setup_logging
 
@@ -495,7 +497,8 @@ class Market:
             market_series_name=self.marketSeriesName,
             method=self.method,
             negotiation_lead_time=self.negotiationLeadTime,
-            prior_market_in_series=self
+            prior_market_in_series=self,
+            transactive_node=my_transactive_node
         )  # This uses a constructor, but most properties must be redefined.
 
         new_market.priceModel = deepcopy(self.priceModel)  # It must be clear that this is a copy, not a reference.
@@ -656,7 +659,22 @@ class Market:
         self._actuate_assets(my_transactive_node)
 
         self.delivery_lead_schedule_power = False
+        self.balanced_price_publish()
         return None
+
+    def balanced_price_publish(self):
+        tn = self.tn()
+        scheduled_powers = defaultdict(dict)
+        for entity in tn.neighbors + tn.localAssets:
+            for p in entity.scheduledPowers:
+                if p.timeInterval.market is self:
+                    scheduled_powers[format_timestamp(p.timeInterval.startTime)][entity.name] = p.value
+        tn.publish('balanced_price_record', {
+                       'tnt_market_name': self.name,
+                       'balanced_prices': {format_timestamp(p.timeInterval.startTime): p.value for p in
+                                           self.marginalPrices},
+                       'schedule_powers': scheduled_powers
+                   })
 
     def _actuate_assets(self, my_transactive_node):
         for local_asset in my_transactive_node.localAssets:
