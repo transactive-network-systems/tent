@@ -40,6 +40,7 @@ PACIFIC NORTHWEST NATIONAL LABORATORY
 operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
+from tent.containers.vertex import Vertex
 
 
 class IntervalValue:
@@ -71,14 +72,15 @@ class IntervalValue:
         pass
 
     def get_dict(self):
+        value = self.value.get_dict() if isinstance(self.value, Vertex) else self.value
         interval_value_dict = {
             "scheduled": self.scheduled,
             "associatedClass": self.associatedClass,
             "associatedObject": self.associatedObject,
             "timeIntervalId": self.id,
-            "timeInterval": self.timeInterval,
-            "measurementType": self.measurementType,
-            "value": self.value
+            "timeInterval": self.timeInterval.get_dict(),
+            "measurementType": self.measurementType.name,
+            "value": value
         }
         return interval_value_dict
 

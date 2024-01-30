@@ -75,7 +75,7 @@ class TimeInterval:
         # DURATION - duration of interval[hr]
         # Ensure that content is a duration [hr]
         if isinstance(duration, timedelta):
-            self.duration = duration
+            self.duration = duration  # TODO: What is it is not? We need to assign something, right?
 
         # MARKET - Market object that uses this TimeInterval
         self.market = market
@@ -169,7 +169,7 @@ class TimeInterval:
         time_interval_dict = {
             "startTime": self.startTime,
             "name": self.name,
-            "duration": self.duration
+            "duration": self.duration.total_seconds()
         }
         return time_interval_dict
 
