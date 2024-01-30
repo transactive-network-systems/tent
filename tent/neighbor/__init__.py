@@ -161,6 +161,10 @@ class Neighbor:
         self.totalProductionCost = 0.0                      # [float] [$]
         self.receivedCurves = None
 
+        # Set up transactive record subscription:
+        transactive_node.register_subscription(subscribe_key=f'{self.name}_incoming_transactive_signal',
+                                               callback=self.receive_transactive_signal)
+
     def calculate_reserve_margin(self, market):
         # CALCULATE_RESERVE_MARGIN() - Estimate the spinning reserve margin in each active time interval
         #
@@ -1430,8 +1434,8 @@ class Neighbor:
             transactive_record.neighborName = self.name
             transactive_record.marketName = market.name
 
-        # Publish the signal (if subclass implements messaging).
-        self.publish_signal(transactive_records)
+        # Publish the signal (if TN subclass implements messaging).
+        this_transactive_node.issue_signal(self.name, transactive_records)
 
         # Save the sent TransactiveRecord messages (i.e., sentSignal) as a copy of the calculated set that was drawn
         # upon by this method (i.e., mySignal).
@@ -1452,21 +1456,15 @@ class Neighbor:
         # Return transactive records to allow further processing by subclasses.
         return transactive_records
 
-    def publish_signal(self, transactive_records):
-        """
-        Subclasses which implement messaging should extend this method to send the signals.
-        """
-        pass
-
     # def receive_transactive_signal(self, this_transactive_node, market, curves=None):
-    def receive_transactive_signal(self, this_transactive_node, curves=None):
+    def receive_transactive_signal(self, curves=None):
         # Receive and save transactive records from a transactive Neighbor.
         # this_transactive_node = Agent's TransactiveNode object
         #
         # The process of receiving a transactive signal is emulated by reading an available text table that is presumed
         # to have been created by the transactive neighbor. This process may change in field settings and using Python
         # and other code environments.
-
+        tn = self.tn()
         # If trying to receive a transactive signal from a non-transactive neighbor, create a warning and return.
         if not self.transactive:
             _log.warning('Transactive signals are not expected to be received from non-transactive neighbors. '
@@ -1476,6 +1474,8 @@ class Neighbor:
             # _log.warning(f'{market.name}  Received Transactive signal is None. {this_transactive_node.name}')
             _log.warning(f'Received Transactive signal is None. {this_transactive_node.name}')
             return
+        elif isinstance(curves, dict) and 'curves' in curves:
+            curves = curves['curves']
 
         # 201013DJH: The neighbor's list of received transactive records must be reinitialized so that it will not grow
         #            indefinitely. Only the latest records are relevant. See the end of method prep_transactive_signal()
@@ -1495,7 +1495,7 @@ class Neighbor:
             #            directly.
             # market_name = curve['timeInterval'].split(':')
             # market_name = market_name[0]
-            if curve['marketName'] in [m.name for m in this_transactive_node.markets]:
+            if curve['marketName'] in [m.name for m in tn.markets]:
                 new_record = TransactiveRecord(time_interval=curve['timeInterval'],
                                                neighbor_name=self.name,
                                                direction='received',
@@ -1513,7 +1513,7 @@ class Neighbor:
             append_table(obj=newly_received_records)
 
         # 210127DJH: Trim the receviedSignal list to remove any expired markets and time intervals.
-        active_markets = [x for x in this_transactive_node.markets]
+        active_markets = [x for x in tn.markets]
         active_time_intervals = []
         for active_market in active_markets:
             active_time_intervals.extend(active_market.timeIntervals)
