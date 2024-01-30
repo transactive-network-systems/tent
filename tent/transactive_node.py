@@ -211,3 +211,13 @@ class TransactiveNode(object):
             return matches[0]
         else:
             return matches
+
+    def publish(self, publish_key, message, date_time=None):
+        pass
+
+    def issue_signal(self, recipient, transactive_records):
+        _log.debug("WRONG PLACE: THIS IS THE ABSTRACT METHOD IN TN")
+        pass
+
+    def register_subscription(self, subscribe_key, callback):
+        pass
