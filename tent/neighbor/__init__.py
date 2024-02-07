@@ -470,7 +470,7 @@ class Neighbor:
             # Find the marginal price for the indexed time interval
             marginal_price = find_obj_by_ti(market.marginalPrices, time_intervals[i])  # an IntervalValue
             if marginal_price is None:
-                marginal_price = market.model_prices(time_intervals[i].startTime)[0]
+                marginal_price = market.priceModel.get(time_intervals[i].startTime)[0]
             else:
                 marginal_price = marginal_price.value
 
