@@ -161,8 +161,17 @@ class Market:
         self.converged = False
         self.dualCosts = []  # [IntervalValue]; Values are [$]
         # TODO: Does isNewestMarket need a setting for instantiation of some markets at startup?
+        # 240206DJH: ANSWER: This is best handled by configuration of the initial market and its treatement by method
+        #            spawn(). The "newest market" flag is held by the market that determines whether new markets must be
+        #            spawned, based on comparison of a calculated actcivation time and the current time.
         self.isNewestMarket = True  # [Boolean] Flag held by only newest market in market series
-        self.marketState = MarketState.Initial if first_market_in_series else self.initialMarketState
+        # 240207DJH: This assignment of market state should be to the preferred initial market state. If that is not
+        #            possible it should be assigned to the initial market state.
+        # self.marketState = MarketState.Initial if first_market_in_series else self.initialMarketState
+        if self.initialMarketState:
+            self.marketState = self.initialMarketState
+        else:
+            self.marketState = MarketState.Initial
         self.marginalPrices = []  # [IntervalValue]; Values are [$/kWh]
         # This market object's name. Use market series name as root
         self.name = self.get_market_name()
@@ -504,6 +513,14 @@ class Market:
         new_market.priceModel = deepcopy(self.priceModel)  # It must be clear that this is a copy, not a reference.
         # new_market.marketState = MarketState.Active  # TODO: initial_market_state seems to be ignored by constructor....
         # # TODO: Shouldn't the initial market state generally be Inactive?
+        # 340207DJH: This next code should fix the TODOs immediately preceding this code. A new market should be
+        #            initialized in its desired initial state. Everything else should be handled by the market state
+        #            machine (i.e., method events()). I have also made this happen in the Market constructor. I think
+        #            these TODOs can be deleted.
+        if new_market.initialMarketState:
+            new_market.marketState = new_market.initialMarketState
+        else:
+            new_market.marketState = MarketState.Initial
 
         # Append the new market object to the list of market objects that is maintained by the agent.
         my_transactive_node.markets.append(new_market)
@@ -663,7 +680,14 @@ class Market:
         return None
 
     def balanced_price_publish(self):
-        tn = self.tn()
+        # 240207DJH: Changing this next line. Unit testing throws an exception when self.tn is None. Additionally, I
+        #            think don't think your intention was to reproduce a copy of the local transactive node (i.e.,
+        #            "myTransactiveNode), which will happen if a call is made to tn.
+        # tn = self.tn()
+        if self.tn:
+            tn = self.tn
+        else:
+            return
         scheduled_powers = defaultdict(dict)
         for entity in tn.neighbors + tn.localAssets:
             for p in entity.scheduledPowers:
@@ -1780,7 +1804,7 @@ class Market:
 
         time_intervals.sort(key=by_start_times)  # 200207DJH: Is this actually used by the method??
 
-        import plotly.express as px
+        import plotly_express as px
 
         import pandas as pd
         df = pd.read_csv('https://raw.githubusercontent.com/plotly/datasets/master/finance-charts-apple.csv')
