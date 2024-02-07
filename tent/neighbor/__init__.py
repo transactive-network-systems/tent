@@ -53,7 +53,7 @@ from tent.utils.data_manager import append_table
 from tent.enumerations.direction import Direction
 from tent.utils.helpers import (are_different1, are_different2, find_obj_by_ti, find_objs_by_ti, format_ts,
                                 format_timestamp, get_duration_in_hour, order_vertices, production,
-                                prod_cost_from_vertices, validate_bool)
+                                prod_cost_from_vertices, validate_bool, power_from_vertices)
 from tent.containers.interval_value import IntervalValue
 from tent.enumerations.market_state import MarketState
 from tent.enumerations.measurement_type import MeasurementType
@@ -161,9 +161,12 @@ class Neighbor:
         self.totalProductionCost = 0.0                      # [float] [$]
         self.receivedCurves = None
 
+        # 240206DJH: This throws errors if transactive_node is None. Skipping this subscription assignment if
+        #            transactive_node is None. This case should only happen in unit testing, I think.
         # Set up transactive record subscription:
-        transactive_node.register_subscription(subscribe_key=f'{self.name}_incoming_transactive_signal',
-                                               callback=self.receive_transactive_signal)
+        if transactive_node:
+            transactive_node.register_subscription(subscribe_key=f'{self.name}_incoming_transactive_signal',
+                                                   callback=self.receive_transactive_signal)
 
     def calculate_reserve_margin(self, market):
         # CALCULATE_RESERVE_MARGIN() - Estimate the spinning reserve margin in each active time interval
@@ -914,7 +917,10 @@ class Neighbor:
 
                 # However, if the power is not yet scheduled (price is not known), the power must be inferred:
                 if len(current_scheduled_power) == 0:
-                    predicted_market_price = market.model_prices(time_interval.startTime)[0]
+                    # 240206DJH: This next line must be modified to use the new price model structure, where the market
+                    #            priceModel attribute is a price model clsss object, and that object owns a price table.
+                    # predicted_market_price = market.model_prices(time_interval.startTime)[0]
+                    predicted_market_price = market.priceModel.get(time_interval.startTime)[0]
                     current_scheduled_power = power_from_vertices(active_vertices,
                                                                   predicted_market_price)
                 else:
