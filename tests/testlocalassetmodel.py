@@ -52,6 +52,7 @@ from tent.market import Market
 from tent.containers.time_interval import TimeInterval
 from tent.local_asset import LocalAsset
 from tent.transactive_node import TransactiveNode
+from tent.market.price_models import HourlyAveragePriceModel  # 240207DJH: Needed for new price model usage
 
 
 def test_assign_transition_costs():
@@ -702,8 +703,9 @@ def test_get_extended_prices():
         print("  The case encountered errors.", result)
 
     assert len(price_set) == 2, 'An unexpected number of prices was found'
-    assert price_set[0].value == price0, 'The first price was not correct'
-    assert price_set[1].value == price1, 'The second price was not correct'
+    # assert price_set[0].value == price0, 'The first price was not correct'
+    # assert price_set[1].value == price1, 'The second price was not correct'
+    assert all([x.value in [price0, price1] for x in price_set]), 'The prices are not correct.'
 
     # ******************************************************************************************************************
     print("  Case 3. Actual marginal prices in prior markets that are being corrected by the market.")  # *******
@@ -821,14 +823,17 @@ def test_get_extended_prices():
     test_market.priorMarketInSeries = None
     test_market.priorRefinedMarket = None
     avg_price = 30
-    std_price = 0.1
-    test_market.priceModel = [avg_price, std_price] * 24  # Critical to this test
+    # std_price = 0.1
+    # test_market.priceModel = [avg_price, std_price] * 24  # Critical to this test
+    # ff = 14
+    # price_dict = dict([(x, [avg_price] * ff) for x in range(1, 25)])
+    test_market.priceModel = HourlyAveragePriceModel(default_price=avg_price)
     test_mtn = TransactiveNode()
     test_mtn.markets = [test_market]
     test_mtn.localAssets = [test_asset_model]
 
     assert len(test_market.marginalPrices) == 1, 'The market was supposed to have a marginal price'
-    assert len(test_market.priceModel) == 48, 'A price model must exist for all 2 * 24 hours'
+    assert len(test_market.priceModel.current_model) == 24, 'A price model must exist for all 2 * 24 hours'
 
     try:
         price_set = test_asset_model.get_extended_prices(test_market)

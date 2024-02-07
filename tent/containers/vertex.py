@@ -42,7 +42,8 @@ under Contract DE-AC05-76RL01830
 """
 
 
-from tent.utils.helpers import validate_bool
+# 240206DJH: Moved method order_vertices here from line 103.
+from tent.utils.helpers import validate_bool, order_vertices
 
 
 class Vertex:
@@ -97,10 +98,12 @@ class Vertex:
 
     @staticmethod
     def check_rationality(v, action="None"):
-        try:
-            from helpers import order_vertices
-        except ModuleNotFoundError:
-            from .helpers import order_vertices
+        # 240206DJH TODO: Delete this try-except, whis is not needed once order_vertices is corrected among import
+        #           statements.
+        # try:
+        #     from helpers import order_vertices
+        # except ModuleNotFoundError:
+        #     from .helpers import order_vertices
         # 211207DJH: This method checks whether a list of vertices is rational, meaning that signed power is a
         #            non-decreasing function of marginal price. These possible actions are allowed:
         #            action=="fix_up": The powers of irrational points are made rational by increasing the powers to be

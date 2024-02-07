@@ -713,7 +713,7 @@ class LocalAsset(object):
         horizon that extends farther into the future than supplied by the market in forward time intervals. For example,
         a market may offer only one forward time interval with its price offer. Even in this example, auction markets do
         not provide market prices at the times bids are to be formulated by the local asset. Local assets having states
-        (e.g., controlled interior temperature, battery charge state) must some how calibrate prices farther into the
+        (e.g., controlled interior temperature, battery charge state) must somehow calibrate prices farther into the
         future as a foundation for understanding the opportunity cost.
         This base method uses the following prioritization to populate the price horizon:
         1. Actual marginal prices offered by the market object.
@@ -744,8 +744,10 @@ class LocalAsset(object):
         if not isinstance(market_prices, type(None)) and market_prices is not None:
             if isinstance(market_prices, list) and len(market_prices) != 0:
                 price_horizon.extend(market_prices)
-
-                end_of_calculated_horizon = price_horizon[0].timeInterval.startTime + market.intervalDuration
+                # 240207DJH: This minor change should ensure that the order of price intervals does not matter:
+                start_time_of_last_interval = max([x.timeInterval.startTime for x in price_horizon])
+                # end_of_calculated_horizon = price_horizon[0].timeInterval.startTime + market.intervalDuration
+                end_of_calculated_horizon = start_time_of_last_interval + market.intervalDuration
                 for x in range(1, len(market_prices)):
                     end_time = price_horizon[x].timeInterval.startTime + market.intervalDuration
                     if end_time > end_of_calculated_horizon:
@@ -819,13 +821,16 @@ class LocalAsset(object):
         market_prices = []
         if market.priceModel is not None:
             while end_of_scheduling_horizon > end_of_calculated_horizon:
+                # 240206DJH: This next line fails unit testing. I see that market.priceModel should now be equivalent to
+                #            an object of class HourlyAveragePriceModel, but it is being made equivalent to the model
+                #            itself instead.
                 price = market.priceModel.get(end_of_calculated_horizon)
                 start_time = end_of_calculated_horizon.replace(minute=0, second=0)
                 end_time = start_time + timedelta(hours=1)
                 duration = end_time - start_time
                 ti = TimeInterval(Timer.get_cur_time(), duration, market,
                                   market.marketClearingTime, start_time)
-                iv = IntervalValue(self, ti, market, None, price[0])
+                iv = IntervalValue(self, ti, market, None, value=price[0])
                 market_prices.append(iv)
                 end_of_calculated_horizon = end_time
 

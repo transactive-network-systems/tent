@@ -49,6 +49,8 @@ class HourlyAveragePriceModel:
         Given a new price, the price model is updated using this price for the hour of the given datetime.
             :param: date_time: The datetime of the update.
             :param: new_price: [$/kWh] New price provided to update the model for the hour of the given datetime.
+        TODO: 240207DJH: Unlike the original model, this dictionary of hourly prices appears to grow indefinitely. This
+              is not sustainable and should be fixed.
         """
         hourly_model = self.current_model[int(date_time.hour)]
         hourly_model.append(new_price)
@@ -60,6 +62,9 @@ class HourlyAveragePriceModel:
 
         :return: avg_price: [$/kWh] average model price for the hour of the given datetime
         :return: sd_price: [$/kWh] standard price deviation for the hour of the given datetime
+        240207DJH: I observe that the price model has been greatly simplified, but the new price model lost most the
+                   elegance and sophistication of the original. (Using a dictionary is fine, however.)
+                   TODO: This change should be reverted to the original approach. Assign to Don.
         """
         hourly_model = self.current_model[int(date_time.hour)]
         try:

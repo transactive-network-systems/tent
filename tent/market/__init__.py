@@ -100,7 +100,7 @@ class Market:
                  negotiation_lead_time: Union[timedelta, float, int] = timedelta(hours=0),
                  prior_market_in_series=None,
                  real_time_duration: Union[timedelta, float, int] = timedelta(minutes=15),
-                 transactive_node=None):
+                 transactive_node=None):  # 240207DJH: Can this reference be automatically found from among objects??
 
         self.tn = weakref.ref(transactive_node) if transactive_node else None
         # These properties are relatively static and may be received as parameters:
@@ -164,7 +164,8 @@ class Market:
         # 240206DJH: ANSWER: This is best handled by configuration of the initial market and its treatement by method
         #            spawn(). The "newest market" flag is held by the market that determines whether new markets must be
         #            spawned, based on comparison of a calculated actcivation time and the current time.
-        self.isNewestMarket = True  # [Boolean] Flag held by only newest market in market series
+        #            A corrected assignment of isNewestMarket must always be checked as new markets are spawned.
+        self.isNewestMarket = True  # [Boolean] Flag held by only the newest market in market series
         # 240207DJH: This assignment of market state should be to the preferred initial market state. If that is not
         #            possible it should be assigned to the initial market state.
         # self.marketState = MarketState.Initial if first_market_in_series else self.initialMarketState
@@ -177,7 +178,8 @@ class Market:
         self.name = self.get_market_name()
         self.netPowers = []  # [IntervalValue]; Values are [avg.kW]
         self.nextMarketClearingTime = self.marketClearingTime + self.marketClearingInterval
-        self.priceModel = HourlyAveragePriceModel(forgetting_factor=14, default_price=self.defaultPrice)
+        self.priceModel: HourlyAveragePriceModel = HourlyAveragePriceModel(forgetting_factor=14,
+                                                                           default_price=self.defaultPrice)
         self.productionCosts = []  # [IntervalValue]; Values are [$]
         self.reconciled = False  # [Boolean] Convergence flag
         self.timeIntervals = []  # [TimeInterval] Current list of active time intervals
