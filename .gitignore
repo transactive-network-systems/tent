@@ -3,3 +3,5 @@ __pycache__
 .idea/
 tent.egg-info
 *.csv
+/unit_tests/CSV_DATA/
+/Market_Data/
