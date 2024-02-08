@@ -178,7 +178,7 @@ class BulkSupplier_dc(Neighbor):
 
                 # However, if the power is not yet scheduled (price is not known), the power must be inferred:
                 if len(scheduled_power) == 0:
-                    predicted_market_price = market.model_prices(time_interval.startTime)[0]
+                    predicted_market_price = market.priceModel.get(time_interval.startTime)[0]
                     scheduled_power = power_from_vertices(vertices,
                                                           predicted_market_price)
                 else:
