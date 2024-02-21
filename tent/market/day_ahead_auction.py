@@ -61,48 +61,58 @@ class DayAheadAuction(Auction):
 
     #def transition_from_initial_to_inactive(self, my_transactive_node):
     #    _log.debug(f'MARKET: {self.name} STATE IS NOW TRANSITIONING: Initial to Inactive')
-    def transition_from_inactive_to_active(self, my_transactive_node):
-        self.spawn_real_time_markets(my_transactive_node)
+    # 240221DJH: This method should not be overwritten here. The spawning of real-time markets should be initiated in
+    #            events based on timing and use of isNewestMarket flag. Spawning is being simplified currently.
+    # def transition_from_inactive_to_active(self, my_transactive_node):
+    #     self.spawn_real_time_markets(my_transactive_node)
 
-    def spawn_markets(self, this_transactive_node, new_market_clearing_time):
-        # First, go ahead and use the base method and current market to create the next member of this market series,
-        # as was intended. This should instantiate the new market,  create its time intervals, and initialize marginal
-        # prices for the new market.
-        Auction.spawn_markets(self, this_transactive_node, new_market_clearing_time)
+    # 240221DJH: This method should not be overwritten here. Base Market class method events() initiates the spawning of
+    #            new markets, provided flag isNewestMarket is being properly managed.
+    # def spawn_markets(self, this_transactive_node, new_market_clearing_time):
+    #     # First, go ahead and use the base method and current market to create the next member of this market series,
+    #     # as was intended. This should instantiate the new market,  create its time intervals, and initialize marginal
+    #     # prices for the new market.
+    #     Auction.spawn_markets(self, this_transactive_node, new_market_clearing_time)
 
         # Next, the new day-ahead market instantiates all the real-time markets that will correct the new day-ahead
         # intervals. There are several ways to retrieve the market that was just created, but this approach should be
         # pretty foolproof.
         # self.spawn_real_time_markets(this_transactive_node)
 
-    def spawn_real_time_markets(self, this_transactive_node):  # , for_current_market=False):
+    def spawn_markets(self, this_transactive_node, new_market_clearing_time):
+
+        # 200910DJH: This is where you may change between 15-minute and 60-minute real-time refinement intervals.
+        # real_time_market_duration = timedelta(minutes=60)
+
+        # First, go ahead and use the base method and current market to create the next member of this market series,
+        # as was intended. This should instantiate the new market,  create its time intervals, and initialize marginal
+        # prices for the new market.
+        Auction.spawn_markets(self, this_transactive_node, new_market_clearing_time)
+
+        self.spawn_real_time_markets(this_transactive_node)
+
+    def spawn_real_time_markets(self, this_transactive_node, for_current_market=False):
         _log.debug(f' {self.name} IS IN SPAWN_REAL_TIME_MARKETS')
-        # if for_current_market:
-        #     market_list = [self]
-        # else:
-        #     market_list = [x for x in this_transactive_node.markets if x.marketClearingTime == self.nextMarketClearingTime
-        #               and x.marketSeriesName == self.marketSeriesName][0]
+        if for_current_market:
+            market = [self]
+        else:
+            market = \
+                [x for x in this_transactive_node.markets if x.marketClearingTime == self.nextMarketClearingTime
+                 and x.marketSeriesName == self.marketSeriesName][0]
         # # Something is seriously wrong if the recently instantiated market cannot be found. Raise an error and stop.
-        # try:
-        #     market = market_list[0]
-        # except Exception as e:
-        #     raise ('No predecessor of ' + self.name + ' could be found: {e}')
+        if not market:
+            raise ('No predecessor of ' + self.name + ' could be found.')
+
         # Gather all the day-ahead market period start times and order them.
-        market = self
         market_interval_start_times = [x.startTime for x in market.timeIntervals]
         market_interval_start_times.sort()
-        # 210401DJH: This initialization of new_market_list had been misplaced, thus causing only the final hour's Real-
-        #            Time markets to be captured as CSV records. It should be initialized prior to looping through the
-        #            Day-Ahead market hours, as placed here.
+
         new_market_list = []
         for i in range(len(market_interval_start_times)):
 
             interval_start = market_interval_start_times[i]
             interval_end = interval_start + market.intervalDuration
 
-            # 210401DJH: This initialization of new_market_list is misplaced, thus causing only the final hour's Real-
-            #            Time markets to be captured as CSV records.
-            # new_market_list = []
             while interval_start < interval_end:
                 # Find the prior market in this series. It should be the one that shares the same market series name and
                 # is, until now, the newest market in the series.

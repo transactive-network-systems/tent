@@ -166,9 +166,6 @@ class Market:
         #            spawned, based on comparison of a calculated actcivation time and the current time.
         #            A corrected assignment of isNewestMarket must always be checked as new markets are spawned.
         self.isNewestMarket = True  # [Boolean] Flag held by only the newest market in market series
-        # 240207DJH: This assignment of market state should be to the preferred initial market state. If that is not
-        #            possible it should be assigned to the initial market state.
-        # self.marketState = MarketState.Initial if first_market_in_series else self.initialMarketState
         if self.initialMarketState:
             self.marketState = self.initialMarketState
         else:
@@ -205,6 +202,8 @@ class Market:
         self._stateIsCompleted = False
 
     def _calculate_clearing_time(self):
+        # 240221DJH: TODO: Move this method to base class Market.
+        # 240221DJH: TODO: Ensure that this base method begins delivery on major temporal transitions.
         now = Timer.get_cur_time()
         run_gap = (self.deliveryLeadTime + self.marketLeadTime + self.negotiationLeadTime
                    + self.activationLeadTime)  # + timedelta(seconds=1)  # TODO: Is this second necessary? May cause issues with spawning new markets.
@@ -1315,8 +1314,10 @@ class Market:
 
                 # The time interval will be found in prior markets of this series only if more than one time
                 # interval is cleared by each market.
-                if self.priorMarketInSeries and self.priorMarketInSeries() and self.intervalsToClear > 1 \
-                        and marginal_price is None:
+                # if self.priorMarketInSeries and self.priorMarketInSeries() and self.intervalsToClear > 1 \
+                #         and marginal_price is None:
+                if self.priorMarketInSeries and self.intervalsToClear > 1 \
+                        and self.intervalsToClear > 1 and marginal_price is None:
 
                     # Look for only the market just prior to this one, based on its market clearing time.
                     prior_market_in_series = self.priorMarketInSeries()
@@ -1358,9 +1359,11 @@ class Market:
 
                 # If there is a prior market indicated and a marginal price has not been found,
                 # 200902DJH: Change this from elif to if with added continue statement
-                if self.marketToBeRefined and self.marketToBeRefined() and marginal_price is None:
+                # if self.marketToBeRefined and self.marketToBeRefined() and marginal_price is None:
+                if self.marketToBeRefined and marginal_price is None:
+
                     # _log.debug("Market name: {}, check_marginal_price: Method 3".format(self.name))
-                    # Read the this market's prior refined market name.
+                    # Read this market's prior refined market name.
                     prior_market = self.marketToBeRefined()
 
                     # Gather the marginal prices from the most recent similar market.

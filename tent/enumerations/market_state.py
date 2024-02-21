@@ -52,8 +52,11 @@ class MarketState(Enum):
     alternative transaction methods (e.g., auctions and consensus). A market object's lifetime is now defined by method
     events(), which is a state machine that transitions between a set of these enumerated states. Implementers may
     modify the actions taken during transitions between these states and while in the various states.
+
+    240207DJH: Making Initial same as Inactive. Proper handling of initial market state is via attribute
+               market.initialMarketState.
     """
-    Initial = 0         # First run of a market in a new market series
+    Initial = 2         # First run of a market in a new market series
     Active = 1          #
     Inactive = 2        # Unneeded, inactive
     Delivery = 3        # The system is currently in the interval period

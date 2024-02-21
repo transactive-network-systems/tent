@@ -50,14 +50,15 @@ def test_spawn_markets():
     print('Running test_spawn_markets()')
     time = datetime(year=2020, month=8, day=18, hour=11)
     test_node = TransactiveNode()
-    prior_da_auction = DayAheadAuction()
-    prior_da_auction.marketClearingInterval = timedelta(hours=24)
-    prior_da_auction.marketType = MarketTypes.auction
+    prior_da_auction = DayAheadAuction(market_clearing_interval=timedelta(hours=24),
+                                       market_series_name='Day-Ahead Auction',
+                                       intervals_to_clear=24,
+                                       interval_duration=timedelta(hours=1)
+                                       )
+
     prior_da_auction.name = 'Prior DA Market'
-    prior_da_auction.marketSeriesName = 'Day-Ahead Auction'
     prior_da_auction.nextMarketClearingTime = time
-    prior_da_auction.intervalsToClear = 24
-    prior_da_auction.intervalDuration = timedelta(hours=1)
+
     test_node.markets = [prior_da_auction]
 
     try:
@@ -70,7 +71,9 @@ def test_spawn_markets():
 
     # 200910DJH: If the real-time markets are defined as 15-minutes, this should be 98 markets; if 60 minutes, 26
     #            markets.
-    real_time_count = prior_da_auction.marketClearingInterval / prior_da_auction.real_time_duration
+    # 240221DJH: The introduction of DayAheadAuction.real_time_count was a bad practice and should be fixed. For now, I
+    #            can live with a definite assigment. This test will need to be revised when auction markets are fixed.
+    real_time_count = int(timedelta(hours=24) / prior_da_auction.real_time_duration)
     assert len(test_node.markets) == real_time_count + 2,\
         'An unexpected market count happened: ' + str(len(test_node.markets))
     assert sum(x.marketSeriesName == 'Day-Ahead Auction' for x in test_node.markets) == 2, \
