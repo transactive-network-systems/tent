@@ -374,8 +374,9 @@ def test_are_different2():
     dt = datetime.now()
     at = dt
     dur = timedelta(hours=1)
-    mkt = Market()
-    mkt.marketSeriesName = "TEST"
+    mkt = Market(
+        market_series_name="TEST"
+    )
     mct = dt
     st = dt
     ti = TimeInterval(at, dur, mkt, mct, st)

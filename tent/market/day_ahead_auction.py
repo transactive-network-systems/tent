@@ -80,12 +80,8 @@ class DayAheadAuction(Auction):
         # self.spawn_real_time_markets(this_transactive_node)
 
     def spawn_markets(self, this_transactive_node, new_market_clearing_time):
-
-        # 200910DJH: This is where you may change between 15-minute and 60-minute real-time refinement intervals.
-        # real_time_market_duration = timedelta(minutes=60)
-
         # First, go ahead and use the base method and current market to create the next member of this market series,
-        # as was intended. This should instantiate the new market,  create its time intervals, and initialize marginal
+        # as was intended. This should instantiate the new market, create its time intervals, and initialize marginal
         # prices for the new market.
         Auction.spawn_markets(self, this_transactive_node, new_market_clearing_time)
 

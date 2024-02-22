@@ -65,8 +65,9 @@ def test_assign_system_vertices():
     now = datetime.now()
     positive_infinity = float('Inf')
     test_node = TransactiveNode()
-    test_market = Market()
-    test_market.intervalDuration = timedelta(hours=1)
+    test_market = Market(
+        interval_duration=timedelta(hours=1)
+    )
     test_node.markets = [test_market]
     test_asset = LocalAsset()
     test_node.localAssets = [test_asset]
@@ -115,8 +116,9 @@ def test_balance():
     now = datetime.now()
     positive_infinity = float('Inf')
     test_node = TransactiveNode()
-    test_market = Market()
-    test_market.intervalDuration = timedelta(hours=1)
+    test_market = Market(
+        interval_duration=timedelta(hours=1)
+    )
     test_node.markets = [test_market]
     test_asset = LocalAsset()
     test_node.localAssets = [test_asset]
@@ -247,15 +249,17 @@ def test_check_marginal_prices():
     print("**Case 2: If the same time interval exists from a prior market clearing, its price may be used.")  # ********
 
     # Configure the test.
-    prior_mkt = Market()
-    prior_mkt.marketSeriesName = "Test Market"
+    prior_mkt = Market(
+        market_series_name="Test Market"
+    )
 
     new_mp = 1.234
 
-    test_mkt = Market()
-    test_mkt.marketSeriesName = "Test Market"
+    test_mkt = Market(
+        market_series_name="Test Market",
+        intervals_to_clear=2
+    )
 
-    test_mkt.intervalsToClear = 2
     test_mkt.priorMarketInSeries = weakref.ref(prior_mkt)  # Important pointer to the prior market in the series
 
     test_ti = TimeInterval(datetime.now(), timedelta(hours=1), test_mkt, datetime.now(), datetime.now())
@@ -297,14 +301,16 @@ def test_check_marginal_prices():
     print("**Case 3: If this market corrects another prior market, its cleared price should be used.")  # **************
 
     # Configure the test.
-    prior_mkt = Market()
-    prior_mkt.marketSeriesName = "Not Test Market"  # The prior market has a different market name
-    prior_mkt.marketClearingTime = datetime.now()
+    prior_mkt = Market(
+        market_series_name="Not Test Market",  # The prior market has a different market name
+        market_clearing_time=datetime.now()
+    )
     new_mp = 1.234
 
-    test_mkt = Market()
-    test_mkt.marketSeriesName = "Test Market"  # This points to the market series that is to be corrected.
-    test_mkt.marketClearingTime = prior_mkt.marketClearingTime + timedelta(hours=1)  # Must be after prior market.
+    test_mkt = Market(
+        market_series_name="Test Market",  # This points to the market series that is to be corrected.
+        market_clearing_time=prior_mkt.marketClearingTime + timedelta(hours=1)  # Must be after prior market.
+    )
     test_mkt.marketToBeRefined = prior_mkt.marketSeriesName  # Assuming here this is not a list.
     test_mkt.marketToBeRefined = weakref.ref(prior_mkt)  # Important pointer to market that is being refined
 
@@ -397,9 +403,10 @@ def test_check_marginal_prices():
     print("**Case 5: If all above methods fail, market periods should be assigned the market's default price.")  # *****
 
     # Configure the test.
-    test_mkt = Market()
-    test_mkt.marketSeriesName = "Test Market"
-    test_mkt.marketClearingTime = datetime.now() + timedelta(hours=1)  # Must be after prior market.
+    test_mkt = Market(
+        market_series_name="Test Market",
+        market_clearing_time=datetime.now() + timedelta(hours=1)  # Must be after prior market.
+    )
     test_mkt.marketToBeRefined = None  # There should be no prior market to correct
     pi = 3.14159
     test_mkt.defaultPrice = pi
@@ -440,9 +447,10 @@ def test_check_marginal_prices():
     print("**Case 6: Finally, if no method has worked, set the marginal price to Null.")  # *****
 
     # Configure the test.
-    test_mkt = Market()
-    test_mkt.marketSeriesName = "Test Market"
-    test_mkt.marketClearingTime = datetime.now() + timedelta(hours=1)  # Must be after prior market.
+    test_mkt = Market(
+        market_series_name="Test Market",
+        market_clearing_time=datetime.now() + timedelta(hours=1)  # Must be after prior market.
+    )
     test_mkt.marketToBeRefined = None  # There should be no prior market to correct
     test_mkt.defaultPrice = None
     test_mkt.priceModel = None  # The lack of price model will excite this final method.
@@ -515,24 +523,23 @@ def test_events():
 
     now = datetime.now()
 
-    test_mkt = Market()
+    market_clearing_time = now - 0.5 * 24 * timedelta(hours=1)
+    market_clearing_interval = timedelta(days=1)
 
-    test_mkt.activationLeadTime = timedelta(minutes=10)
-    test_mkt.negotiationLeadTime = timedelta(minutes=10)
-    test_mkt.marketLeadTime = timedelta(hours=10)
-    test_mkt.deliveryLeadTime = timedelta(minutes=10)
-    test_mkt.intervalsToClear = 24
-    test_mkt.intervalDuration = timedelta(hours=1)
-
-    test_mkt.marketState = MarketState.Delivery
-
-    test_mkt.marketSeriesName = "Test Market"
-
-    test_mkt.marketClearingTime = now - 0.5 * test_mkt.intervalsToClear * test_mkt.intervalDuration
-
+    test_mkt = Market(
+        activation_lead_time=timedelta(minutes=10),
+        negotiation_lead_time=timedelta(minutes=10),
+        market_lead_time=timedelta(hours=10),
+        delivery_lead_time=timedelta(minutes=10),
+        intervals_to_clear=24,
+        interval_duration=timedelta(hours=1),
+        initial_market_state=MarketState.Delivery,
+        market_series_name="Test Market",
+        market_clearing_time=market_clearing_time,
+        market_clearing_interval=market_clearing_interval,
+    )
     test_mkt.reconciled = False
-    test_mkt.marketClearingInterval = timedelta(days=1)
-    test_mkt.nextMarketClearingTime = test_mkt.marketClearingTime + test_mkt.marketClearingInterval
+    test_mkt.nextMarketClearingTime = market_clearing_time + market_clearing_interval
     test_mkt.isNewestMarket = True
 
     test_mtn = TransactiveNode()
@@ -564,24 +571,24 @@ def test_events():
 
     now = datetime.now()
 
-    test_mkt = Market()
-
-    test_mkt.activationLeadTime = timedelta(minutes=10)
-    test_mkt.negotiationLeadTime = timedelta(minutes=10)
-    test_mkt.marketLeadTime = timedelta(hours=10)
-    test_mkt.deliveryLeadTime = timedelta(minutes=10)
-    test_mkt.intervalsToClear = 24
-    test_mkt.intervalDuration = timedelta(hours=1)
+    activation_lead_time = timedelta(minutes=10)
+    negotiation_lead_time = timedelta(minutes=10)
+    market_lead_time = timedelta(hours=10)
+    test_mkt = Market(
+        activation_lead_time=activation_lead_time,
+        negotiation_lead_time=negotiation_lead_time,
+        market_lead_time=market_lead_time,
+        delivery_lead_time=timedelta(minutes=10),
+        intervals_to_clear=24,
+        interval_duration=timedelta(hours=1),
+        initial_market_state=MarketState.Initial,
+        market_series_name="Test Market",
+        market_clearing_time=now + 0.5 * activation_lead_time + negotiation_lead_time + market_lead_time,
+        market_clearing_interval=timedelta(days=1)
+    )
 
     test_mkt.marketState = MarketState.Active
-
-    test_mkt.marketSeriesName = "Test Market"
-
-    test_mkt.marketClearingTime = now + 0.5 * test_mkt.activationLeadTime + test_mkt.negotiationLeadTime \
-                                  + test_mkt.marketLeadTime
-
     test_mkt.reconciled = False
-    test_mkt.marketClearingInterval = timedelta(days=1)
     test_mkt.nextMarketClearingTime = test_mkt.marketClearingTime + test_mkt.marketClearingInterval
     test_mkt.isNewestMarket = True
 
@@ -612,16 +619,18 @@ def test_events():
 
     now = datetime.now()
 
+    activation_lead_time = timedelta(minutes=10)
+    negotiation_lead_time = timedelta(minutes=10)
+    market_lead_time = timedelta(hours=10)
     test_mkt = Market(
-        activation_lead_time=timedelta(minutes=10),
-        negotiation_lead_time=timedelta(minutes=10),
-        market_lead_time=timedelta(hours=10),
+        activation_lead_time=activation_lead_time,
+        negotiation_lead_time=negotiation_lead_time,
+        market_lead_time=market_lead_time,
         delivery_lead_time=timedelta(minutes=10),
         intervals_to_clear=24,
         interval_duration=timedelta(hours=1),
         market_series_name="Test Market",
-        market_clearing_time=now + 0.5 * test_mkt.activationLeadTime + test_mkt.negotiationLeadTime \
-                                  + test_mkt.marketLeadTime,
+        market_clearing_time=now + 0.5 * activation_lead_time + negotiation_lead_time + market_lead_time,
         market_clearing_interval=timedelta(days=1)
     )
 
@@ -668,23 +677,22 @@ def test_events():
 
     now = datetime.now()
 
-    test_mkt = Market()
-
-    test_mkt.activationLeadTime = timedelta(minutes=10)
-    test_mkt.negotiationLeadTime = timedelta(minutes=10)
-    test_mkt.marketLeadTime = timedelta(hours=10)
-    test_mkt.deliveryLeadTime = timedelta(minutes=10)
-    test_mkt.intervalsToClear = 24
-    test_mkt.intervalDuration = timedelta(hours=1)
+    negotiation_lead_time = timedelta(minutes=10)
+    market_lead_time = timedelta(hours=10)
+    test_mkt = Market(
+        activation_lead_time=timedelta(minutes=10),
+        negotiation_lead_time=negotiation_lead_time,
+        market_lead_time=market_lead_time,
+        delivery_lead_time=timedelta(minutes=10),
+        interval_duration=timedelta(hours=1),
+        intervals_to_clear=24,
+        market_series_name="Test Market",
+        market_clearing_time=now + 0.5 * negotiation_lead_time + market_lead_time,
+        market_clearing_interval=timedelta(days=1)
+            )
 
     test_mkt.marketState = MarketState.Active
-
-    test_mkt.marketSeriesName = "Test Market"
-
-    test_mkt.marketClearingTime = now + 0.5 * test_mkt.negotiationLeadTime + test_mkt.marketLeadTime
-
     test_mkt.reconciled = False
-    test_mkt.marketClearingInterval = timedelta(days=1)
     test_mkt.nextMarketClearingTime = test_mkt.marketClearingTime + test_mkt.marketClearingInterval
 
     test_mtn = TransactiveNode()
@@ -719,23 +727,22 @@ def test_events():
 
     now = datetime.now()
 
-    test_mkt = Market()
-
-    test_mkt.activationLeadTime = timedelta(minutes=10)
-    test_mkt.negotiationLeadTime = timedelta(minutes=10)
-    test_mkt.marketLeadTime = timedelta(hours=10)
-    test_mkt.deliveryLeadTime = timedelta(minutes=10)
-    test_mkt.intervalsToClear = 24
-    test_mkt.intervalDuration = timedelta(hours=1)
+    negotiation_lead_time = timedelta(minutes=10)
+    market_lead_time = timedelta(hours=10)
+    test_mkt = Market(
+        activation_lead_time=timedelta(minutes=10),
+        negotiation_lead_time=negotiation_lead_time,
+        market_lead_time=market_lead_time,
+        delivery_lead_time=timedelta(minutes=10),
+        intervals_to_clear=24,
+        interval_duration=timedelta(hours=1),
+        market_series_name="Test Market",
+        market_clearing_time=now + 0.5 * negotiation_lead_time + market_lead_time,
+        market_clearing_interval=timedelta(days=1)
+    )
 
     test_mkt.marketState = MarketState.Negotiation
-
-    test_mkt.marketSeriesName = "Test Market"
-
-    test_mkt.marketClearingTime = now + 0.5 * test_mkt.negotiationLeadTime + test_mkt.marketLeadTime
-
     test_mkt.reconciled = False
-    test_mkt.marketClearingInterval = timedelta(days=1)
     test_mkt.nextMarketClearingTime = test_mkt.marketClearingTime + test_mkt.marketClearingInterval
 
     test_mtn = TransactiveNode()
@@ -770,23 +777,20 @@ def test_events():
 
     now = datetime.now()
 
-    test_mkt = Market()
-
-    test_mkt.activationLeadTime = timedelta(minutes=10)
-    test_mkt.negotiationLeadTime = timedelta(minutes=10)
-    test_mkt.marketLeadTime = timedelta(hours=10)
-    test_mkt.deliveryLeadTime = timedelta(minutes=10)
-    test_mkt.intervalsToClear = 24
-    test_mkt.intervalDuration = timedelta(hours=1)
+    test_mkt = Market(
+        activation_lead_time=timedelta(minutes=10),
+        negotiation_lead_time=timedelta(minutes=10),
+        market_lead_time=timedelta(hours=10),
+        delivery_lead_time=timedelta(minutes=10),
+        intervals_to_clear=24,
+        interval_duration=timedelta(hours=1),
+        market_series_name="Test Market",
+        market_clearing_interval=timedelta(days=1)
+    )
 
     test_mkt.marketState = MarketState.Negotiation
-
-    test_mkt.marketSeriesName = "Test Market"
-
     test_mkt.marketClearingTime = now + 0.5 * test_mkt.marketLeadTime
-
     test_mkt.reconciled = False
-    test_mkt.marketClearingInterval = timedelta(days=1)
     test_mkt.nextMarketClearingTime = test_mkt.marketClearingTime + test_mkt.marketClearingInterval
 
     test_mtn = TransactiveNode()
@@ -820,23 +824,20 @@ def test_events():
 
     now = datetime.now()
 
-    test_mkt = Market()
-
-    test_mkt.activationLeadTime = timedelta(minutes=10)
-    test_mkt.negotiationLeadTime = timedelta(minutes=10)
-    test_mkt.marketLeadTime = timedelta(hours=10)
-    test_mkt.deliveryLeadTime = timedelta(minutes=10)
-    test_mkt.intervalsToClear = 24
-    test_mkt.intervalDuration = timedelta(hours=1)
+    test_mkt = Market(
+        activation_lead_time=timedelta(minutes=10),
+        negotiation_lead_time=timedelta(minutes=10),
+        market_lead_time=timedelta(hours=10),
+        delivery_lead_time=timedelta(minutes=10),
+        intervals_to_clear=24,
+        interval_duration=timedelta(hours=1),
+        market_series_name="Test Market",
+        market_clearing_interval=timedelta(days=1)
+    )
 
     test_mkt.marketState = MarketState.MarketLead
-
-    test_mkt.Series = "Test Market"
-
     test_mkt.marketClearingTime = now + 0.5 * test_mkt.marketLeadTime
-
     test_mkt.reconciled = False
-    test_mkt.marketClearingInterval = timedelta(days=1)
     test_mkt.nextMarketClearingTime = test_mkt.marketClearingTime + test_mkt.marketClearingInterval
 
     test_mtn = TransactiveNode()
@@ -870,23 +871,21 @@ def test_events():
 
     now = datetime.now()
 
-    test_mkt = Market()
-
-    test_mkt.activationLeadTime = timedelta(minutes=10)
-    test_mkt.negotiationLeadTime = timedelta(minutes=10)
-    test_mkt.marketLeadTime = timedelta(hours=10)
-    test_mkt.deliveryLeadTime = timedelta(minutes=10)
-    test_mkt.intervalsToClear = 24
-    test_mkt.intervalDuration = timedelta(hours=1)
+    delivery_lead_time = timedelta(minutes=10)
+    test_mkt = Market(
+        activation_lead_time=timedelta(minutes=10),
+        negotiation_lead_time=timedelta(minutes=10),
+        market_lead_time=timedelta(hours=10),
+        delivery_lead_time=delivery_lead_time,
+        intervals_to_clear=24,
+        interval_duration=timedelta(hours=1),
+        market_series_name="Test Market",
+        market_clearing_time=now - 0.5 * delivery_lead_time,
+        market_clearing_interval=timedelta(days=1)
+    )
 
     test_mkt.marketState = MarketState.MarketLead
-
-    test_mkt.marketSeriesName = "Test Market"
-
-    test_mkt.marketClearingTime = now - 0.5 * test_mkt.deliveryLeadTime
-
     test_mkt.reconciled = False
-    test_mkt.marketClearingInterval = timedelta(days=1)
     test_mkt.nextMarketClearingTime = test_mkt.marketClearingTime + test_mkt.marketClearingInterval
 
     test_mtn = TransactiveNode()
@@ -919,23 +918,21 @@ def test_events():
 
     now = datetime.now()
 
-    test_mkt = Market()
-
-    test_mkt.activationLeadTime = timedelta(minutes=10)
-    test_mkt.negotiationLeadTime = timedelta(minutes=10)
-    test_mkt.marketLeadTime = timedelta(hours=10)
-    test_mkt.deliveryLeadTime = timedelta(minutes=10)
-    test_mkt.intervalsToClear = 24
-    test_mkt.intervalDuration = timedelta(hours=1)
+    delivery_lead_time = timedelta(minutes=10)
+    test_mkt = Market(
+        activation_lead_time=timedelta(minutes=10),
+        negotiation_lead_time=timedelta(minutes=10),
+        market_lead_time=timedelta(hours=10),
+        delivery_lead_time=delivery_lead_time,
+        intervals_to_clear=24,
+        interval_duration=timedelta(hours=1),
+        market_series_name="Test Market",
+        market_clearing_time=now - 0.5 * delivery_lead_time,
+        market_clearing_interval=timedelta(days=1)
+    )
 
     test_mkt.marketState = MarketState.DeliveryLead
-
-    test_mkt.marketSeriesName = "Test Market"
-
-    test_mkt.marketClearingTime = now - 0.5 * test_mkt.deliveryLeadTime
-
     test_mkt.reconciled = False
-    test_mkt.marketClearingInterval = timedelta(days=1)
     test_mkt.nextMarketClearingTime = test_mkt.marketClearingTime + test_mkt.marketClearingInterval
 
     test_mtn = TransactiveNode()
@@ -968,23 +965,22 @@ def test_events():
 
     now = datetime.now()
 
-    test_mkt = Market()
-
-    test_mkt.activationLeadTime = timedelta(minutes=10)
-    test_mkt.negotiationLeadTime = timedelta(minutes=10)
-    test_mkt.marketLeadTime = timedelta(hours=10)
-    test_mkt.deliveryLeadTime = timedelta(minutes=10)
-    test_mkt.intervalsToClear = 24
-    test_mkt.intervalDuration = timedelta(hours=1)
+    delivery_lead_time = timedelta(minutes=10)
+    interval_duration = timedelta(hours=1)
+    test_mkt = Market(
+        activation_lead_time=timedelta(minutes=10),
+        negotiation_lead_time=timedelta(minutes=10),
+        market_lead_time=timedelta(hours=10),
+        delivery_lead_time=delivery_lead_time,
+        intervals_to_clear=24,
+        interval_duration=interval_duration,
+        market_series_name="Test Market",
+        market_clearing_time=now - delivery_lead_time - 0.5 * interval_duration,
+        market_clearing_interval=timedelta(days=1)
+    )
 
     test_mkt.marketState = MarketState.DeliveryLead
-
-    test_mkt.marketSeriesName = "Test Market"
-
-    test_mkt.marketClearingTime = now - test_mkt.deliveryLeadTime - 0.5 * test_mkt.intervalDuration
-
     test_mkt.reconciled = False
-    test_mkt.marketClearingInterval = timedelta(days=1)
     test_mkt.nextMarketClearingTime = test_mkt.marketClearingTime + test_mkt.marketClearingInterval
 
     test_mtn = TransactiveNode()
@@ -1018,23 +1014,22 @@ def test_events():
 
     now = datetime.now()
 
-    test_mkt = Market()
-
-    test_mkt.activationLeadTime = timedelta(minutes=10)
-    test_mkt.negotiationLeadTime = timedelta(minutes=10)
-    test_mkt.marketLeadTime = timedelta(hours=10)
-    test_mkt.deliveryLeadTime = timedelta(minutes=10)
-    test_mkt.intervalsToClear = 24
-    test_mkt.intervalDuration = timedelta(hours=1)
+    delivery_lead_time = timedelta(minutes=10)
+    interval_duration = timedelta(hours=1)
+    test_mkt = Market(
+        activation_lead_time=timedelta(minutes=10),
+        negotiation_lead_time=timedelta(minutes=10),
+        market_lead_time=timedelta(hours=10),
+        delivery_lead_time=delivery_lead_time,
+        intervals_to_clear=24,
+        interval_duration=interval_duration,
+        market_series_name="Test Market",
+        market_clearing_time=now - delivery_lead_time - 0.5 * interval_duration,
+        market_clearing_interval=timedelta(days=1)
+    )
 
     test_mkt.marketState = MarketState.Delivery
-
-    test_mkt.marketSeriesName = "Test Market"
-
-    test_mkt.marketClearingTime = now - test_mkt.deliveryLeadTime - 0.5 * test_mkt.intervalDuration
-
     test_mkt.reconciled = False
-    test_mkt.marketClearingInterval = timedelta(days=1)
     test_mkt.nextMarketClearingTime = test_mkt.marketClearingTime + test_mkt.marketClearingInterval
 
     test_mtn = TransactiveNode()
@@ -1068,23 +1063,22 @@ def test_events():
 
     now = datetime.now()
 
-    test_mkt = Market()
-
-    test_mkt.activationLeadTime = timedelta(minutes=10)
-    test_mkt.negotiationLeadTime = timedelta(minutes=10)
-    test_mkt.marketLeadTime = timedelta(hours=10)
-    test_mkt.deliveryLeadTime = timedelta(minutes=10)
-    test_mkt.intervalsToClear = 24
-    test_mkt.intervalDuration = timedelta(hours=1)
+    delivery_lead_time = timedelta(minutes=10)
+    intervals_to_clear = 24
+    interval_duration = timedelta(hours=1)
+    test_mkt = Market(
+        activation_lead_time=timedelta(minutes=10),
+        negotiation_lead_time=timedelta(minutes=10),
+        market_lead_time=timedelta(hours=10),
+        delivery_lead_time=delivery_lead_time,
+        intervals_to_clear=intervals_to_clear,
+        interval_duration=interval_duration,
+        market_series_name="Test Market",
+        market_clearing_time=now - delivery_lead_time - intervals_to_clear * interval_duration - timedelta(minutes=1),
+        market_clearing_interval=timedelta(days=1)
+    )
 
     test_mkt.marketState = MarketState.Delivery
-
-    test_mkt.marketSeriesName = "Test Market"
-
-    test_mkt.marketClearingTime = now - test_mkt.deliveryLeadTime \
-                                  - test_mkt.intervalsToClear * test_mkt.intervalDuration - timedelta(minutes=1)
-
-    test_mkt.marketClearingInterval = timedelta(days=1)
     test_mkt.nextMarketClearingTime = test_mkt.marketClearingTime + 2 * test_mkt.marketClearingInterval
 
     test_mtn = TransactiveNode()
@@ -1117,23 +1111,22 @@ def test_events():
 
     now = datetime.now()
 
-    test_mkt = Market()
-
-    test_mkt.activationLeadTime = timedelta(minutes=10)
-    test_mkt.negotiationLeadTime = timedelta(minutes=10)
-    test_mkt.marketLeadTime = timedelta(hours=10)
-    test_mkt.deliveryLeadTime = timedelta(minutes=10)
-    test_mkt.intervalsToClear = 24
-    test_mkt.intervalDuration = timedelta(hours=1)
+    delivery_lead_time = timedelta(minutes=10)
+    intervals_to_clear = 24
+    interval_duration = timedelta(hours=1)
+    test_mkt = Market(
+        activation_lead_time=timedelta(minutes=10),
+        negotiation_lead_time=timedelta(minutes=10),
+        market_lead_time=timedelta(hours=10),
+        delivery_lead_time=delivery_lead_time,
+        intervals_to_clear=intervals_to_clear,
+        interval_duration=interval_duration,
+        market_series_name="Test Market",
+        market_clearing_time=now - delivery_lead_time - intervals_to_clear * interval_duration - timedelta(minutes=1),
+        market_clearing_interval=timedelta(days=1)
+    )
 
     test_mkt.marketState = MarketState.Reconcile
-
-    test_mkt.marketSeriesName = "Test Market"
-
-    test_mkt.marketClearingTime = now - test_mkt.deliveryLeadTime \
-                                  - test_mkt.intervalsToClear * test_mkt.intervalDuration - timedelta(minutes=1)
-
-    test_mkt.marketClearingInterval = timedelta(days=1)
     test_mkt.nextMarketClearingTime = test_mkt.marketClearingTime + 2 * test_mkt.marketClearingInterval
 
     test_mtn = TransactiveNode()
@@ -1165,23 +1158,22 @@ def test_events():
 
     now = datetime.now()
 
-    test_mkt = Market()
-
-    test_mkt.activationLeadTime = timedelta(minutes=10)
-    test_mkt.negotiationLeadTime = timedelta(minutes=10)
-    test_mkt.marketLeadTime = timedelta(hours=10)
-    test_mkt.deliveryLeadTime = timedelta(minutes=10)
-    test_mkt.intervalsToClear = 24
-    test_mkt.intervalDuration = timedelta(hours=1)
+    delivery_lead_time = timedelta(minutes=10)
+    intervals_to_clear = 24
+    interval_duration = timedelta(hours=1)
+    test_mkt = Market(
+        activation_lead_time=timedelta(minutes=10),
+        negotiation_lead_time=timedelta(minutes=10),
+        market_lead_time=timedelta(hours=10),
+        delivery_lead_time=delivery_lead_time,
+        intervals_to_clear=intervals_to_clear,
+        interval_duration=interval_duration,
+        market_series_name="Test Market",
+        market_clearing_time=now - delivery_lead_time - intervals_to_clear * interval_duration - timedelta(minutes=1),
+        market_clearing_interval=timedelta(days=1)
+    )
 
     test_mkt.marketState = MarketState.Reconcile
-
-    test_mkt.marketSeriesName = "Test Market"
-
-    test_mkt.marketClearingTime = now - test_mkt.deliveryLeadTime \
-                                  - test_mkt.intervalsToClear * test_mkt.intervalDuration - timedelta(minutes=1)
-
-    test_mkt.marketClearingInterval = timedelta(days=1)
     test_mkt.nextMarketClearingTime = test_mkt.marketClearingTime + 2 * test_mkt.marketClearingInterval
 
     test_mtn = TransactiveNode()
@@ -1213,23 +1205,22 @@ def test_events():
 
     now = datetime.now()
 
-    test_mkt = Market()
-
-    test_mkt.activationLeadTime = timedelta(minutes=10)
-    test_mkt.negotiationLeadTime = timedelta(minutes=10)
-    test_mkt.marketLeadTime = timedelta(hours=10)
-    test_mkt.deliveryLeadTime = timedelta(minutes=10)
-    test_mkt.intervalsToClear = 24
-    test_mkt.intervalDuration = timedelta(hours=1)
+    delivery_lead_time = timedelta(minutes=10)
+    intervals_to_clear = 24
+    interval_duration = timedelta(hours=1)
+    test_mkt = Market(
+        activation_lead_time=timedelta(minutes=10),
+        negotiation_lead_time=timedelta(minutes=10),
+        market_lead_time=timedelta(hours=10),
+        delivery_lead_time=delivery_lead_time,
+        intervals_to_clear=intervals_to_clear,
+        interval_duration=interval_duration,
+        market_series_name="Test Market",
+        market_clearing_time=now - delivery_lead_time - intervals_to_clear * interval_duration - timedelta(minutes=1),
+        market_clearing_interval=timedelta(days=1)
+    )
 
     test_mkt.marketState = MarketState.Expired
-
-    test_mkt.marketSeriesName = "Test Market"
-
-    test_mkt.marketClearingTime = now - test_mkt.deliveryLeadTime \
-                                  - test_mkt.intervalsToClear * test_mkt.intervalDuration - timedelta(minutes=1)
-
-    test_mkt.marketClearingInterval = timedelta(days=1)
     test_mkt.nextMarketClearingTime = test_mkt.marketClearingTime + 2 * test_mkt.marketClearingInterval
 
     test_mtn = TransactiveNode()
@@ -1330,8 +1321,9 @@ def test_see_marginal_prices():
     now = datetime.now()
 
     print('**Case 1: Normal plot of several marginal prices.')  # ***************
-    test_market = Market()
-    test_market.intervalDuration = timedelta(hours=1)
+    test_market = Market(
+        interval_duration=timedelta(hours=1)
+    )
 
     marginal_prices = [0, 1, 0, -0.2]
 
@@ -1389,13 +1381,15 @@ def test_spawn_markets():
     print('**Case 1: Normal case when the next market is spawned in the same market series.')
     print('  NOTE: The test method will often be replaced to spawn additional, or no, new markets.')
     test_node = TransactiveNode()
-    test_market = Market()
-    test_market.marketSeriesName = 'Test Market Series'
-    test_market.marketClearingTime = datetime(year=2020, month=1, day=1, hour=0, second=0, microsecond=0)
-    test_market.marketClearingInterval = timedelta(hours=1)
+    test_market = Market(
+        market_series_name='Test Market Series',
+        market_clearing_time=datetime(year=2020, month=1, day=1, hour=0, second=0, microsecond=0),
+        market_clearing_interval=timedelta(hours=1),
+        interval_duration=timedelta(minutes=15),
+        intervals_to_clear=4
+    )
+
     new_clearing_time = test_market.marketClearingTime + test_market.marketClearingInterval
-    test_market.intervalDuration = timedelta(minutes=15)
-    test_market.intervalsToClear = 4
     test_market.isNewestMarket = True
     test_node.markets = [test_market]
 

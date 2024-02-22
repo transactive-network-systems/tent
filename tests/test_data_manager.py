@@ -77,9 +77,11 @@ class TestAppendIntervalValueTable:
         dur = timedelta(hours=1)
         self.test_caller = Neighbor()
         self.test_caller.name = 'test_neighbor'
-        self.test_market = Market()
-        self.test_market.marketSeriesName = 'test_market_series'
-        self.test_market.marketClearingTime = dt
+        self.test_market = Market(
+            market_series_name='test_market_series',
+            market_clearing_time=dt
+        )
+
         self.test_vertex = Vertex(marginal_price=0,
                                   prod_cost=0,
                                   power=0)
@@ -170,9 +172,11 @@ class TestAppendTransactiveRecordTable:
         dur = timedelta(hours=1)
         self.test_neighbor = Neighbor()
         self.test_neighbor.name = 'test_neighbor'
-        self.test_market = Market()
-        self.test_market.marketSeriesName = 'test_market_series'
-        self.test_market.marketClearingTime = dt
+        self.test_market = Market(
+            market_series_name='test_market_series',
+            market_clearing_time=dt
+        )
+
         self.test_market.name = self.test_market.marketSeriesName.replace(' ', '_') + '_' + str(dt)[:19]
         self.test_vertex = Vertex(marginal_price=0,
                                   prod_cost=0,
@@ -239,11 +243,12 @@ class TestAppendMarketObjectTable:
         dur = timedelta(hours=1)
         self.test_neighbor = Neighbor()
         self.test_neighbor.name = 'test_neighbor'
-        self.test_market = Market()
-        self.test_market.intervalsToClear=1
-        self.test_market.intervalDuration = timedelta(hours=1)
-        self.test_market.marketSeriesName = 'test_market_series'
-        self.test_market.marketClearingTime = dt
+        self.test_market = Market(
+            intervals_to_clear=1,
+            interval_duration=timedelta(hours=1),
+            market_series_name='test_market_series',
+            market_clearing_time=dt
+        )
         self.test_market.name = self.test_market.marketSeriesName.replace(' ', '_') + '_' + str(dt)[:19]
         self.test_vertex = Vertex(marginal_price=0,
                                   prod_cost=0,

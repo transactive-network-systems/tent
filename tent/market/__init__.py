@@ -100,33 +100,45 @@ class Market:
                  negotiation_lead_time: Union[timedelta, float, int] = timedelta(hours=0),
                  prior_market_in_series=None,
                  real_time_duration: Union[timedelta, float, int] = timedelta(minutes=15),
-                 transactive_node=None):  # 240207DJH: Can this reference be automatically found from among objects??
+                 transactive_node=None,
+                 market_series=None):
 
         self.tn = weakref.ref(transactive_node) if transactive_node else None
-        # These properties are relatively static and may be received as parameters:
-        self.activationLeadTime = activation_lead_time if isinstance(activation_lead_time, timedelta)\
-            else timedelta(seconds=activation_lead_time)  # [timedelta] Time in market state "Active"
-        self.commitment = validate_bool(commitment, 'commitment')  # [Boolean] If true, scheduled power & price are commitments
+        self.marketSeries = weakref.ref(market_series) if market_series else None
+
+        # 240222DJH: This is a model of how I propose to handle the many time durations of the market state machine:
+        #   (1) Assign these simply as protected properties at first. Doing so allows existing methods to work as
+        #       before.
+        #   (2) All such time durations have been duplicated in new class TimeSeries. Each market object now has a weak
+        #       reference to its TimeSeries object.
+        #   (3) Manage these properties by having the market return the corresponding TimeSeries protected property
+        #       whenever there exists the weak reference, the local protected property otherwise.
+        #   (4) In the future we might delete the market classes' local protected time durations, as these will more
+        #       appropriately reside with each market's market series.
+        self._activationLeadTime = activation_lead_time if isinstance(activation_lead_time, timedelta) else \
+            timedelta(seconds=activation_lead_time)  # [timedelta] Time in market state "Active"
+        self.commitment = validate_bool(commitment, 'commitment')  # [Boolean] If true, scheduled power & price are
+        #                                                            commitments
         self.defaultPrice = float(default_price)  # [$/kWh] Static default price assignment
         # deliveryAnchorTime [time] A time of day a market will always start (start immediately if None)
         self.deliveryAnchorTime = time.fromisoformat(delivery_anchor_time) if isinstance(delivery_anchor_time, str)\
             else delivery_anchor_time
-        self.deliveryLeadTime = delivery_lead_time if isinstance(delivery_lead_time, timedelta)\
-            else timedelta(seconds=delivery_lead_time) # [timedelta] Time in market state "DeliveryLead"
+        self._deliveryLeadTime = delivery_lead_time if isinstance(delivery_lead_time, timedelta)\
+            else timedelta(seconds=delivery_lead_time)  # [timedelta] Time in market state "DeliveryLead"
         self.dualityGapThreshold = float(duality_gap_threshold)  # [dimensionless]; 0.01 = 1%
         self.futureHorizon = future_horizon if isinstance(future_horizon, timedelta)\
             else timedelta(seconds=future_horizon)  # Future functionality: future of price-discovery relevance
-        self.initialMarketState = initial_market_state if isinstance(initial_market_state, MarketState)\
+        self._initialMarketState = initial_market_state if isinstance(initial_market_state, MarketState)\
             else MarketState[initial_market_state]  # [MarketState] New market's initial state
-        self.intervalDuration = interval_duration if isinstance(interval_duration, timedelta)\
+        self._intervalDuration = interval_duration if isinstance(interval_duration, timedelta)\
             else timedelta(seconds=interval_duration)  # [timedelta] Duration of this market's time intervals
-        self.intervalsToClear = int(intervals_to_clear)  # [int] Market intervals to be cleared by this market object
-        self.marketClearingInterval = market_clearing_interval if isinstance(market_clearing_interval, timedelta)\
+        self._intervalsToClear = int(intervals_to_clear)  # [int] Market intervals to be cleared by this market object
+        self._marketClearingInterval = market_clearing_interval if isinstance(market_clearing_interval, timedelta)\
             else timedelta(seconds=market_clearing_interval)  # [timedelta] Time between successive market clearings
-        self.marketLeadTime = market_lead_time if isinstance(market_lead_time, timedelta)\
+        self._marketLeadTime = market_lead_time if isinstance(market_lead_time, timedelta)\
             else timedelta(seconds=market_lead_time)  # [timedelta] Time in market state "MarketLead"
         self.marketOrder = int(market_order)  # [pos. integer] Ordering of sequential markets  (Unused)
-        self.marketSeriesName = str(market_series_name)  # Successive market series objects share this name root
+        self._marketSeriesName = str(market_series_name)  # Successive market series objects share this name root
         # [Market] Pointer to market to be refined or corrected
         if isinstance(market_to_be_refined, Market):
             self.marketToBeRefined = weakref.ref(market_to_be_refined)
@@ -135,7 +147,7 @@ class Market:
         else:
             self.marketToBeRefined = None
         self.marketType = market_type if isinstance(market_type, MarketTypes)\
-            else MarketTypes[market_type] # [MarketTypes] enumeration
+            else MarketTypes[market_type]  # [MarketTypes] enumeration
         if isinstance(method, Method): # Solution method {1: subgradient, 2: interpolation}
             self.method = method
         elif isinstance(method, int):
@@ -150,6 +162,7 @@ class Market:
             self.priorMarketInSeries = weakref.ref(self.tn().get_market_by_name(prior_market_in_series))
         else:
             self.priorMarketInSeries = None
+        # 240222DJH: TODO: Depreciate, delete usage of real_time_duration.
         self.real_time_duration = real_time_duration if isinstance(real_time_duration, timedelta)\
             else timedelta(seconds=real_time_duration)
         self.marketClearingTime = market_clearing_time if market_clearing_time else self._calculate_clearing_time()
@@ -201,12 +214,45 @@ class Market:
         #            market state.
         self._stateIsCompleted = False
 
+    @property
+    def activationLeadTime(self):
+        return self.marketSeries().activationLeadTime if self.marketSeries else self._activationLeadTime
+
+    @property
+    def deliveryLeadTime(self):
+        return self.marketSeries().deliveryLeadTime if self.marketSeries else self._deliveryLeadTime
+
+    @property
+    def intervalDuration(self):
+        return self.marketSeries().intervalDuration if self.marketSeries else self._intervalDuration
+
+    @property
+    def intervalsToClear(self):
+        return self.marketSeries().intervalsToClear if self.marketSeries else self._intervalsToClear
+
+    @property
+    def marketClearingInterval(self):
+        return self.marketSeries().marketClearingInterval if self.marketSeries else self._marketClearingInterval
+
+    @property
+    def marketLeadTime(self):
+        return self.marketSeries().marketLeadTime if self.marketSeries else self._marketLeadTime
+
+    @property
+    def initialMarketState(self):
+        return self.marketSeries().initialMarketState if self.marketSeries else self._initialMarketState
+
+    @property
+    def marketSeriesName(self):  # 240222DJH: I chose not to protect this at class MarketState.
+        return self.marketSeries().marketSeriesName if self.marketSeries else self._marketSeriesName
+
     def _calculate_clearing_time(self):
-        # 240221DJH: TODO: Move this method to base class Market.
+        # 240221DJH: TODO: Move this method to new market series class.
         # 240221DJH: TODO: Ensure that this base method begins delivery on major temporal transitions.
+        #            Why not use existing method update_market_clearing_time()?
         now = Timer.get_cur_time()
         run_gap = (self.deliveryLeadTime + self.marketLeadTime + self.negotiationLeadTime
-                   + self.activationLeadTime)  # + timedelta(seconds=1)  # TODO: Is this second necessary? May cause issues with spawning new markets.
+                   + self.activationLeadTime)
         if not self.deliveryAnchorTime:
             delivery_start = now + run_gap
         else:
@@ -482,7 +528,7 @@ class Market:
         (1) Still more markets should be instantiated, as may happen when market self is refined or corrected by another
         market series. If this is the case, not only the next needed market in this series, but also one or more markets
         in another market series must be instantiated.
-        (2) The markets in this series are instantiated by another market series. In this case, this method shoudl be
+        (2) The markets in this series are instantiated by another market series. In this case, this method should be
         replaced by a pass (no action).
         :param: my_transactive_node: my transactive node agent object
         :param: new_market_clearing_time: new market objects market clearing time
@@ -512,12 +558,7 @@ class Market:
         )  # This uses a constructor, but most properties must be redefined.
 
         new_market.priceModel = deepcopy(self.priceModel)  # It must be clear that this is a copy, not a reference.
-        # new_market.marketState = MarketState.Active  # TODO: initial_market_state seems to be ignored by constructor....
-        # # TODO: Shouldn't the initial market state generally be Inactive?
-        # 340207DJH: This next code should fix the TODOs immediately preceding this code. A new market should be
-        #            initialized in its desired initial state. Everything else should be handled by the market state
-        #            machine (i.e., method events()). I have also made this happen in the Market constructor. I think
-        #            these TODOs can be deleted.
+
         if new_market.initialMarketState:
             new_market.marketState = new_market.initialMarketState
         else:
@@ -681,9 +722,7 @@ class Market:
         return None
 
     def balanced_price_publish(self):
-        # 240207DJH: Changing this next line. Unit testing throws an exception when self.tn is None. Additionally, I
-        #            think don't think your intention was to reproduce a copy of the local transactive node (i.e.,
-        #            "myTransactiveNode), which will happen if a call is made to tn.
+        # 240207DJH: Changing this next line. Unit testing throws an exception when self.tn is None.
         # tn = self.tn()
         if self.tn:
             tn = self.tn

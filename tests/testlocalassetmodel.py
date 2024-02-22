@@ -652,7 +652,7 @@ def test_get_extended_prices():
 
     test_asset_model.schedulingHorizon = timedelta(hours=1.5)  # Should cause asset to use prior market
 
-    test_market = Market()
+
 
     test_interval0 = TimeInterval(now, timedelta(hours=1), test_market, now, now)
     price0 = 3.14159
@@ -661,12 +661,19 @@ def test_get_extended_prices():
                                 market=test_market,
                                 measurement_type='test',
                                 value=price0)
+    test_market = Market(
+        market_series_name="Test Market",
+        market_clearing_time=now
+    )
+
     test_market.timeIntervals = [test_interval0]
     test_market.marginalPrices = [test_price0]
-    test_market.marketSeriesName = "Test Market"
-    test_market.marketClearingTime = now
 
-    prior_market = Market()
+    prior_market = Market(
+        market_series_name=test_market.marketSeriesName,
+        market_clearing_time=test_market.marketClearingTime - timedelta(hours=1)
+    )
+
     test_interval1 = TimeInterval(now, timedelta(hours=1), prior_market, now, now)
     test_interval2 = TimeInterval(now, timedelta(hours=1), prior_market, now, now + timedelta(hours=1))
     price1 = 10
@@ -680,10 +687,9 @@ def test_get_extended_prices():
                                 market=prior_market,
                                 measurement_type='test',
                                 value=price1)
+
     prior_market.timeIntervals = [test_interval1, test_interval2]
     prior_market.marginalPrices = [test_price1, test_price2]
-    prior_market.marketSeriesName = test_market.marketSeriesName
-    prior_market.marketClearingTime = test_market.marketClearingTime - timedelta(hours=1)
 
     test_market.priorMarketInSeries = prior_market  # Important pointer to preceding market interval in market series.
 
@@ -718,7 +724,10 @@ def test_get_extended_prices():
     # test_asset_model.object = test_asset
     test_asset_model.schedulingHorizon = timedelta(hours=2.5)  # Should cause asset to use prior market
 
-    test_market = Market()
+    test_market = Market(
+        market_series_name="Test Market",
+        market_clearing_time=now
+    )
 
     test_interval0 = TimeInterval(now, timedelta(hours=1), test_market, now, now)
     price0 = 3.14159
@@ -729,10 +738,11 @@ def test_get_extended_prices():
                                 value=price0)
     test_market.timeIntervals = [test_interval0]
     test_market.marginalPrices = [test_price0]
-    test_market.marketSeriesName = "Test Market"
-    test_market.marketClearingTime = now
 
-    prior_market = Market()
+    prior_market = Market(
+        market_series_name=test_market.marketSeriesName,
+        market_clearing_time=test_market.marketClearingTime - timedelta(hours=1)
+    )
     test_interval1 = TimeInterval(now, timedelta(hours=1), prior_market, now, now)
     test_interval2 = TimeInterval(now, timedelta(hours=1), prior_market, now, now + timedelta(hours=1))
     price1 = 10
@@ -748,12 +758,14 @@ def test_get_extended_prices():
                                 value=price1)
     prior_market.timeIntervals = [test_interval1, test_interval2]
     prior_market.marginalPrices = [test_price1, test_price2]
-    prior_market.marketSeriesName = test_market.marketSeriesName
-    prior_market.marketClearingTime = test_market.marketClearingTime - timedelta(hours=1)
 
     test_market.priorMarketInSeries = prior_market
 
-    corrected_market = Market()
+    corrected_market = Market(
+        market_series_name="Corrected Market",
+        market_clearing_time=test_market.marketClearingTime - timedelta(hours=2),
+        interval_duration=timedelta(hours=1)
+    )
     price2 = 20
     test_interval3 = TimeInterval(now, timedelta(hours=1), corrected_market, now, now + timedelta(hours=2))
     test_price3 = IntervalValue(calling_object=test_market,
@@ -773,9 +785,6 @@ def test_get_extended_prices():
                                 value=price2)
     corrected_market.timeIntervals = [test_interval1, test_interval2, test_interval3]
     corrected_market.marginalPrices = [test_price3, test_price4, test_price5]
-    corrected_market.marketSeriesName = "Corrected Market"
-    corrected_market.marketClearingTime = test_market.marketClearingTime - timedelta(hours=2)
-    corrected_market.intervalDuration = timedelta(hours=1)
 
     test_market.priorRefinedMarket = corrected_market
 
@@ -807,7 +816,10 @@ def test_get_extended_prices():
     test_asset_model = LocalAsset()
     test_asset_model.schedulingHorizon = timedelta(hours=3.5)  # Should cause asset to use prior market
 
-    test_market = Market()
+    test_market = Market(
+        market_series_name="Test Market",
+        market_clearing_time=now
+    )
 
     test_interval0 = TimeInterval(now, timedelta(hours=1), test_market, now, now)
     price0 = 3.14159
@@ -818,8 +830,6 @@ def test_get_extended_prices():
                                 value=price0)
     test_market.timeIntervals = [test_interval0]
     test_market.marginalPrices = [test_price0]
-    test_market.marketSeriesName = "Test Market"
-    test_market.marketClearingTime = now
     test_market.priorMarketInSeries = None
     test_market.priorRefinedMarket = None
     avg_price = 30
@@ -858,14 +868,18 @@ def test_get_extended_prices():
 
     test_asset_model.schedulingHorizon = timedelta(hours=4.5)
 
-    test_market = Market()
     default_price = 1.2345
-    test_market.defaultPrice = default_price
-    test_market.priceModel = None
-    test_market.intervalsToClear = 24
-    test_market.intervalDuration = timedelta(hours=1)
-    test_market.activationLeadTime = timedelta(days=2)
+    test_market = Market(
+        default_price=default_price,
+        intervals_to_clear=24,
+        interval_duration=timedelta(hours=1),
+        activation_lead_time=timedelta(days=2),
+        prior_market_in_series=None
+    )
+
     test_market.priorRefinedMarket = None
+
+    test_market.priceModel = None
 
     test_mtn = TransactiveNode()
     test_mtn.markets = [test_market]
