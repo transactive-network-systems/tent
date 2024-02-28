@@ -54,6 +54,12 @@ setup_logging()
 _log = logging.getLogger(__name__)
 
 
+# 240228DJH: Having simplified the spawning of new market objects in class DayAheadAuction, there doesn't seem to be
+#            any valuable code remaining. I believe a day-ahead auction is simply a market series of Action market
+#            objects. See new class MarketSeries.
+#            TODO: Depreciate, stop using class DayAheadAuction.
+
+
 class DayAheadAuction(Auction):
 
     def __init__(self, *args, **kwargs):

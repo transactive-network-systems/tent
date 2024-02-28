@@ -50,6 +50,14 @@ setup_logging()
 _log = logging.getLogger(__name__)
 
 
+# 240228DJH: Now that the process of spawning auction markets has been decoupled and simplified, there's not much
+#            valuable code left in this class. Is it needed? A real-time auction is simply a market series of type
+#            Auction. See new class MarketSeries.
+#            TODO: Move behaviors of transition_from_delivery_lead_to_delivery() below to parent Auction class. I think
+#                  these behaviors are probably sensible for all auctions.
+#            TODO: Depreciated, stop using RealTimeAuction class.
+
+
 class RealTimeAuction(Auction):
 
     def __init__(self, *args, **kwargs):

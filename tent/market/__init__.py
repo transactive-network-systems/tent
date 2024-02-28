@@ -103,6 +103,8 @@ class Market:
                  transactive_node=None,
                  market_series=None):
 
+        # 240228DJH: Is there any reason we break the existing camelCase trend using descriptive attribute names?
+        #            Why not thisTransactiveNode??
         self.tn = weakref.ref(transactive_node) if transactive_node else None
         self.marketSeries = weakref.ref(market_series) if market_series else None
 
@@ -162,7 +164,7 @@ class Market:
             self.priorMarketInSeries = weakref.ref(self.tn().get_market_by_name(prior_market_in_series))
         else:
             self.priorMarketInSeries = None
-        # 240222DJH: TODO: Depreciate, delete usage of real_time_duration.
+        # 240222DJH: TODO: Depreciate, halt usage of real_time_duration.
         self.real_time_duration = real_time_duration if isinstance(real_time_duration, timedelta)\
             else timedelta(seconds=real_time_duration)
         self.marketClearingTime = market_clearing_time if market_clearing_time else self._calculate_clearing_time()
@@ -198,6 +200,7 @@ class Market:
         self.totalGeneration = []  # [IntervalValue]; Values are [avg.kW]
         self.totalProductionCost = 0.0  # [$]
 
+        # 240228DJH: TODO: Depreciate, halt using attributes new_data_signal and delivery_lead_schedule_power.
         self.new_data_signal = False
         self.delivery_lead_schedule_power = False
 
@@ -539,6 +542,7 @@ class Market:
         # or can be derived therefrom. The new market should typically be initialized from the same class as the calling
         # market (i.e., self).
         new_market = self.__class__(
+            activation_lead_time=self.activationLeadTime,
             commitment=self.commitment,
             default_price=self.defaultPrice,
             delivery_lead_time=self.deliveryLeadTime,
@@ -550,12 +554,15 @@ class Market:
             market_clearing_time=new_market_clearing_time,
             market_lead_time=self.marketLeadTime,
             market_order=self.marketOrder,
-            market_series_name=self.marketSeriesName,
+            market_series_name=self.marketSeriesName,  # This often points to self.marketSeries.marketSeriesName
+            market_to_be_refined=self.marketToBeRefined,
             method=self.method,
             negotiation_lead_time=self.negotiationLeadTime,
             prior_market_in_series=self,
-            transactive_node=my_transactive_node
-        )  # This uses a constructor, but most properties must be redefined.
+            transactive_node=my_transactive_node,
+            market_series=self.marketSeries  # 240228DJH: new weak reference to the market's market series object.
+        )
+        new_market.marketType = self.marketType if isinstance(self.marketType, MarketTypes) else MarketTypes.unknown
 
         new_market.priceModel = deepcopy(self.priceModel)  # It must be clear that this is a copy, not a reference.
 
@@ -566,6 +573,11 @@ class Market:
 
         # Append the new market object to the list of market objects that is maintained by the agent.
         my_transactive_node.markets.append(new_market)
+
+        # 240228DJH: If this market references its MarketSeries object, then also place the market into its list of
+        #            active markets.
+        if new_market.marketSeries:
+            new_market.marketSeries.activeMarkets.append(new_market)
 
         # 210127DJH: Save information about the new Market object into a formatted csv file.
         try:

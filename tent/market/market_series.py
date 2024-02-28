@@ -11,7 +11,22 @@ from tent.market.price_models.hourly_average_price_model import HourlyAveragePri
 from tent.market import Market
 
 
+# 240228DJH: TODO: Make MarketSeries reference another market series that is to be revised or corrected. If this is
+#                  done, then individual markets in the series can easily find the specific market object that is to be
+#                  revised or corrected. (This is pretty low priority)
+
+
 class MarketSeries:
+    """
+    An object of this class contains all the critical timing and initialization properties of the market objects in a
+    series of similar market objects. These properties were initially owned by the market objects and had to be passed
+    from existing to succeeding market objects. Now, many of the properties have been converted to protected properties
+    that are owned jointly by the MarketSeries and Market objects. Eventually, all the properties should be owned by the
+    MarketSeries and not Market objects. This is easy to do because the base Market class now allows a weak reference to
+    its MarketSeries object.
+    Additionally, a MarketSeries constructs its first "dummy" market that jump starts the market state machine for all
+    future markets in the series.
+    """
     def __init__(self,
                  activation_lead_time: Union[timedelta, float, int] = timedelta(hours=0),
                  commitment: bool = False,
@@ -33,7 +48,7 @@ class MarketSeries:
                  negotiation_lead_time: Union[timedelta, float, int] = timedelta(hours=0),
                  transactive_node=None):
         # Weak reference to myTransactiveNode object:
-        self.tn = weakref.ref(transactive_node) if transactive_node else None
+        self.tn = weakref.ref(transactive_node) if transactive_node and transactive_node() else None
         self._activationLeadTime = activation_lead_time if isinstance(activation_lead_time, timedelta) \
             else timedelta(seconds=activation_lead_time)  # [timedelta] Time in market state "Active"
         self.commitment = validate_bool(commitment, 'commitment')  # [Boolean] If true, scheduled power & price are
@@ -111,6 +126,8 @@ class MarketSeries:
         #            might have to manage BOTH places until this new architecture is proven and stable.
         self.activeMarkets = [initial_market]
 
+        # 240228DJH: Also append this MarketSeries to this transactive node's list of markets if the transactive node
+        #            has been referenced.
         if self.tn and self.tn():
             tn = self.tn()
             tn.markets.append(self)
