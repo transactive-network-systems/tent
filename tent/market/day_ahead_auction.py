@@ -79,15 +79,28 @@ class DayAheadAuction(Auction):
         # pretty foolproof.
         # self.spawn_real_time_markets(this_transactive_node)
 
+    # 240228DJH: Undertaking a simplification of auction markets that will not require overwriting of spawn_markets().
+    #            When day_ahead_auction.py was first coded, spawn_markets() was overwritten to make sure that
+    #            corresponding real-time markets would be spawned also. However, it is much simpler to let the market
+    #            state machine create the day-ahead markets and any other market series object. This is facilitated by
+    #            new class MarketSeries that should adopt all the recurring properties of the market objects in the
+    #            market series and, when instantiates, properly configures the first "dummy" market to jump start the
+    #            market state machine.
+    '''
     def spawn_markets(self, this_transactive_node, new_market_clearing_time):
         # First, go ahead and use the base method and current market to create the next member of this market series,
         # as was intended. This should instantiate the new market, create its time intervals, and initialize marginal
         # prices for the new market.
-        Auction.spawn_markets(self, this_transactive_node, new_market_clearing_time)
+        Auction.spawn_markets(self, my_transactive_node=this_transactive_node, new_market_clearing_time)
 
-        self.spawn_real_time_markets(this_transactive_node)
+        self.spawn_real_time_markets(my_transactive_node=this_transactive_node) 
+        '''
 
-    def spawn_real_time_markets(self, this_transactive_node, for_current_market=False):
+    # 240228DJH: Read the note above from same date. It will no longer be necessary to have the day_ahead_auction.py
+    #            also spawn the corresponding real-time market objects. (This change may affect some unit tests that
+    #            will be changed to correspond with this new, simpler behavior.
+    '''
+    def spawn_real_time_markets(self, my_transactive_node=this_transactive_node, for_current_market=False):
         _log.debug(f' {self.name} IS IN SPAWN_REAL_TIME_MARKETS')
         if for_current_market:
             market = [self]
@@ -172,6 +185,7 @@ class DayAheadAuction(Auction):
                 new_market_list.append(new_market)
         # 210127DJH: Capture the new markets to a formatted csv datafile.
         append_table(obj=new_market_list)
+        '''
 
     def _actuate_assets(self, my_transactive_node):
         # Don't actuate from Day Ahead, Actuate from Real-Time Market.

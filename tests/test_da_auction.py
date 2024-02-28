@@ -62,7 +62,9 @@ def test_spawn_markets():
     test_node.markets = [prior_da_auction]
 
     try:
-        prior_da_auction.spawn_markets(this_transactive_node=test_node,
+        # 240228DJH: For some reason, spawn_markets() in day_ahead_market.py expected this_transactive_market, while the
+        #            original spawn_markets() in the base market class expected my_transactive_market.
+        prior_da_auction.spawn_markets(my_transactive_node=test_node,
                                        new_market_clearing_time=time
                                        )
         print('  - The method ran without errors.')
@@ -73,7 +75,10 @@ def test_spawn_markets():
     #            markets.
     # 240221DJH: The introduction of DayAheadAuction.real_time_count was a bad practice and should be fixed. For now, I
     #            can live with a definite assigment. This test will need to be revised when auction markets are fixed.
-    real_time_count = int(timedelta(hours=24) / prior_da_auction.real_time_duration)
+    # 240228DJH: Have simplified day_ahead_market to no longer automatically spawn all the real-time market objects. See
+    #            new class MarketSeries which should become the preferred class for initializing market series.
+    # real_time_count = int(timedelta(hours=24) / prior_da_auction.real_time_duration)
+    real_time_count = 0
     assert len(test_node.markets) == real_time_count + 2,\
         'An unexpected market count happened: ' + str(len(test_node.markets))
     assert sum(x.marketSeriesName == 'Day-Ahead Auction' for x in test_node.markets) == 2, \
