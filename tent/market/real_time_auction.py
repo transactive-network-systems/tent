@@ -55,10 +55,15 @@ class RealTimeAuction(Auction):
     def __init__(self, *args, **kwargs):
         super(RealTimeAuction, self).__init__(*args, **kwargs)
 
-    def spawn_markets(self, this_transactive_node=None, new_market_clearing_time=None):
+    # 240228DJH: Child classes inheriting from Auction class should typically not overwrite base method spawn_markets().
+    #            The dependency between real-time and day-ahead auctions is being broken and simplified.
+    #            TODO: Delete method spawn_markets() that has been commented out below.
+    '''
+    def spawn_markets(self, my_transactive_node=None, new_market_clearing_time=None):
         # In this case, the real-time auctions are spawned by the day-ahead markets. Therefore, the real-time markets
         # should not instantiate ANY market objects. The base class method is replaced.
         pass
+        '''
 
     def transition_from_delivery_lead_to_delivery(self, my_transactive_node):
         """
