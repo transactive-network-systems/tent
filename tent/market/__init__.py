@@ -263,15 +263,51 @@ class Market:
             delivery_start = now + ((delivery_anchor_today - now - run_gap) % self.marketClearingInterval)
         return delivery_start - self.deliveryLeadTime
 
-    def events(self, my_transactive_node):
+    def events(self, my_transactive_node=None):
         """
         This is the market state machine. Activities should be assigned to state transition events and to the states
         themselves using the supplied methods. This state machine should not itself be modified by implementers because
         doing so may affect alternative market methods' state models.
-        :param: my_transactive_node: transactive node--this agent--that keeps track of market objects
+        :param: my_transactive_node or None: transactive node--this agent--that keeps track of market objects
         :return: None
+
+        ================================================================================================================
+        MarketStates    Market Events               Intervals               State Machine Events
+        ============    =============               =========               ====================
+        Initial ------ (market gets constructed) -------------------------- transition_from_initial_to_inactive
+        |                                           (immediate)
+        Inactive -------------------------------------------------------------------------------------------------------
+        |                                           (indeterminate)
+        Active -------- (activation_start_time) --------------------------- transition_from_inactive_to_active
+        |                                           activationLeadTime      while_in_acative
+        Negotiation --- (negotiation_start_time) -------------------------- transition_from_active_to_negotiation
+        |                                           negotiationLeadTime     while_in_negotiation
+        MarketLead ---- (market_lead_start_time) -------------------------- transition_from_negotiation_to_market_lead
+        |                                           marketLeadTime          while_in_market_lead
+        DeliveryLead -- marketClearingTime -------------------------------- transition_from_market_lead_to_delivery_lead
+        |                                           deliveryLeadTime        while_in_delivery_lead
+        Delivery ------ (delivery_start_time) ----------------------------- transition_from_delivery_lead_to_delivery
+        |                                           intervalDuration        while_in_dellivery
+        Reconcile ----- (reconcile_start_time) ---------------------------- transition_from_delivery_to_reconcile
+        |                                                                   while_in_reconcile
+        Expired ------- (reconciliation complete) ------------------------- transition_from_reconcile_to_expire
+        |                                           (indefinite)
+        ================================================================================================================
+            Note: Items in (parentheses) are calculated or inferred, not explicit variables.
+            Note: Market states are shown at their starting times or starting events.
+        ================================================================================================================
         """
         current_time = Timer.now()
+
+        # 240228DJH: These next lines of code pave the way for decreasing our dependence on passing parameter
+        #            my_transactive_node. Note the that the parameter has also been assigned default value None when
+        #            called.
+        if self.marketSeries:
+            my_transactive_node = self.marketSeries.tn
+        elif self.tn:
+            my_transactive_node = self.tn
+        else:
+            my_transactive_node = my_transactive_node
 
         # EVENT 0: % FIRST INSTANTIATION OF A MARKET SERIES ************************************************************
         # First time setup of a new market series.
