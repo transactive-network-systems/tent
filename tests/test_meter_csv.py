@@ -122,7 +122,8 @@ class TestCSVMeterPoint(unittest.TestCase):
         print("\nCASE 2: Read from CSV with unequal timestamps")
         # Verify nothing is stored in meter_intervals
         assert len(self.test_csv_meter.meter_intervals) == 0
-        self.test_market.intervalsToClear += 1
+        # 240229DJH: Property intervalsToClear has become a protected property.
+        self.test_market._intervalsToClear += 1
         self.test_market.check_intervals()
         # Read in all values in csv
         self.test_csv_meter.read_meter(self.test_market)
