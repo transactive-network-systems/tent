@@ -134,6 +134,7 @@ class TestCSVMeterPoint(unittest.TestCase):
         for x in range(self.test_csv_length-1):
             with self.subTest(x=x):
                 # Verify that all values are IntervalValues
+
                 assert isinstance(self.test_csv_meter.meter_intervals[x], IntervalValue)
                 # Verify that timestamps match csv
                 self.assertEqual(self.test_csv_meter.meter_intervals[x].timeInterval.startTime,
