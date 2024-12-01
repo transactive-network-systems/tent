@@ -85,7 +85,7 @@ class SolarPvResource(LocalAsset):
         for i in range(len(time_intervals)):
 
             # Production will be estimated from the time-of-day at the center of the time interval.
-            time_of_day = time_intervals[i].startTime + time_intervals[i].duration/2  # a datetime
+            time_of_day = time_intervals[i].start_time + time_intervals[i].duration / 2  # a datetime
 
             # extract a fractional representation of the hour-of-day
             h = time_of_day.hour
@@ -154,7 +154,7 @@ class SolarPvResource(LocalAsset):
         self.scheduleCalculated = True
         _log.debug(f"Market: {market.name} schedule_power {self.scheduledPowers}")
         for power in self.scheduledPowers:
-            _log.debug(f"schedule_power Market {power.market.name}, time interval: {power.timeInterval.startTime},"
+            _log.debug(f"schedule_power Market {power.market.name}, time interval: {power.timeInterval.start_time},"
                        f" power value: {power.value} ")
 
         # Remove any extra engagement schedule values

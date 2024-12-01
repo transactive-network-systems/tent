@@ -139,7 +139,7 @@ def test_production():
     mkt = test_market
     mct = dt
     st = dt
-    ti = TimeInterval(at, dur, mkt, mct, st)
+    ti = TimeInterval(mkt, dur, st)
 
     # Assign activeVertices, which are IntervalValues
     test_object.activeVertices = [
@@ -223,13 +223,13 @@ def test_prod_cost_from_formula():
     mct = dt
 
     st = dt
-    ti = [TimeInterval(at, dur, mkt, mct, st)]
+    ti = [TimeInterval(mkt, dur, st)]
 
     st = st + dur
-    ti.append(TimeInterval(at, dur, mkt, mct, st))
+    ti.append(TimeInterval(mkt, dur, st))
 
     st = st + dur
-    ti.append(TimeInterval(at, dur, mkt, mct, st))
+    ti.append(TimeInterval(mkt, dur, st))
 
     test_market.timeIntervals = ti
 
@@ -289,7 +289,7 @@ def test_prod_cost_from_vertices():
     mkt = test_market
     mct = dt
     st = dt
-    ti = TimeInterval(at, dur, mkt, mct, st)
+    ti = TimeInterval(mkt, dur, st)
 
     # Create and store the activeVertices, which are IntervalValues
     test_object.activeVertices = [IntervalValue(calling_object=test_object,
@@ -379,7 +379,7 @@ def test_are_different2():
     )
     mct = dt
     st = dt
-    ti = TimeInterval(at, dur, mkt, mct, st)
+    ti = TimeInterval(mkt, dur, st)
 
     transactive_records = [
         TransactiveRecord(ti, 0, 0.5, 100),

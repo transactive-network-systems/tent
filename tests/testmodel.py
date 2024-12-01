@@ -71,7 +71,7 @@ def test_schedule():
     mct = dt
     # NOTE: Function Hours() corrects behavior of Matlab hours().
     st = datetime.combine(date.today(), time()) + timedelta(hours=20)
-    ti = TimeInterval(at, dur, mkt, mct, st)
+    ti = TimeInterval(mkt, dur, st)
 
     #   Save the time interval
     test_mkt.timeIntervals = [ti]
@@ -147,7 +147,7 @@ def test_update_costs():
     mkt = test_mkt
     mct = dt
     st = datetime.combine(date.today(), time()) + timedelta(hours=20)
-    ti = TimeInterval(at, dur, mkt, mct, st)
+    ti = TimeInterval(mkt, dur, st)
 
     #   Save the time interval
     test_mkt.timeIntervals = [ti]

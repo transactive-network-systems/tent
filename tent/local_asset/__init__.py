@@ -207,7 +207,7 @@ class LocalAsset(Entity):
         # self.scheduledPowers = [x for x in self.scheduledPowers if x.timeInterval.startTime in time_interval_values]
 
         # Sort by function lambda, assumed to be a helper function pointing to start times
-        time_intervals.sort(key=lambda x: x.startTime)
+        time_intervals.sort(key=lambda x: x.start_time)
 
         # len_powers = len(self.default_powers)
         default_value = self.default_power
@@ -438,7 +438,7 @@ class LocalAsset(Entity):
         # self.transitionCosts = [x for x in self.transitionCosts if x.timeInterval.startTime in time_interval_values]
 
         # Ensure that ti is ordered by time interval start times
-        time_intervals.sort(key=lambda x: x.startTime)
+        time_intervals.sort(key=lambda x: x.start_time)
 
         # Index through all but the first time interval.
         for i in range(len(time_intervals)):
@@ -702,11 +702,11 @@ class LocalAsset(Entity):
             if isinstance(market_prices, list) and len(market_prices) != 0:
                 price_horizon.extend(market_prices)
                 # 240207DJH: This minor change should ensure that the order of price intervals does not matter:
-                start_time_of_last_interval = max([x.timeInterval.startTime for x in price_horizon])
+                start_time_of_last_interval = max([x.timeInterval.start_time for x in price_horizon])
                 # end_of_calculated_horizon = price_horizon[0].timeInterval.startTime + market.intervalDuration
                 end_of_calculated_horizon = start_time_of_last_interval + market.intervalDuration
                 for x in range(1, len(market_prices)):
-                    end_time = price_horizon[x].timeInterval.startTime + market.intervalDuration
+                    end_time = price_horizon[x].timeInterval.start_time + market.intervalDuration
                     if end_time > end_of_calculated_horizon:
                         end_of_calculated_horizon = end_time
 
@@ -727,14 +727,14 @@ class LocalAsset(Entity):
 
                     # Find any market prices from the corrected market to add to the price horizon
                     for x in range(len(market_prices)):
-                        interval_end_time = market_prices[x].timeInterval.startTime \
+                        interval_end_time = market_prices[x].timeInterval.start_time \
                                             + market_prices[x].market.intervalDuration
                         if interval_end_time > end_of_calculated_horizon:
                             price_horizon.append(market_prices[x])
 
                     # Find the end of the calculated price horizon
                     for x in range(len(price_horizon)):
-                        end_time = price_horizon[x].timeInterval.startTime \
+                        end_time = price_horizon[x].timeInterval.start_time \
                                    + price_horizon[x].market.intervalDuration
                         if end_time > end_of_calculated_horizon:
                             end_of_calculated_horizon = end_time
@@ -759,14 +759,14 @@ class LocalAsset(Entity):
                     # Find any market prices from the corrected market to add to the price horizon
                     # TODO: This following logic might be sensitive to order of prices found
                     for x in range(len(market_prices)):
-                        interval_end_time = market_prices[x].timeInterval.startTime \
+                        interval_end_time = market_prices[x].timeInterval.start_time \
                                             + market_prices[x].market.intervalDuration
                         if interval_end_time > end_of_calculated_horizon:
                             price_horizon.append(market_prices[x])
 
                     # Find the end of the calculated price horizon
                     for x in range(len(price_horizon)):
-                        end_time = price_horizon[x].timeInterval.startTime \
+                        end_time = price_horizon[x].timeInterval.start_time \
                                    + price_horizon[x].market.intervalDuration
                         if end_time > end_of_calculated_horizon:
                             end_of_calculated_horizon = end_time
@@ -785,8 +785,7 @@ class LocalAsset(Entity):
                 start_time = end_of_calculated_horizon.replace(minute=0, second=0)
                 end_time = start_time + timedelta(hours=1)
                 duration = end_time - start_time
-                ti = TimeInterval(Timer.get_cur_time(), duration, market,
-                                  market.marketClearingTime, start_time)
+                ti = TimeInterval(market, duration, start_time)
                 iv = IntervalValue(self, ti, market, None, value=price[0])
                 market_prices.append(iv)
                 end_of_calculated_horizon = end_time
@@ -805,8 +804,7 @@ class LocalAsset(Entity):
             end_time = start_time + timedelta(hours=1)
             end_time.replace(minute=0, second=0, microsecond=0)
             duration = end_time - start_time
-            ti = TimeInterval(Timer.get_cur_time(), duration, market,
-                              market.marketClearingTime, start_time)
+            ti = TimeInterval(market, duration, start_time)
             iv = IntervalValue(self, ti, market, MeasurementType.MarginalPrice, price)
             price_horizon.append(iv)
             end_of_calculated_horizon = end_time
@@ -842,8 +840,8 @@ class LocalAsset(Entity):
         pass
 
     def get_dict(self):
-        scheduled_powers = [(format_timestamp(x.timeInterval.startTime), x.value) for x in self.scheduledPowers]
-        vertices = [(format_timestamp(x.timeInterval.startTime), x.value.marginalPrice, x.value.power) for x in
+        scheduled_powers = [(format_timestamp(x.timeInterval.start_time), x.value) for x in self.scheduledPowers]
+        vertices = [(format_timestamp(x.timeInterval.start_time), x.value.marginalPrice, x.value.power) for x in
                     self.activeVertices]
         local_asset_dict = {
             "name": self.name,

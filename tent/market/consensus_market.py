@@ -148,7 +148,7 @@ class ConsensusMarket(Market):
                 elif self.method == Method.Interpolation:  # === 2
                     # Get the indexed active system vertices
                     active_vertices = [x.value for x in self.activeVertices
-                                       if x.timeInterval.startTime == time_intervals[i].startTime]
+                                       if x.timeInterval.start_time == time_intervals[i].start_time]
 
                     # Order the system vertices in the indexed time interval
                     active_vertices = order_vertices(active_vertices)

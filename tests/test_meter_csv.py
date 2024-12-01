@@ -109,7 +109,7 @@ class TestCSVMeterPoint(unittest.TestCase):
                 # Verify that all values are IntervalValues
                 assert isinstance(self.test_csv_meter.meter_intervals[x], IntervalValue)
                 # Verify that timestamps match csv
-                self.assertEqual(self.test_csv_meter.meter_intervals[x].timeInterval.startTime,
+                self.assertEqual(self.test_csv_meter.meter_intervals[x].timeInterval.start_time,
                                  self.test_df["Timestamp"][x])
                 # Verify that values match csv value intervals
                 self.assertEqual(self.test_csv_meter.meter_intervals[x].value,
@@ -137,7 +137,7 @@ class TestCSVMeterPoint(unittest.TestCase):
 
                 assert isinstance(self.test_csv_meter.meter_intervals[x], IntervalValue)
                 # Verify that timestamps match csv
-                self.assertEqual(self.test_csv_meter.meter_intervals[x].timeInterval.startTime,
+                self.assertEqual(self.test_csv_meter.meter_intervals[x].timeInterval.start_time,
                                  self.test_df["Timestamp"][x])
                 # Verify that values match csv value intervals
                 self.assertEqual(self.test_csv_meter.meter_intervals[x].value,

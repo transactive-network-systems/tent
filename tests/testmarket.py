@@ -73,7 +73,7 @@ def test_assign_system_vertices():
     test_node.localAssets = [test_asset]
     test_neighbor = Neighbor()
     test_node.neighbors = [test_neighbor]
-    test_interval = TimeInterval(now, test_market.intervalDuration, test_market, now, now)
+    test_interval = TimeInterval(test_market, test_market.intervalDuration, now)
     test_market.timeIntervals = [test_interval]
 
     vertex1 = Vertex(0.02, 0, 0)
@@ -124,7 +124,7 @@ def test_balance():
     test_node.localAssets = [test_asset]
     test_neighbor = Neighbor()
     test_node.neighbors = [test_neighbor]
-    test_interval = TimeInterval(now, test_market.intervalDuration, test_market, now, now)
+    test_interval = TimeInterval(test_market, test_market.intervalDuration, now)
     test_market.timeIntervals = [test_interval]
 
     vertex1 = Vertex(0.02, 0, 0)
@@ -192,9 +192,9 @@ def test_check_intervals():
 
     assert len(test_market.timeIntervals) == test_market.intervalsToClear, \
         'The wrong number of time intervals was created.'
-    assert test_market.timeIntervals[0].startTime == test_market.marketClearingTime + test_market.deliveryLeadTime, \
+    assert test_market.timeIntervals[0].start_time == test_market.marketClearingTime + test_market.deliveryLeadTime, \
         'The time intervals do not begin with the correct start time.'
-    assert test_market.timeIntervals[1].startTime == test_market.timeIntervals[0].startTime \
+    assert test_market.timeIntervals[1].start_time == test_market.timeIntervals[0].start_time \
            + test_market.intervalDuration, 'The intervals might not be separated by the correct duration'
 
     # Success
@@ -220,7 +220,7 @@ def test_check_marginal_prices():
 
     # Configure the test.
     test_mkt = Market()
-    test_ti = TimeInterval(datetime.now(), timedelta(hours=1), test_mkt, datetime.now(), datetime.now())
+    test_ti = TimeInterval(test_mkt, timedelta(hours=1), datetime.now())
     pi = 3.14159
     test_mp = IntervalValue(test_mkt, test_ti, test_mkt, MeasurementType.MarginalPrice, pi)
     test_mkt.timeIntervals = [test_ti]
@@ -262,7 +262,7 @@ def test_check_marginal_prices():
 
     test_mkt.priorMarketInSeries = weakref.ref(prior_mkt)  # Important pointer to the prior market in the series
 
-    test_ti = TimeInterval(datetime.now(), timedelta(hours=1), test_mkt, datetime.now(), datetime.now())
+    test_ti = TimeInterval(test_mkt, timedelta(hours=1), datetime.now())
 
     # NOTE: Test_mkt is assigned no marginal prices for this case. But a marginal price exists in the prior market for
     # the active time interval.
@@ -314,7 +314,7 @@ def test_check_marginal_prices():
     test_mkt.marketToBeRefined = prior_mkt.marketSeriesName  # Assuming here this is not a list.
     test_mkt.marketToBeRefined = weakref.ref(prior_mkt)  # Important pointer to market that is being refined
 
-    test_ti = TimeInterval(datetime.now(), timedelta(hours=1), test_mkt, datetime.now(), datetime.now())
+    test_ti = TimeInterval(test_mkt, timedelta(hours=1), datetime.now())
 
     # NOTE: Test_mkt is assigned no marginal prices for this case. But a marginal price exists in the prior market for
     # the active time interval.
@@ -368,7 +368,7 @@ def test_check_marginal_prices():
     # pi = 3.14159
     # test_mkt.priceModel.current_model = [pi, 2 * pi] * 24
 
-    test_ti = TimeInterval(datetime.now(), timedelta(hours=1), test_mkt, datetime.now(), datetime.now())
+    test_ti = TimeInterval(test_mkt, timedelta(hours=1), datetime.now())
 
     test_mkt.timeIntervals = [test_ti]
 
@@ -412,7 +412,7 @@ def test_check_marginal_prices():
     test_mkt.defaultPrice = pi
     test_mkt.priceModel = None  # The lack of price model will excite this final method.
 
-    test_ti = TimeInterval(datetime.now(), timedelta(hours=1), test_mkt, datetime.now(), datetime.now())
+    test_ti = TimeInterval(test_mkt, timedelta(hours=1), datetime.now())
 
     test_mkt.timeIntervals = [test_ti]
 
@@ -455,7 +455,7 @@ def test_check_marginal_prices():
     test_mkt.defaultPrice = None
     test_mkt.priceModel = None  # The lack of price model will excite this final method.
 
-    test_ti = TimeInterval(datetime.now(), timedelta(hours=1), test_mkt, datetime.now(), datetime.now())
+    test_ti = TimeInterval(test_mkt, timedelta(hours=1), datetime.now())
 
     test_mkt.timeIntervals = [test_ti]
 
@@ -1276,7 +1276,7 @@ def test_schedule():
     mkt = test_mkt
     mct = dt
     st = dt
-    ti = TimeInterval(at, dur, mkt, mct, st)
+    ti = TimeInterval(mkt, dur, st)
 
     test_mkt.timeIntervals = [ti]
 
@@ -1327,10 +1327,10 @@ def test_see_marginal_prices():
 
     marginal_prices = [0, 1, 0, -0.2]
 
-    test_interval1 = TimeInterval(now, timedelta(hours=1), test_market, now, now)
-    test_interval2 = TimeInterval(now, timedelta(hours=1), test_market, now, now + timedelta(hours=1))
-    test_interval3 = TimeInterval(now, timedelta(hours=1), test_market, now, now + timedelta(hours=2))
-    test_interval4 = TimeInterval(now, timedelta(hours=1), test_market, now, now + timedelta(hours=3))
+    test_interval1 = TimeInterval(test_market, timedelta(hours=1), now)
+    test_interval2 = TimeInterval(test_market, timedelta(hours=1), now + timedelta(hours=1))
+    test_interval3 = TimeInterval(test_market,timedelta(hours=1), now + timedelta(hours=2))
+    test_interval4 = TimeInterval(test_market, timedelta(hours=1), now + timedelta(hours=3))
     test_market.timeIntervals = [test_interval1, test_interval2, test_interval3, test_interval4]
     test_market.marginalPrices = [IntervalValue(test_market, test_interval1, test_market, None, marginal_prices[0]),
                                   IntervalValue(test_market, test_interval2, test_market, None, marginal_prices[1]),
@@ -1362,7 +1362,7 @@ def test_see_net_curve():
     test_market = Market()
     test_vertex1 = Vertex(0.02, 0, -10)
     test_vertex2 = Vertex(0.03, 0, 10)
-    test_interval = TimeInterval(now, timedelta(hours=1), test_market, now, now)
+    test_interval = TimeInterval(test_market, timedelta(hours=1), now)
     test_market.timeIntervals = [test_interval]
     test_market.activeVertices = [IntervalValue(test_market, test_interval, test_market, None, test_vertex1),
                                   IntervalValue(test_market, test_interval, test_market, None, test_vertex2)]
@@ -1426,13 +1426,11 @@ def test_sum_vertices():
     test_node.markets = test_market
 
     # Create and store a time interval to work with.
-    dt = datetime.now()
-    at = dt
+    st = datetime.now()
     dur = timedelta(hours=1)
     mkt = test_market
-    mct = dt
-    st = dt
-    time_interval = TimeInterval(at, dur, mkt, mct, st)
+
+    time_interval = TimeInterval(mkt, dur, st)
     test_market.timeIntervals = [time_interval]
 
     # Create test LocalAsset and LocalAsset objects

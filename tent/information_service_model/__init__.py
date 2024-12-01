@@ -114,7 +114,7 @@ class InformationServiceModel(Component):
     def update_information(self, market):
         for time_interval in market.timeIntervals:
 
-            start_time = time_interval.startTime
+            start_time = time_interval.start_time
 
             #       Extract the starting time hour
             hr = start_time.hour

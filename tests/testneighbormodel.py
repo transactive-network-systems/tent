@@ -90,7 +90,7 @@ def test_calculate_reserve_margin():
     # st = datetime(date) + Hours(12)  # today at noon
     st = datetime.combine(date.today(), time()) + timedelta(hours=12)
 
-    ti = TimeInterval(at, dur, mkt, mct, st)
+    ti = TimeInterval(mkt, dur, st)
 
     test_mkt.timeIntervals = [ti]
 
@@ -176,7 +176,7 @@ def test_check_for_convergence():
 
     # Create and store an active TimeInterval object.
     dt = datetime.now()
-    time_intervals = TimeInterval(dt, one_hour, test_market, dt, dt)
+    time_intervals = TimeInterval(test_market, one_hour, dt)
     test_market.timeIntervals = [time_intervals]
 
     # TEST 1: No TransactiveRecord messages have been sent.
@@ -411,7 +411,7 @@ def test_prep_transactive_signal():
     mkt = test_market
     mct = dt
     st = dt
-    time_interval = TimeInterval(at, dur, mkt, mct, st)
+    time_interval = TimeInterval(mkt, dur, st)
     test_market.timeIntervals = [time_interval]
 
     # Create some active vertices and their IntervalValue objects ready to
@@ -613,7 +613,7 @@ def test_receive_transactive_signal():
     mkt = test_market
     mct = dt
     st = dt
-    time_interval = TimeInterval(at, dur, mkt, mct, st)
+    time_interval = TimeInterval(mkt, dur, st)
 
     # Create a couple test transactive records.
     test_record1 = TransactiveRecord(time_interval=time_interval, record=0, marginal_price=0.1, power=0)
@@ -675,7 +675,7 @@ def test_schedule_power():
 
     # Create and store an active TimeInterval object.
     dt = datetime.now()  # datetime that may be used for all datetime arguments
-    time_interval = TimeInterval(dt, timedelta(hours=1), test_market, dt, dt)
+    time_interval = TimeInterval(test_market, timedelta(hours=1), dt)
     test_market.timeIntervals = [time_interval]
 
     # Create and store a marginal price IntervalValue object.
@@ -763,7 +763,7 @@ def test_send_transactive_signal():
     mkt = test_market
     mct = dt
     st = dt
-    time_interval = TimeInterval(at, dur, mkt, mct, st)
+    time_interval = TimeInterval(mkt, dur, st)
 
     # Create a couple test transactive records.
     test_record1 = TransactiveRecord(time_interval=time_interval, record=0, marginal_price=0.1, power=0)
@@ -830,10 +830,10 @@ def test_update_dc_threshold():
     mct = dt
 
     st = dt
-    ti1 = TimeInterval(at, dur, mkt, mct, st)
+    ti1 = TimeInterval(mkt, dur, st)
 
     st = st + dur
-    ti2 = TimeInterval(at, dur, mkt, mct, st)
+    ti2 = TimeInterval(mkt, dur, st)
 
     ti = [ti1, ti2]
     test_mkt.timeIntervals = ti
@@ -949,7 +949,7 @@ def test_update_dual_costs():
 
     # Create and store a TimeInterval object.
     dt = datetime.now()  # datetime that may be used for most datetime arguments
-    time_interval = TimeInterval(dt, timedelta(hours=1), test_market, dt, dt)
+    time_interval = TimeInterval(test_market, timedelta(hours=1), dt)
     test_market.timeIntervals = [time_interval]
 
     # Create and store a marginal price IntervalValue object.
@@ -1010,7 +1010,7 @@ def test_update_production_costs():
 
     # Create and store a TimeInterval object.
     dt = datetime.now()  # datetime that may be used for most datetime arguments
-    time_interval = TimeInterval(dt, timedelta(hours=1), test_market, dt, dt)
+    time_interval = TimeInterval(test_market, timedelta(hours=1), dt)
     test_market.timeIntervals = [time_interval]
 
     # Create a test Neighbor object.
@@ -1073,7 +1073,7 @@ def test_update_vertices():
 
     # Create and store a TimeInterval object.
     dt = datetime.now()  # datetime that may be used for most datetime arguments
-    time_interval = TimeInterval(dt, timedelta(hours=1), test_market, dt, dt)
+    time_interval = TimeInterval(test_market, timedelta(hours=1), dt)
     test_market.timeIntervals = [time_interval]
 
     # Create a test Neighbor object.

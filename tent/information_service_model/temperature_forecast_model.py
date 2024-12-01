@@ -134,7 +134,7 @@ class TemperatureForecastModel(InformationServiceModel):
         predicted_values = []
         for ti in mkt.timeIntervals:
             # Find item which has the same timestamp as ti.timeStamp
-            start_time = ti.startTime.replace(minute=0)
+            start_time = ti.start_time.replace(minute=0)
             previous_measurement = items
             items = [x[1] for x in weather_data if x[0] == start_time]
             # Create interval value and add it to predicted values
@@ -171,7 +171,7 @@ class TemperatureForecastModel(InformationServiceModel):
         weather_data = self.query_weather_data()
         if not self.map_forecast_to_interval(mkt, weather_data):
             if self.predictedValues:
-                gap_time = mkt.timeIntervals[0].startTime - self.predictedValues[0].timeInterval.startTime
+                gap_time = mkt.timeIntervals[0].start_time - self.predictedValues[0].timeInterval.start_time
                 if gap_time > self.max_gap_time:
                     self.predictedValues = []
                     if self.weather_data:
@@ -198,7 +198,7 @@ class TemperatureForecastModel(InformationServiceModel):
         self.predictedValues = []
         for ti in mkt.timeIntervals:
             # Find item which has the same timestamp as ti.timeStamp
-            start_time = ti.startTime.replace(minute=0)
+            start_time = ti.start_time.replace(minute=0)
             items = [x for x in self.weather_data if x['Timestamp'] == start_time]
             if len(items) == 0:
                 trial_deltas = [-1, 1, -2, 2, -24, 24]
@@ -209,7 +209,7 @@ class TemperatureForecastModel(InformationServiceModel):
 
                 # None exist, raise exception
                 if len(items) == 0:
-                    raise Exception('No weather data for time: {}'.format(format_timestamp(ti.startTime)))
+                    raise Exception('No weather data for time: {}'.format(format_timestamp(ti.start_time)))
 
             # Create interval value and add it to predicted values
             temp = items[0]['Value']
@@ -270,6 +270,6 @@ if __name__ == '__main__':
     # Test update_information
     forecaster.update_information(market)
 
-    times = [format_ts(x.timeInterval.startTime) for x in forecaster.predictedValues]
+    times = [format_ts(x.timeInterval.start_time) for x in forecaster.predictedValues]
 
     print(times)

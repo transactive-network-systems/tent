@@ -72,11 +72,7 @@ def test_while_in_negotiation():
     test_market.marketState = MarketState.Active
 
     dt = datetime.now()
-    test_interval = TimeInterval(dt,
-                                 timedelta(hours=1),
-                                 test_market,
-                                 dt,
-                                 dt)
+    test_interval = TimeInterval(test_market, timedelta(hours=1), dt)
 
     test_market.timeIntervals = [test_interval]
 
@@ -117,11 +113,7 @@ def test_while_in_market_lead():
     test_market.marketState = MarketState.MarketLead
 
     dt = datetime.now()
-    test_interval = TimeInterval(dt,
-                                 timedelta(hours=1),
-                                 test_market,
-                                 dt,
-                                 dt)
+    test_interval = TimeInterval(test_market, timedelta(hours=1), dt)
 
     test_market.timeIntervals = [test_interval]
 
@@ -189,7 +181,7 @@ def test_while_in_delivery_lead():
     test_auction = Auction()
     test_auction.marginalPrices = []
     mtn.markets = test_auction
-    test_time_interval = TimeInterval(now, timedelta(hours=1), test_auction, now, now)
+    test_time_interval = TimeInterval(test_auction, timedelta(hours=1), now)
     test_auction.timeIntervals = [test_time_interval]
     test_vertex1 = Vertex(0.1, 0, 0)
     test_vertex2 = Vertex(0.2, 0, 100)
@@ -244,7 +236,7 @@ def test_while_in_delivery_lead():
     test_auction = Auction()
     test_auction.marginalPrices = []
     mtn.markets = test_auction
-    test_time_interval = TimeInterval(now, timedelta(hours=1), test_auction, now, now)
+    test_time_interval = TimeInterval(test_auction, timedelta(hours=1), now)
     test_auction.timeIntervals = [test_time_interval]
     test_vertex1 = Vertex(0.1, 0, 0)
     test_vertex2 = Vertex(0.2, 0, 100)

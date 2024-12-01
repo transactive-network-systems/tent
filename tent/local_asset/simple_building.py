@@ -93,7 +93,7 @@ class SimpleBuilding(LocalAsset):
         time_intervals = market.timeIntervals
         for x in range(len(time_intervals)):
             time_interval = time_intervals[x]
-            start_time = time_interval.startTime
+            start_time = time_interval.start_time
             start_hour = start_time.hour
             if start_hour in [0, 1, 2, 3, 4, 17, 18, 19, 20, 21, 22, 23]:
                 iv = IntervalValue(calling_object=self,

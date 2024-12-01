@@ -86,11 +86,7 @@ class TestAppendIntervalValueTable:
                                   prod_cost=0,
                                   power=0)
         self.test_value = 1234.5678
-        self.test_interval = TimeInterval(activation_time=dt,
-                                          duration=dur,
-                                          market=self.test_market,
-                                          market_clearing_time=dt,
-                                          start_time=dt)
+        self.test_interval = TimeInterval(market=self.test_market, duration=dur, start_time=dt)
         self.test_iv = IntervalValue(calling_object=self.test_caller,
                                      time_interval=self.test_interval,
                                      market=self.test_market,
@@ -182,11 +178,7 @@ class TestAppendTransactiveRecordTable:
                                   prod_cost=0,
                                   power=0)
         self.test_value = 1234.5678
-        self.test_interval = TimeInterval(activation_time=dt,
-                                          duration=dur,
-                                          market=self.test_market,
-                                          market_clearing_time=dt,
-                                          start_time=dt)
+        self.test_interval = TimeInterval(market=self.test_market, duration=dur, start_time=dt)
         self.test_iv = IntervalValue(calling_object=self.test_neighbor,
                                      time_interval=self.test_interval,
                                      market=self.test_market,
@@ -254,11 +246,7 @@ class TestAppendMarketObjectTable:
                                   prod_cost=0,
                                   power=0)
         self.test_value = 1234.5678
-        self.test_interval = TimeInterval(activation_time=dt,
-                                          duration=dur,
-                                          market=self.test_market,
-                                          market_clearing_time=dt,
-                                          start_time=dt)
+        self.test_interval = TimeInterval(market=self.test_market, duration=dur, start_time=dt)
         self.test_market.timeIntervals = [self.test_interval]
         self.test_iv = IntervalValue(calling_object=self.test_neighbor,
                                      time_interval=self.test_interval,

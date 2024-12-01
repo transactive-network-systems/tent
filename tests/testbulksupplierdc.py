@@ -70,11 +70,7 @@ def test_update_vertices():
     test_neighbor.demandThreshold = 101  # Placing this just above the vertices' power range
     test_market = Market()
     test_market.neighbors = [test_neighbor]
-    test_time_interval = TimeInterval(activation_time=dt,
-                                      duration=timedelta(hours=1),
-                                      market=test_market,
-                                      market_clearing_time=dt,
-                                      start_time=dt)
+    test_time_interval = TimeInterval(market=test_market, duration=timedelta(hours=1), start_time=dt)
     test_market.timeIntervals = [test_time_interval]
     # 210803DJH: The market clearing time must be defined because it is needed by the new data_manager.py for
     #            IntervalValue objects.
@@ -108,11 +104,7 @@ def test_update_vertices():
     test_neighbor.demandThreshold = 50  # Placing this in the middle of the vertices' power range
     test_market = Market()
     test_market.neighbors = [test_neighbor]
-    test_time_interval = TimeInterval(activation_time=dt,
-                                      duration=timedelta(hours=1),
-                                      market=test_market,
-                                      market_clearing_time=dt,
-                                      start_time=dt)
+    test_time_interval = TimeInterval(market=test_market, duration=timedelta(hours=1), start_time=dt)
     test_market.timeIntervals = [test_time_interval]
     # 210803DJH: data_manager.py requires that the market be assigned a market clearing time.
     test_market.marketClearingTime = dt

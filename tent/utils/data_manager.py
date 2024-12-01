@@ -118,9 +118,9 @@ def append_interval_value_table(method=METHOD, objects=None):
         else:
             MARKET_CLEARING_DATE = ''
             MARKET_CLEARING_TIME = ''
-        if obj.timeInterval.startTime:
-            INTERVAL_STARTING_DATE = obj.timeInterval.startTime.strftime(DATE_FORMAT)
-            INTERVAL_STARTING_TIME = obj.timeInterval.startTime.strftime(TIME_FORMAT)
+        if obj.timeInterval.start_time:
+            INTERVAL_STARTING_DATE = obj.timeInterval.start_time.strftime(DATE_FORMAT)
+            INTERVAL_STARTING_TIME = obj.timeInterval.start_time.strftime(TIME_FORMAT)
         else:
             INTERVAL_STARTING_DATE = ''
             INTERVAL_STARTING_TIME = ''
@@ -201,7 +201,7 @@ def append_market_object_table(method=METHOD, objects=None):
         NUMBER_INTERVALS = obj.intervalsToClear
         MARKET_CLEARING_DATE = format(obj.marketClearingTime, DATE_FORMAT)
         MARKET_CLEARING_TIME = format(obj.marketClearingTime, TIME_FORMAT)
-        start_time = min([x.startTime for x in obj.timeIntervals])
+        start_time = min([x.start_time for x in obj.timeIntervals])
         DELIVERY_START_DATE = format(start_time, DATE_FORMAT)
         DELIVERY_START_TIME = format(start_time, TIME_FORMAT)
         TOTAL_DELIVERY_HOURS = obj.intervalsToClear * obj.intervalDuration

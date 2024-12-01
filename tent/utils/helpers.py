@@ -279,7 +279,7 @@ def prod_cost_from_vertices(obj, ti, pwr):
         return cost
 
     # Find the active vertices for the object in the given time interval
-    v = [x for x in obj.activeVertices if x.timeInterval.startTime == ti.startTime]
+    v = [x for x in obj.activeVertices if x.timeInterval.start_time == ti.start_time]
 
     # number of active vertices len in the indexed time interval
     v_len = len(v)

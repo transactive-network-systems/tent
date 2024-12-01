@@ -94,7 +94,7 @@ class CSVMeterPoint(PullMeterPoint):
         # Gather active time intervals
         time_intervals = market.timeIntervals
         for i in range(len(time_intervals)):
-            start_time = time_intervals[i].startTime
+            start_time = time_intervals[i].start_time
             end_time = start_time + time_intervals[i].duration
             # Attempt to get value based on timeInterval.
             # If the timeInterval does not exist in the csv data, skip.

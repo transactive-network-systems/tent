@@ -94,7 +94,7 @@ def test_calculate_reserve_margin():
     # st = datetime(date)
     st = datetime.combine(date.today(), time())
 
-    ti = TimeInterval(at, dur, mkt, mct, st)
+    ti = TimeInterval(mkt, dur, st)
 
     # Store time interval
     test_mkt.timeIntervals = [ti]
@@ -286,10 +286,10 @@ def test_schedule_engagement():
     mct = dt
     st = datetime.combine(date.today(), time())  # datetime(date)
 
-    ti = [TimeInterval(at, dur, mkt, mct, st)]
+    ti = [TimeInterval(mkt, dur, st)]
 
-    st = ti[0].startTime + dur
-    ti.append(TimeInterval(at, dur, mkt, mct, st))
+    st = ti[0].start_time + dur
+    ti.append(TimeInterval(mkt, dur, st))
 
     #   store time intervals
     test_mkt.timeIntervals = ti
@@ -320,8 +320,8 @@ def test_schedule_engagement():
         """
 
     # Create and store another active time interval.
-    st = ti[1].startTime + dur
-    ti.append(TimeInterval(at, dur, mkt, mct, st))
+    st = ti[1].start_time + dur
+    ti.append(TimeInterval(mkt, dur, st))
 
     #   Re-store time intervals
     test_mkt.timeIntervals = ti
@@ -366,9 +366,9 @@ def test_schedule_power():
     mct = dt
     st = datetime.combine(date.today(), time())  # datetime(date)
 
-    ti = [TimeInterval(at, dur, mkt, mct, st)]
-    st = ti[0].startTime + dur
-    ti.append(TimeInterval(at, dur, mkt, mct, st))
+    ti = [TimeInterval(mkt, dur, st)]
+    st = ti[0].start_time + dur
+    ti.append(TimeInterval(mkt, dur, st))
 
     #   Store time intervals
     test_mkt.timeIntervals = ti
@@ -398,8 +398,8 @@ def test_schedule_power():
     test_model.defaultPower = 6
 
     #   Create and store another active time interval.
-    st = ti[1].startTime + dur
-    ti.append(TimeInterval(at, dur, mkt, mct, st))
+    st = ti[1].start_time + dur
+    ti.append(TimeInterval(mkt, dur, st))
 
     #   Re-store time intervals
     test_mkt.timeIntervals = ti
@@ -434,7 +434,7 @@ def test_update_dual_costs():
 
     #   Create and store a TimeInterval object.
     dt = datetime.now()  # datetime that may be used for most datetime arguments
-    time_interval = TimeInterval(dt, timedelta(hours=1), test_market, dt, dt)
+    time_interval = TimeInterval(test_market, timedelta(hours=1), dt)
     test_market.timeIntervals = [time_interval]
 
     #   Create and store a marginal price IntervalValue object.
@@ -500,7 +500,7 @@ def test_update_production_costs():
 
     #   Create and store a TimeInterval.
     dt = datetime.now()  # datetime that may be used for most datetime arguments
-    time_interval = TimeInterval(dt, timedelta(hours=1), test_market, dt, dt)
+    time_interval = TimeInterval(test_market, timedelta(hours=1), dt)
     test_market.timeIntervals = [time_interval]
 
     #   Create a test LocalAsset.
@@ -565,7 +565,7 @@ def test_update_vertices():
 
     #   Create and store a TimeInterval.
     dt = datetime.now()  # datetime that may be used for most datetime arguments
-    time_interval = TimeInterval(dt, timedelta(hours=1), test_market, dt, dt)
+    time_interval = TimeInterval(test_market, timedelta(hours=1), dt)
     test_market.timeIntervals = [time_interval]
 
     #   Create a test LocalAsset.
@@ -615,7 +615,7 @@ def test_get_extended_prices():
     # test_asset_model.object = test_asset
     test_asset_model.schedulingHorizon = timedelta(hours=0.5)
     test_market = Market()
-    test_interval = TimeInterval(now, timedelta(hours=1), test_market, now, now)
+    test_interval = TimeInterval(test_market, timedelta(hours=1), now)
     price = 3.14159
     test_price = IntervalValue(calling_object=test_market,
                                time_interval=test_interval,
@@ -630,7 +630,7 @@ def test_get_extended_prices():
 
     assert len(test_market.marginalPrices) == 1, 'The market was supposed to have a marginal price'
     assert datetime.now() + test_asset_model.schedulingHorizon \
-           < test_market.timeIntervals[0].startTime + test_market.intervalDuration, \
+           < test_market.timeIntervals[0].start_time + test_market.intervalDuration, \
         'For this test, the existing marginal price intervals should not extend beyond the scheduling horizon.'
 
     try:
@@ -654,7 +654,7 @@ def test_get_extended_prices():
 
 
 
-    test_interval0 = TimeInterval(now, timedelta(hours=1), test_market, now, now)
+    test_interval0 = TimeInterval(test_market, timedelta(hours=1), now)
     price0 = 3.14159
     test_price0 = IntervalValue(calling_object=test_market,
                                 time_interval=test_interval0,
@@ -674,8 +674,8 @@ def test_get_extended_prices():
         market_clearing_time=test_market.marketClearingTime - timedelta(hours=1)
     )
 
-    test_interval1 = TimeInterval(now, timedelta(hours=1), prior_market, now, now)
-    test_interval2 = TimeInterval(now, timedelta(hours=1), prior_market, now, now + timedelta(hours=1))
+    test_interval1 = TimeInterval(prior_market, timedelta(hours=1), now)
+    test_interval2 = TimeInterval(prior_market, timedelta(hours=1), now + timedelta(hours=1))
     price1 = 10
     test_price1 = IntervalValue(calling_object=test_market,
                                 time_interval=test_interval1,
@@ -729,7 +729,7 @@ def test_get_extended_prices():
         market_clearing_time=now
     )
 
-    test_interval0 = TimeInterval(now, timedelta(hours=1), test_market, now, now)
+    test_interval0 = TimeInterval(test_market, timedelta(hours=1), now)
     price0 = 3.14159
     test_price0 = IntervalValue(calling_object=test_market,
                                 time_interval=test_interval0,
@@ -743,8 +743,8 @@ def test_get_extended_prices():
         market_series_name=test_market.marketSeriesName,
         market_clearing_time=test_market.marketClearingTime - timedelta(hours=1)
     )
-    test_interval1 = TimeInterval(now, timedelta(hours=1), prior_market, now, now)
-    test_interval2 = TimeInterval(now, timedelta(hours=1), prior_market, now, now + timedelta(hours=1))
+    test_interval1 = TimeInterval(prior_market, timedelta(hours=1), now)
+    test_interval2 = TimeInterval(prior_market, timedelta(hours=1), now + timedelta(hours=1))
     price1 = 10
     test_price1 = IntervalValue(calling_object=test_market,
                                 time_interval=test_interval1,
@@ -767,7 +767,7 @@ def test_get_extended_prices():
         interval_duration=timedelta(hours=1)
     )
     price2 = 20
-    test_interval3 = TimeInterval(now, timedelta(hours=1), corrected_market, now, now + timedelta(hours=2))
+    test_interval3 = TimeInterval(corrected_market, timedelta(hours=1), now + timedelta(hours=2))
     test_price3 = IntervalValue(calling_object=test_market,
                                 time_interval=test_interval1,
                                 market=corrected_market,
@@ -821,7 +821,7 @@ def test_get_extended_prices():
         market_clearing_time=now
     )
 
-    test_interval0 = TimeInterval(now, timedelta(hours=1), test_market, now, now)
+    test_interval0 = TimeInterval(test_market, timedelta(hours=1), now)
     price0 = 3.14159
     test_price0 = IntervalValue(calling_object=test_market,
                                 time_interval=test_interval0,

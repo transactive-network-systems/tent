@@ -354,7 +354,7 @@ class Neighbor(Entity):
             self.converged = True
 
         _log.debug(f"TCC convergence flags for {self.name} are "
-                   f"{[(format_ts(f.timeInterval.startTime), f.value) for f in self.convergenceFlags]}")
+                   f"{[(format_ts(f.timeInterval.start_time), f.value) for f in self.convergenceFlags]}")
         _log.debug(f"TCC convergence flag for {self.name} is {self.converged}.")
 
     @staticmethod
@@ -461,7 +461,7 @@ class Neighbor(Entity):
             # Find the marginal price for the indexed time interval
             marginal_price = find_obj_by_ti(market.marginalPrices, time_intervals[i])  # an IntervalValue
             if marginal_price is None:
-                marginal_price = market.priceModel.get(time_intervals[i].startTime)[0]
+                marginal_price = market.priceModel.get(time_intervals[i].start_time)[0]
             else:
                 marginal_price = marginal_price.value
 
@@ -911,7 +911,7 @@ class Neighbor(Entity):
                     # 240206DJH: This next line must be modified to use the new price model structure, where the market
                     #            priceModel attribute is a price model clsss object, and that object owns a price table.
                     # predicted_market_price = market.model_prices(time_interval.startTime)[0]
-                    predicted_market_price = market.priceModel.get(time_interval.startTime)[0]
+                    predicted_market_price = market.priceModel.get(time_interval.start_time)[0]
                     current_scheduled_power = power_from_vertices(active_vertices,
                                                                   predicted_market_price)
                 else:
@@ -1163,7 +1163,7 @@ class Neighbor(Entity):
                         # Demand charges are in play. Get the newly updated active vertices for this transactive
                         # Neighbor again in the indexed time interval.
                         vertices = [x.value for x in self.activeVertices if
-                                    x.timeInterval.startTime == time_intervals[i].startTime]
+                                    x.timeInterval.start_time == time_intervals[i].start_time]
 
                         # Find the marginal price that would correspond to the demand-charge threshold, based on the
                         # newly updated (but excluding the effects of demand charges) active vertices in the indexed
@@ -1197,7 +1197,7 @@ class Neighbor(Entity):
                         # Check that vertices having power greater than the demand threshold have their marginal prices
                         # reflect the demand charges. Start by picking out those in the currently indexed time interval.
                         interval_values = [x for x in self.activeVertices
-                                           if x.timeInterval.startTime == time_intervals[i].startTime]
+                                           if x.timeInterval.start_time == time_intervals[i].start_time]
 
                         # Index through the current active vertices in the indexed time interval. At this point, these
                         # include vertices from both prior to and after the introduction of demand-charge vertices.
@@ -1909,7 +1909,7 @@ class Neighbor(Entity):
         return vertices
 
     def get_dict(self):
-        scheduled_powers = [(format_timestamp(x.timeInterval.startTime), x.value) for x in self.scheduledPowers]
+        scheduled_powers = [(format_timestamp(x.timeInterval.start_time), x.value) for x in self.scheduledPowers]
         received_signal = [(x.timeInterval, x.marginalPrice, x.power) for x in self.receivedSignal]
         sent_signal = [(x.timeInterval, x.marginalPrice, x.power) for x in self.sentSignal]
 

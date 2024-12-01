@@ -129,9 +129,9 @@ class BulkSupplierDC(Neighbor):
 
             # Find the month number for the indexed time interval start time. The month is needed for rate lookup
             # tables.
-            month_number = time_interval.startTime.month
+            month_number = time_interval.start_time.month
 
-            if is_heavyloadhour(time_interval.startTime):
+            if is_heavyloadhour(time_interval.start_time):
                 price = bpa_energy_rate[month_number - 1][0]  # HLH energy rate [$/kWh]
             else:
                 price = bpa_energy_rate[month_number - 1][1]  # bpa_energy_rate(month_number, 2)
@@ -164,7 +164,7 @@ class BulkSupplierDC(Neighbor):
             #            charges, but the scheduled power is needed to update the active_threshold within a given series
             #            of market time intervals. I'm moving the threshold update to after the inclusion of demand
             #            charges.
-            if is_heavyloadhour(time_interval.startTime) and self.demandRate != 0:
+            if is_heavyloadhour(time_interval.start_time) and self.demandRate != 0:
                 # scheduled_power = [x.power for x in self.scheduledPowers if x.timeInterval == time_interval]
                 # if scheduled_power is not None and len(scheduled_power) != 0:
                 #     active_threshold = max(active_threshold, scheduled_power[0])
@@ -178,7 +178,7 @@ class BulkSupplierDC(Neighbor):
 
                 # However, if the power is not yet scheduled (price is not known), the power must be inferred:
                 if len(scheduled_power) == 0:
-                    predicted_market_price = market.priceModel.get(time_interval.startTime)[0]
+                    predicted_market_price = market.priceModel.get(time_interval.start_time)[0]
                     scheduled_power = power_from_vertices(vertices,
                                                           predicted_market_price)
                 else:
@@ -273,9 +273,9 @@ class BulkSupplierDC(Neighbor):
 
             # Find the month number for the indexed time interval start time. The month is needed for rate lookup
             # tables.
-            month_number = time_interval.startTime.month
+            month_number = time_interval.start_time.month
 
-            if is_heavyloadhour(time_interval.startTime):
+            if is_heavyloadhour(time_interval.start_time):
 
                 # The indexed time interval is an HLH hour. The electricity rate is a little higher during HLH hours,
                 # and demand-charges may apply. Look up the BPA energy rate for month_number. The second parameter is
@@ -322,7 +322,7 @@ class BulkSupplierDC(Neighbor):
                 if len(scheduled_powers) == 0:
 
                     # Powers have been scheduled, order the scheduled powers by their start time
-                    ordered_scheduled_powers = sorted(self.scheduledPowers, key=lambda x: x.timeInterval.startTime)
+                    ordered_scheduled_powers = sorted(self.scheduledPowers, key=lambda x: x.timeInterval.start_time)
                     ordered_scheduled_powers = ordered_scheduled_powers[:interval_index + 1]
 
                     # The peak demand determinant is the greater of the monthly peak threshold or the prior scheduled

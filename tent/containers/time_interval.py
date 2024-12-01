@@ -43,141 +43,60 @@ under Contract DE-AC05-76RL01830
 
 from datetime import datetime, timedelta
 
-from tent.enumerations.market_state import MarketState
+from tent import Archivable
 from tent.utils.helpers import format_ts
-from tent.utils.timer import Timer
-
-# import logging
-"""
-utils.setup_logging()
-_log = logging.getLogger(__name__)
-"""
 
 
-class TimeInterval:
+class TimeInterval(Archivable):
     """
     The TimeInterval is the Market time interval. It progresses through
     a series of MarketStates (see MarketState enumeration).
     """
 
-    def __init__(self, activation_time, duration, market, market_clearing_time, start_time):
-        self.active = False  # Boolean
-        self.marketState = MarketState.Inactive  # members are enumeration
-        self.timeStamp = None  # datetime.empty  # when interval is created/modified
-
-        # ACTIVATION TIME - datetime that the TimeInterval becomes Active and
-        # enters the Exploring market state
-        self.activationTime = activation_time  # datetime(at)
-
-        # CONVERGED - convergence flag for possible future use
-        self.converged = False
-
-        # DURATION - duration of interval[hr]
-        # Ensure that content is a duration [hr]
-        if isinstance(duration, timedelta):
-            self.duration = duration  # TODO: What is it is not? We need to assign something, right?
-
-        # MARKET - Market object that uses this TimeInterval
+    # def __init__(self, activation_time, duration, market, market_clearing_time, start_time):
+    def __init__(self, market, duration, start_time):
+        super(TimeInterval, self).__init__()
+        self.duration = duration if isinstance(duration, timedelta) else timedelta(seconds=duration)
         self.market = market
+        self.start_time: datetime = start_time
 
-        # MARKET CLEARING TIME - time that negotiations stop. Time that
-        # commitments, if used, are in force.
-        self.marketClearingTime = market_clearing_time  # datetime(mct)
+        # The TimeInterval name is used by the transactive record, and must be unique to its market.
+        self.name: str = str(self.market.marketSeriesName) + ":" + format_ts(self.start_time)
 
-        # START TIME - time that interval period begins
-        self.startTime = start_time  # datetime(st)
+    @property
+    def data_manager(self):
+        return self.market.data_manager
 
-        # NAME
-        # 201009DJH: In Version 3, where there can be multiple simultaneous time intervals, let's try appending the
-        #            market name to make sure the time interval is unique to its market.
-        # self.name = helpers.format_ts(self.startTime)
-        self.name = str(self.market.marketSeriesName) + ":" + format_ts(self.startTime)
+    @property
+    def table_name(self):
+        return 'time_interval'
 
-        # RECONCILED - reconciliation flag for possible future use
-        self.reconciled = False
-
-        # MARKET STATE - an enumeration of market states, concerning the
-        #                status of negotiations on this time interval.
-        # ACTIVE - logical true during negotiations, delivery, and
-        #          reconciliation of the time interval
-        # TIME STAMP - the time when the time interval is created or modified
-        # NOTE 1911DJH: The market state of an interval is no longer relevant. A Market owns its market state, and the
-        # market state is relevant to all of its included market time intervals.
-        # self.assign_state(market)
-
-    def assign_state(self, market):
-        # assign_state - assign state of the TimeInterval in its Market.
-        # Enumeration MarketState has all the allowed market state names.
-        # obj - a TimeInterval object. Invoke as "self.assign_state(market)".
-        # market - Market object (see class Market).
-
-        dt = Timer.get_cur_time()
-
-        # State "Expired": The TimeInterval period is over and the interval has
-        # been reconciled in its Market.
-        if (dt >= self.startTime + self.duration) and self.reconciled:
-            self.marketState = MarketState.Expired
-            self.active = False
-            self.timeStamp = dt
-
-        # State "Publish": The TimeInterval period has expired, but it has not
-        # yet been reconciled in its Market.
-        elif dt >= self.startTime + self.duration:
-            self.marketState = MarketState.Publish
-            self.active = True
-            self.timeStamp = dt
-
-        # State "Delivery": Current datetime is within the interval period.
-        elif dt >= self.startTime:
-            self.marketState = MarketState.Delivery
-            self.active = True
-            self.timeStamp = dt
-
-        # State "Transaction": Current datetime exceeds the market clearing time.
-        elif dt >= self.marketClearingTime:
-            self.marketState = MarketState.Transaction
-            self.active = True
-            self.timeStamp = dt
-
-        # State "Tender": TimeInterval is both active and converged.
-        elif dt >= self.activationTime and self.converged:
-            self.marketState = MarketState.Tender
-            self.active = True
-            self.timeStamp = dt
-
-        # State "Exploring": TimeInterval is active, but it has not converged.
-        elif dt >= self.activationTime:
-            self.marketState = MarketState.Exploring
-            self.active = True
-            self.timeStamp = dt
-
-        # State "Inactive": The TimeInterval has not yet become active.
-        elif dt < self.activationTime:
-            self.marketState = MarketState.Inactive
-            self.active = False
-            self.timeStamp = dt
-
-        else:
-            """
-            logging.basicConfig(level=logging.DEBUG,
-                                format='%(asctime)s %(module)s %(name)s.%(funcName)s +%(lineno)s: %(levelname)-8s [%(process)d] %(message)s',
-                                )
-            """
-#            _log.log(logging.ERROR, 'Invalid TimeInterval market state: TimeInterval ' + self.name)
-
-    def get_dict(self):
-        time_interval_dict = {
-            "startTime": self.startTime,
+    def get_record(self) -> dict:
+        record = super(TimeInterval, self).get_record()
+        record.update({
+            "duration": self.duration,
+            "market_id": self.market.id,
             "name": self.name,
-            "duration": self.duration.total_seconds()
-        }
-        return time_interval_dict
+            "start_time": self.start_time
+        })
+        return record
 
-if __name__ == '__main__':
-    # Dummy values for testing
-    activation_time = datetime.now()
-    duration = timedelta(hours=1)
-    market_clearing_time = datetime.now()
-    start_time = datetime.now()
-
-    ti = TimeInterval(activation_time, duration, None, market_clearing_time, start_time)
+    @classmethod
+    def get_archive_definitions(cls) -> list[dict]:
+        definitions = super(TimeInterval, cls).get_archive_definitions()
+        definitions.extend([
+            {
+                "name": "time_interval",
+                "columns": [
+                    {"name": "id", "type": "Uuid", "identity": True, "kwargs": {"primary_key": True}},
+                    {"name": "name", "type": "String", "type_args": [255]},
+                    {"name": "market_id", "foreign_key": "market.id"},
+                    {"name": "start_time", "type": "DateTime"},
+                    {"name": "duration", "type": "DateTimeRangeType"}
+                ],
+                "indices": [
+                    {"name": "idx_ti_instance", "columns": ["market", "start_time", "duration"], "unique": True}
+                ]
+            }
+        ])
+        return definitions

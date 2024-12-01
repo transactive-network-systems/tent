@@ -117,7 +117,7 @@ class OpenLoopLoadPredictor(LocalAsset):
         # for time_interval in time_intervals:
         for time_interval in time_intervals:
             # Extract the start time from the indexed time interval.
-            interval_start_time = time_interval.startTime
+            interval_start_time = time_interval.start_time
 
             if self.temperature_forecaster is None:
                 # No appropriate information service was found, must use a default temperature value.
@@ -229,15 +229,13 @@ class OpenLoopLoadPredictor(LocalAsset):
         # Create and store a couple TimeInterval objects at a known date and
         # time.
         dt = datetime(2017, 11, 1, 12, 0, 0)  # Wednesday Nov. 1, 2017 at noon
-        at = dt
         dur = timedelta(hours=1)
         mkt = test_mkt
-        mct = dt
         st = dt
-        test_intervals = [TimeInterval(at, dur, mkt, mct, st)]
+        test_intervals = [TimeInterval(mkt, dur,st)]
 
         st = st + dur  # 1p on the same day
-        test_intervals.append(TimeInterval(at, dur, mkt, mct, st))
+        test_intervals.append(TimeInterval(mkt, dur, st))
 
         test_mkt.timeIntervals = test_intervals
 
@@ -324,7 +322,7 @@ class OpenLoopLoadPredictor(LocalAsset):
         predictor = OpenLoopLoadPredictor(forecaster)
         predictor.schedule_power(mkt)
 
-        powers = [(x.timeInterval.startTime, x.value) for x in predictor.scheduledPowers]
+        powers = [(x.timeInterval.start_time, x.value) for x in predictor.scheduledPowers]
         total_power = sum([s[1] for s in powers])
 
         print(powers)

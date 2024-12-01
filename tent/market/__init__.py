@@ -760,7 +760,7 @@ class Market(Component):
         final_prices = self.marginalPrices
         _log.debug(f'Final prices are: {[p.value for p in final_prices]}')
         for x in range(len(final_prices)):
-            self.priceModel.update(final_prices[x].timeInterval.startTime, final_prices[x].value)
+            self.priceModel.update(final_prices[x].timeInterval.start_time, final_prices[x].value)
 
         # Tell Local Assets it is time to actuate.
         self._actuate_assets(my_transactive_node)
@@ -780,10 +780,10 @@ class Market(Component):
         for entity in tn.neighbors + tn.localAssets:
             for p in entity.scheduledPowers:
                 if p.timeInterval.market is self:
-                    scheduled_powers[format_timestamp(p.timeInterval.startTime)][entity.name] = p.value
+                    scheduled_powers[format_timestamp(p.timeInterval.start_time)][entity.name] = p.value
         tn.publish('balanced_price_record', {
                        'tnt_market_name': self.name,
-                       'balanced_prices': {format_timestamp(p.timeInterval.startTime): p.value for p in
+                       'balanced_prices': {format_timestamp(p.timeInterval.start_time): p.value for p in
                                            self.marginalPrices},
                        'schedule_powers': scheduled_powers
                    })
@@ -914,7 +914,7 @@ class Market(Component):
 
         for x in self.marginalPrices:  #
             datum = [self.name,
-                     x.timeInterval.startTime,
+                     x.timeInterval.start_time,
                      x.value]
             price_data.append(datum)
 
@@ -959,7 +959,7 @@ class Market(Component):
         for time_interval in self.timeIntervals:
             # Find and delete existing aggregate active vertices in the indexed time interval. They will be recreated.
             self.activeVertices = [x for x in self.activeVertices
-                                   if x.timeInterval.startTime != time_interval.startTime]
+                                   if x.timeInterval.start_time != time_interval.start_time]
 
             # Call the utility sum_vertices to recreate the aggregate vertices in the indexed time interval. (This
             # method is separated out because it will be used by other methods.)
@@ -1033,7 +1033,7 @@ class Market(Component):
             elif self.method == Method.Interpolation:
                 # Get the indexed active system vertices.
                 active_vertices = [x.value for x in self.activeVertices
-                                   if x.timeInterval.startTime == time_intervals[i].startTime]
+                                   if x.timeInterval.start_time == time_intervals[i].start_time]
 
                 # Order the system vertices in the indexed time interval by price and power.
                 active_vertices = order_vertices(active_vertices)
@@ -1209,7 +1209,7 @@ class Market(Component):
 
                 elif self.method == 2:
                     # Get the indexed active system vertices
-                    av = [x.value for x in self.activeVertices if x.timeInterval.startTime == tis[i].startTime]
+                    av = [x.value for x in self.activeVertices if x.timeInterval.start_time == tis[i].start_time]
                     err_msg = ''
 
                     # Order the system vertices in the indexed time interval
@@ -1334,16 +1334,12 @@ class Market(Component):
             # 200924DJH: This check is inadequate in Version 3 because starting times are no longer necessarily unique.
             #            The criterion must be revised to make sure the time interval is also in this market.
             # time_intervals = [x for x in self.timeIntervals if x.startTime == starting_time]
-            time_intervals = [x for x in self.timeIntervals if x.startTime == starting_time and x.market == self]
+            time_intervals = [x for x in self.timeIntervals if x.start_time == starting_time and x.market == self]
 
             if len(time_intervals) == 0:  # None was found. Append a new time interval to the list of time intervals.
-                self.timeIntervals.append(TimeInterval(activation_time=Timer.get_cur_time(),
-                                                       duration=self.intervalDuration,
-                                                       market=self,
-                                                       market_clearing_time=self.marketClearingTime,
-                                                       start_time=starting_time
-                                                       )
-                                          )
+                new_interval = TimeInterval(self, self.intervalDuration, starting_time)
+                new_interval.archive()
+                self.timeIntervals.append(new_interval)
 
             elif len(time_intervals) == 1:  # The TimeInterval already exists. There is really no problem.
                 pass  # All is OK. There's no action to take.
@@ -1358,7 +1354,7 @@ class Market(Component):
                 #  That would already guarantee a single interval for each start time.
                 #  self.timeIntervals is already unique to this market. We only need to check whether to create one.
                 self.timeIntervals = [x for x in self.timeIntervals
-                                      if x.startTime != starting_time and x.market != self]
+                                      if x.start_time != starting_time and x.market != self]
                 # Then append one lone time interval for this starting time.
                 self.timeIntervals.append(time_intervals[0])
 
@@ -1427,9 +1423,9 @@ class Market(Component):
 
                             # and if any are found such that the currently indexed time interval lies within its
                             # timing,
-                            start_time = prior_marginal_price.timeInterval.startTime
+                            start_time = prior_marginal_price.timeInterval.start_time
                             end_time = start_time + prior_market_in_series.intervalDuration
-                            if start_time <= time_interval.startTime < end_time:
+                            if start_time <= time_interval.start_time < end_time:
 
                                 # then capture this value for the new marginal price in this time interval,
                                 marginal_price = prior_marginal_price.value
@@ -1469,9 +1465,9 @@ class Market(Component):
                         # Index through those prior marginal prices.
                         for prior_marginal_price in prior_marginal_prices:
                             # If any are found such that the currently indexed time interval lies within its timing,
-                            start_time = prior_marginal_price.timeInterval.startTime
+                            start_time = prior_marginal_price.timeInterval.start_time
                             end_time = start_time + prior_market.intervalDuration
-                            if start_time <= time_interval.startTime < end_time:
+                            if start_time <= time_interval.start_time < end_time:
                                 # capture this value as the marginal price in this time interval.
                                 marginal_price = prior_marginal_price.value
 
@@ -1488,7 +1484,7 @@ class Market(Component):
                 # METHOD #4. Use the price model to predict marginal price.
                 # 200902DJH: Change elif to if with continue statement.
                 if self.priceModel is not None and marginal_price is None:
-                    marginal_price = self.priceModel.get(time_interval.startTime)[0]
+                    marginal_price = self.priceModel.get(time_interval.start_time)[0]
                     if marginal_price:
                         self.marginalPrices.append(IntervalValue(calling_object=self,
                                                                  time_interval=time_interval,
@@ -1969,7 +1965,7 @@ class Market(Component):
         marginal_prices = [x.value for x in self.marginalPrices]
         marginal_prices.append(marginal_prices[-1])
 
-        start_times = [x.timeInterval.startTime for x in self.marginalPrices]
+        start_times = [x.timeInterval.start_time for x in self.marginalPrices]
         start_times.append(start_times[-1] + self.intervalDuration)
 
         fig, ax = plt.subplots()
