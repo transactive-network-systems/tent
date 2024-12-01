@@ -52,7 +52,7 @@ from tent.containers.time_interval import TimeInterval
 # from neighbor_model import Neighbor
 # from local_asset_model import LocalAsset
 # from TransactiveNode import TransactiveNode
-from tent.neighbor.bulk_supplier_dc import BulkSupplier_dc
+from tent.neighbor.bulk_supplier_dc import BulkSupplierDC
 # from const import *
 
 
@@ -62,7 +62,7 @@ def test_update_vertices():
     print('Case 1: Expect two active vertices when neither demand charges nor losses are in play. ')
     dt = datetime.now()
     dt = dt.replace(hour=1, month=1)  # an example LLH hour
-    test_neighbor = BulkSupplier_dc()
+    test_neighbor = BulkSupplierDC()
     test_neighbor.maximumPower = 100
     test_neighbor.minimumPower = 0
     test_neighbor.lossFactor = 0
@@ -96,7 +96,7 @@ def test_update_vertices():
     print('Case 2: Same as Case 1, but let demand charges be in play. ')
     dt = datetime(2021, 3, 3, 13)
     # dt = dt.replace(hour=10, month=1)  # an example HLH hour
-    test_neighbor = BulkSupplier_dc()
+    test_neighbor = BulkSupplierDC()
     test_neighbor.maximumPower = 100
     test_neighbor.minimumPower = 0
     test_neighbor.lossFactor = 0

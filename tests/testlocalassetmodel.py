@@ -103,7 +103,7 @@ def test_calculate_reserve_margin():
     test_model = LocalAsset()
     test_model.scheduledPowers = [
         IntervalValue(test_model, ti, test_mkt, MeasurementType.ScheduledPower, 0.0)]
-    test_model.maximumPower = 100
+    test_model.maximum_power = 100
 
     # Run the first test case.
     print("  Case 1:")
@@ -115,7 +115,7 @@ def test_calculate_reserve_margin():
 
     assert len(test_model.reserveMargins) == 1, 'An unexpected number of results were stored'
 
-    assert test_model.reserveMargins[0].value == test_model.maximumPower, \
+    assert test_model.reserveMargins[0].value == test_model.maximum_power, \
                                                                 'The method did not use the available maximum power'
 
     # create some vertices and store them
@@ -126,7 +126,7 @@ def test_calculate_reserve_margin():
     test_model.activeVertices = iv
 
     print("  Case 2: test with maximum power greater than maximum vertex")
-    test_model.maximumPower = 100
+    test_model.maximum_power = 100
     try:
         test_model.calculate_reserve_margin(test_mkt)
         print('  The test ran without errors')
@@ -136,7 +136,7 @@ def test_calculate_reserve_margin():
     assert test_model.reserveMargins[0].value == 10, 'The method should have used vertex for comparison'
 
     print("  Case 3: test with maximum power less than maximum vertex")
-    test_model.maximumPower = 5
+    test_model.maximum_power = 5
     try:
         test_model.calculate_reserve_margin(test_mkt)
         print('  The test ran without errors')
@@ -147,7 +147,7 @@ def test_calculate_reserve_margin():
 
     print("  Case 4: test with scheduled power greater than maximum vertex")
     test_model.scheduledPowers[0].value = 20
-    test_model.maximumPower = 500
+    test_model.maximum_power = 500
     try:
         test_model.calculate_reserve_margin(test_mkt)
         print('  The test ran without errors')
@@ -179,7 +179,7 @@ def test_cost():
     print('  Case 2: No power parameter is used')
     test_value = 1.234
     immutable_trio = (test_value, 0, 0)
-    test_asset.costParameters = immutable_trio
+    test_asset.cost_parameters = immutable_trio
 
     try:
         production_cost = test_asset.cost()
@@ -190,7 +190,7 @@ def test_cost():
     assert production_cost == test_value, 'The production cost should have been provided test value'
 
     print('  Case 3: Full calculation')
-    test_asset.costParameters = [1, 1, 1]
+    test_asset.cost_parameters = [1, 1, 1]
     power = 10
 
     try:
@@ -212,7 +212,7 @@ def test_engagement_cost():
     test_model = LocalAsset()
 
     #   Assign engagement costs for [dissengagement, hold, engagement]
-    test_model.engagementCost = [1, 2, 3]
+    test_model.engagement_cost = [1, 2, 3]
 
     # TEST 1
     print('  Test 1a: Normal transition input arguments [-1,0,1]')
@@ -376,7 +376,7 @@ def test_schedule_power():
     #   Establish test model that is a LocalAsset with a default power
     #   property.
     test_model = LocalAsset()
-    test_model.defaultPower = 3.14159
+    test_model.default_power = 3.14159
 
     #   Run the first test case.
     print("  Case 1: Power is scheduled for two time intervals.")
@@ -391,11 +391,11 @@ def test_schedule_power():
 
     # Where the correct scheduled power values stored?
     # if any([test_model.scheduledPowers.value] != test_model.defaultPower * ones(1, 2))
-    assert all([x.value == test_model.defaultPower for x in test_model.scheduledPowers]), \
+    assert all([x.value == test_model.default_power for x in test_model.scheduledPowers]), \
         'The stored scheduled powers were not as expected'
 
     # Change the default power.
-    test_model.defaultPower = 6
+    test_model.default_power = 6
 
     #   Create and store another active time interval.
     st = ti[1].start_time + dur
@@ -416,7 +416,7 @@ def test_schedule_power():
     assert len(test_model.scheduledPowers) == 3, 'The method failed to create a new scheduled power'
 
     # Were the existing time intervals reassigned properly?
-    assert all([x.value == test_model.defaultPower for x in test_model.scheduledPowers]), \
+    assert all([x.value == test_model.default_power for x in test_model.scheduledPowers]), \
         '- existing scheduled powers were not reassigned properly'
 
     # Success.
@@ -576,8 +576,8 @@ def test_update_vertices():
         IntervalValue(test_model, time_interval, test_market, MeasurementType.ScheduledPower, 50)]
 
     #   Create maximum and minimum powers.
-    test_model.maximumPower = 200
-    test_model.minimumPower = 0
+    test_model.maximum_power = 200
+    test_model.minimum_power = 0
 
     # TEST 1
     print('- Test 1: Basic operation')
@@ -613,7 +613,7 @@ def test_get_extended_prices():
     test_asset_model = LocalAsset()
     # test_asset = test_asset_model
     # test_asset_model.object = test_asset
-    test_asset_model.schedulingHorizon = timedelta(hours=0.5)
+    test_asset_model.scheduling_horizon = timedelta(hours=0.5)
     test_market = Market()
     test_interval = TimeInterval(test_market, timedelta(hours=1), now)
     price = 3.14159
@@ -650,7 +650,7 @@ def test_get_extended_prices():
 
     test_asset_model = LocalAsset()
 
-    test_asset_model.schedulingHorizon = timedelta(hours=1.5)  # Should cause asset to use prior market
+    test_asset_model.scheduling_horizon = timedelta(hours=1.5)  # Should cause asset to use prior market
 
 
 
@@ -722,7 +722,7 @@ def test_get_extended_prices():
     test_asset_model = LocalAsset()
     # test_asset.model = test_asset_model
     # test_asset_model.object = test_asset
-    test_asset_model.schedulingHorizon = timedelta(hours=2.5)  # Should cause asset to use prior market
+    test_asset_model.scheduling_horizon = timedelta(hours=2.5)  # Should cause asset to use prior market
 
     test_market = Market(
         market_series_name="Test Market",
@@ -814,7 +814,7 @@ def test_get_extended_prices():
     # The test setup is such that the local asset should use Methods 1 & 4 to find four marginal prices.
     now = datetime.now()
     test_asset_model = LocalAsset()
-    test_asset_model.schedulingHorizon = timedelta(hours=3.5)  # Should cause asset to use prior market
+    test_asset_model.scheduling_horizon = timedelta(hours=3.5)  # Should cause asset to use prior market
 
     test_market = Market(
         market_series_name="Test Market",
@@ -866,7 +866,7 @@ def test_get_extended_prices():
 
     test_asset_model = LocalAsset()
 
-    test_asset_model.schedulingHorizon = timedelta(hours=4.5)
+    test_asset_model.scheduling_horizon = timedelta(hours=4.5)
 
     default_price = 1.2345
     test_market = Market(

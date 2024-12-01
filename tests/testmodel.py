@@ -113,7 +113,7 @@ def test_schedule():
     test_mdl = LocalAsset()
     # test_obj.model = test_mdl
     # test_mdl.object = test_obj
-    test_mdl.maximumPower = 100
+    test_mdl.maximum_power = 100
 
     print('- running test with a LocalAsset:')
 
@@ -190,7 +190,7 @@ def test_update_costs():
     test_mdl = LocalAsset()
     # test_obj.model = test_mdl
     # test_mdl.object = test_obj
-    test_mdl.maximumPower = 100
+    test_mdl.maximum_power = 100
 
     test_mdl.scheduledPowers = [IntervalValue(test_mdl, ti, test_mkt, MeasurementType.ScheduledPower, 100)]
     test_mdl.activeVertices = [IntervalValue(test_mdl, ti, test_mkt,

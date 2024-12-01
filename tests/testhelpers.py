@@ -212,7 +212,7 @@ def test_prod_cost_from_formula():
     test_market = Market()
 
     #   Create and store the object's cost parameters
-    test_object.costParameters = [4, 3, 2]
+    test_object.cost_parameters = [4, 3, 2]
 
     #   Create and store three hourly TimeIntervals
     #   Modified to use the TimeInterval constructor.

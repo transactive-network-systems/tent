@@ -57,7 +57,7 @@ from tent.containers.time_interval import TimeInterval
 from tent.neighbor import Neighbor
 from tent.local_asset import LocalAsset
 from tent.transactive_node import TransactiveNode
-from tent.neighbor.bulk_supplier_dc import BulkSupplier_dc
+from tent.neighbor.bulk_supplier_dc import BulkSupplierDC
 
 
 def test_calculate_reserve_margin():
@@ -816,7 +816,7 @@ def test_update_dc_threshold():
 
     # Basic configuration for tests:
     # Create a test object and initialize demand-related properties
-    test_obj = BulkSupplier_dc()
+    test_obj = BulkSupplierDC()
     test_obj.demandMonth = dt.month
     test_obj.demandThreshold = 1000
 

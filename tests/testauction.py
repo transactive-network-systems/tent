@@ -65,7 +65,7 @@ def test_while_in_negotiation():
 
     test_asset = LocalAsset()
     default_power = 4.321
-    test_asset.defaultPower = default_power
+    test_asset.default_power = default_power
 
     test_market = Auction()
     test_market.converged = False
