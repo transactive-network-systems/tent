@@ -57,7 +57,7 @@ setup_logging()
 _log = logging.getLogger(__name__)
 
 
-class BulkSupplier_dc(Neighbor):
+class BulkSupplierDC(Neighbor):
     # BulkSupplier Neighbor subclass - Represents non-transactive neighbor, including demand charges
     #
     # Created to represent large, non-transactive electricity supplier BPA in its relationship to a municipality.
@@ -66,7 +66,7 @@ class BulkSupplier_dc(Neighbor):
     # - Mines tables to determine monthly electricity and demand rates in HLH and LLH hour types.
 
     def __init__(self, *args, **kwargs):
-        super(BulkSupplier_dc, self).__init__(*args, **kwargs)
+        super(BulkSupplierDC, self).__init__(*args, **kwargs)
         self.transactive = False
 
     def update_vertices(self, market):
