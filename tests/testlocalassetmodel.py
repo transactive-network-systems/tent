@@ -629,7 +629,7 @@ def test_get_extended_prices():
     test_mtn.localAssets = [test_asset_model]
 
     assert len(test_market.marginalPrices) == 1, 'The market was supposed to have a marginal price'
-    assert datetime.now() + test_asset_model.schedulingHorizon \
+    assert datetime.now() + test_asset_model.scheduling_horizon \
            < test_market.timeIntervals[0].start_time + test_market.intervalDuration, \
         'For this test, the existing marginal price intervals should not extend beyond the scheduling horizon.'
 
