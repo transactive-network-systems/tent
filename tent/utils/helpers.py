@@ -46,6 +46,7 @@ import dateutil
 import logging
 import math
 import pytz
+import re
 
 from datetime import datetime, timedelta
 
@@ -53,6 +54,13 @@ from tent.utils.log import setup_logging
 
 setup_logging()
 _log = logging.getLogger(__name__)
+
+first_cap_re = re.compile('(.)([A-Z][a-z]+)')
+all_cap_re = re.compile('([a-z\d])([A-Z])')
+
+def camel_to_snake(name):
+    s1 = first_cap_re.sub(r'\1_\2', name)
+    return all_cap_re.sub(r'\1_\2', s1).lower()
 
 
 def validate_bool(value, name):
@@ -370,7 +378,7 @@ def prod_cost_from_formula(obj, ti):
     # cost - production cost in absolute dollars for time interval ti [$]
 
     # Get the object's quadratic cost coefficients
-    a = obj.costParameters
+    a = obj.cost_parameters
 
     # Find the scheduled power sp in time interval ti
     sp = find_obj_by_ti(obj.scheduledPowers, ti)

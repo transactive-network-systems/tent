@@ -42,12 +42,13 @@ under Contract DE-AC05-76RL01830
 """
 
 
-# 240206DJH: Moved method order_vertices here from line 103.
+from tent import Archivable
 from tent.utils.helpers import validate_bool, order_vertices
 
 
-class Vertex:
+class Vertex(Archivable):
     def __init__(self, marginal_price, prod_cost, power, continuity=True, power_uncertainty=0.0, record=0):
+        super(Vertex, self).__init__()
         # Production cost. A dynamic representation of the delivered cost. An ideal is that the cost of electricity
         # using this price should be equivalent to revenue payments over extended time periods. Local assets and
         # neighbor "friends" (meaning belonging to the same business entity) may be offered the "recovery cost" that
@@ -146,3 +147,36 @@ class Vertex:
         v_star = order_vertices(v_star)
 
         return v_star[:], ivf
+
+    @property
+    def data_manager(self):
+        return self.sd_curve.market.data_manager
+        # TODO: Need references to sd_curve?
+
+    @property
+    def table_name(self):
+        return 'vertex'
+
+    def get_record(self) -> dict:
+        # TODO: Need get_record implemented.
+        raise NotImplementedError
+
+    @classmethod
+    def get_archive_definitions(cls) -> list[dict]:
+        definitions = super(Vertex, cls).get_archive_definitions()
+        definitions.extend([
+            {
+                "name": "vertex",
+                "columns": [
+                    {"name": "curve_id", "foreign_key": "sd_curve.id"},
+                    {"name": "id", "type": "Uuid", "identity": True, "kwargs": {"primary_key": True}},
+                    {"name": "marginal_price", "type": "Float"},
+                    {"name": "power", "type": "Float"},
+                    {"name": "prod_cost", "type": "Float"},
+                    {"name": "continuity", "type": "Boolean"},
+                    {"name": "power_uncertainty", "type": "Float"},
+                    {"name": "record", "type": "Integer"}
+                ]
+            }
+        ])
+        return definitions

@@ -49,6 +49,7 @@ from datetime import datetime, timedelta
 from operator import attrgetter
 from typing import Union
 
+from tent import Entity
 from tent.utils.data_manager import append_table
 from tent.enumerations.direction import Direction
 from tent.utils.helpers import (are_different1, are_different2, find_obj_by_ti, find_objs_by_ti, format_ts,
@@ -69,7 +70,7 @@ _log = logging.getLogger(__name__)
 # 191217DJH: This class had originally inherited from class Model. Model will be deleted.
 
 
-class Neighbor:
+class Neighbor(Entity):
     # The Neighbor class manages the interface with a Neighbor object and represents it for the computational agent.
     # Members of the transactive network must be indicated by setting the "transactive" property true.
 
@@ -84,6 +85,7 @@ class Neighbor:
                  description='',
                  effective_impedance=0.0,
                  friend=False,
+                 information_services=None,
                  location='',
                  loss_factor=0.01,
                  maximum_power=0.0,
@@ -96,8 +98,8 @@ class Neighbor:
                  transactive_node=None,
                  up_or_down: Union[Direction, int, str] = Direction.unknown):
 
-        super(Neighbor, self).__init__()
-
+        super(Neighbor, self).__init__(cost_parameters, default_vertices, description, information_services, location,
+                                       maximum_power, meter_points, minimum_power, name, transactive_node)
         self.tn = None if transactive_node is None else weakref.ref(transactive_node)
 
         self.convergenceThreshold = float(convergence_threshold)      # [Small positive fraction]: May affect negotiations
@@ -133,17 +135,6 @@ class Neighbor:
         # [IntervalValue] Values are [Vertices]
         self.defaultVertices = [Vertex(float("inf"), 0.0, 1)] if default_vertices is None \
             else Vertex.vertex_list(default_vertices)
-
-        # [MeterPoint] See class MeterPoint
-        if meter_points is None:
-            self.meterPoints = []
-        elif all([isinstance(mp, MeterPoint) for mp in meter_points]):
-            self.meterPoints = [weakref.ref(mp) for mp in meter_points]
-        elif all([isinstance(mp, str) for mp in meter_points]) and self.tn and self.tn():
-            self.meterPoints = [weakref.ref(mp) for mp in self.tn().get_meters_by_attribute('name', meter_points)]
-        else:
-            raise ValueError(f'All meter points assigned to Neighbor {self.name} must be an instance of class'
-                             f' MeterPoint or the name of a MeterPoint held by the TransactiveNode.')
 
         # These properties and lists are to be dynamically assigned. An implementer would usually not manually assign
         # these properties.
@@ -521,7 +512,7 @@ class Neighbor:
 
         # Find the MeterPoint that is configured to measure average demand for this Neighbor. The determination is
         # based on the meter's MeasurementType.
-        mtr = [x() for x in self.meterPoints if x() and x().measurementType == MeasurementType.AverageDemandkW]
+        mtr = [x for x in self.meterPoints if x.measurementType == MeasurementType.AverageDemandkW]
         mtr = mtr[0] if len(mtr) > 0 else None
 
         if mtr is None:
@@ -1519,7 +1510,7 @@ class Neighbor:
             return
         if curves is None:
             # _log.warning(f'{market.name}  Received Transactive signal is None. {this_transactive_node.name}')
-            _log.warning(f'Received Transactive signal is None. {this_transactive_node.name}')
+            _log.warning(f'Received Transactive signal is None. {tn.name}')
             return
         elif isinstance(curves, dict) and 'curves' in curves:
             curves = curves['curves']
@@ -1930,6 +1921,53 @@ class Neighbor:
             "sent_signal": sent_signal
         }
         return neighbor_dict
+
+    @property
+    def table_name(self):
+        return 'neighbor'
+
+    def get_record(self) -> dict:
+        record = super(Neighbor, self).get_record()
+        record.update({
+            'id': self.id,
+            # 'last_updated': self.last_updated, TODO: Did this come from old schema?
+            'convergence_threshold': self.convergenceThreshold,
+            'demand_month': self.demandMonth,
+            'demand_rate': self.demandRate,
+            'demand_threshold': self.demandThreshold,
+            'demand_threshold_coefficient': self.demandThresholdCoef,
+            'effective_impedance': self.effectiveImpedance,
+            'friend': self.friend,
+            'loss_factor': self.lossFactor,
+            'transactive': self.transactive,
+            'up_or_down': self.upOrDown
+        })
+        return record
+
+    @classmethod
+    def get_archive_definitions(cls) -> list[dict]:
+        definitions = super(Neighbor, cls).get_archive_definitions()
+        definitions.extend([
+            {
+                "name": "neighbor",
+                "inherits": "entity",
+                "columns": [
+                    {"name": "id", "foreign_key": "entity.id", "kwargs": {"primary_key": True}},
+                    # {"name": "last_updated", "type": "DateTime"},
+                    {"name": "convergence_threshold", "type": "Float"},
+                    {"name": "demand_month", "type": "Integer"},
+                    {"name": "demand_rate", "type": "Float"},
+                    {"name": "demand_threshold", "type": "Float"},
+                    {"name": "demand_threshold_coefficient", "type": "Float"},
+                    {"name": "effective_impedance", "type": "Float"},
+                    {"name": "friend", "type": "Boolean"},
+                    {"name": "loss_factor", "type": "Float"},
+                    {"name": "transactive", "type": "Boolean"},
+                    {"name": "up_or_down", "enumeration": "Direction"}
+                ]
+            }
+        ])
+        return definitions
 
 
 if __name__ == '__main__':

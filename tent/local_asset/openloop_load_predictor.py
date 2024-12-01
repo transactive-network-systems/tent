@@ -46,12 +46,13 @@ import logging
 from datetime import timedelta
 from typing import List
 
-from tent.utils.helpers import find_obj_by_ti
+
 from tent.containers.interval_value import IntervalValue
-from tent.local_asset import LocalAsset
+from tent.enumerations.market_state import MarketState
 from tent.enumerations.measurement_type import MeasurementType
 from tent.information_service_model.temperature_forecast_model import TemperatureForecastModel
-from tent.enumerations.market_state import MarketState
+from tent.local_asset import LocalAsset
+from tent.utils.helpers import find_obj_by_ti
 from tent.utils.log import setup_logging
 
 setup_logging()
@@ -95,7 +96,9 @@ class OpenLoopLoadPredictor(LocalAsset):
         self.dow_intercept = dow_intercept
         self.season = season
         self.values = values
-        self.temperature_forecaster = self.informationServices[0]
+        # TODO: This should probably allow configuration of a named ism instead.
+        self.temperature_forecaster = next((s for s in self.informationServices
+                                            if s.informationType == MeasurementType.Temperature), None)
         self.scale_factor = scale_factor
 
     def schedule_power(self, mkt):
@@ -214,6 +217,7 @@ class OpenLoopLoadPredictor(LocalAsset):
 
     @classmethod
     def test_schedule_power(cls):
+        from datetime import datetime
         from tent.market import Market
         from tent.containers.time_interval import TimeInterval
         print('Running test_schedule_power()')
@@ -325,6 +329,39 @@ class OpenLoopLoadPredictor(LocalAsset):
 
         print(powers)
         print(total_power)
+
+    @property
+    def table_name(self):
+        return 'open_loop_load_predictor'
+
+    def get_record(self) -> dict:
+        record = super(OpenLoopLoadPredictor, self).get_record()
+        record.update({
+            'asset_id': self.id,
+            'dow_intercept': self.dow_intercept,
+            'season': self.season,
+            'values': self.values,
+            'scale_factor': self.scale_factor
+        })
+        return record
+
+    @classmethod
+    def get_archive_definitions(cls) -> list[dict]:
+        definitions = super(OpenLoopLoadPredictor, cls).get_archive_definitions()
+        definitions.extend([
+            {
+                "name": "open_loop_load_predictor",
+                "inherits": "local_asset",
+                "columns": [
+                    {"name": "asset_id", "foreign_key": "local_asset.id", "kwargs": {"primary_key": True}},
+                    {"name": "dow_intercept", "type": "JSON"},
+                    {"name": "season", "type": "JSON"},
+                    {"name": "values", "type": "JSON"},
+                    {"name": "scale_factor", "type": "Float"}
+                ]
+            }
+        ])
+        return definitions
 
 
 if __name__ == '__main__':

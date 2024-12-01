@@ -41,11 +41,12 @@ operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
 
+from tent import Archivable
 from tent.containers.time_interval import TimeInterval
 from tent.utils.timer import Timer
 
 
-class TransactiveRecord:
+class TransactiveRecord(Archivable):
     def __init__(self,
                  time_interval,
                  neighbor_name='unknown',  # Name of Neighbor object that owns this record
@@ -60,7 +61,7 @@ class TransactiveRecord:
                  reactive_power_uncertainty=0.0,
                  voltage=0.0,
                  voltage_uncertainty=0.0):
-
+        super(TransactiveRecord, self).__init__()
         # These are the four normal arguments of the constructor. NOTE: Use the time interval ti text name, not a
         # TimeInterval object itself.
         if isinstance(time_interval, TimeInterval):
@@ -109,3 +110,43 @@ class TransactiveRecord:
             "power": self.power
         }
         return transactive_record_dict
+
+    @property
+    def data_manager(self):
+        return self.tn().data_manager
+        # TODO: There need to be actual references to the neighbor, market, and tn objects.
+
+    @property
+    def table_name(self):
+        return 'transactive_record'
+
+    def get_record(self) -> dict:
+        # TODO: Need get_record implemented.
+        raise NotImplementedError
+
+    @classmethod
+    def get_archive_definitions(cls) -> list[dict]:
+        definitions = super(TransactiveRecord, cls).get_archive_definitions()
+        definitions.extend([
+            {
+                "name": "transactive_record",
+                "columns": [
+                    {"name": "time_stamp", "type": "DateTime"},
+                    {"name": "id", "type": "Uuid", "identity": True, "kwargs": {"primary_key": True}},
+                    {"name": "neighbor_id", "foreign_key": "neighbor.id"},
+                    {"name": "node_id", "foreign_key": "transactive_node.id"},
+                    {"name": "direction", "enumeration": "Direction"},
+                    {"name": "time_interval_id", "foreign_key": "time_interval.id"},
+                    {"name": "record_number", "type": "Integer"},
+                    {"name": "price", "type": "Float"},
+                    {"name": "real_power", "type": "Float"},
+                    {"name": "real_power_uncertainty", "type": "Float"},
+                    {"name": "cost", "type": "Float"},
+                    {"name": "reactive_power", "type": "Float"},
+                    {"name": "reactive_power_uncertainty", "type": "Float"},
+                    {"name": "voltage", "type": "Float"},
+                    {"name": "voltage_uncertainty", "type": "Float"}
+                ]
+            }
+        ])
+        return definitions

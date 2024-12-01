@@ -63,31 +63,8 @@ on_peak_vertex1 = Vertex(marginal_price=0.05,
 
 class SimpleBuilding(LocalAsset):
 
-    def __init__(self,
-                 cost_parameters=(0.0, 0.0, 0.0),
-                 default_power=10.0,
-                 description='A simple test building with time-invariant flexibility.',
-                 engagement_cost=(0.0, 0.0, 0.0),
-                 location='',
-                 maximum_power=0.0,
-                 minimum_power=-50,
-                 name='Very_Simple_Building',
-                 schedule_calculated=False,
-                 scheduling_horizon=timedelta(hours=0),
-                 subclass=None,
-                 *args, **kwargs):
-        super(LocalAsset, self).__init__(cost_parameters=cost_parameters,
-                                         default_power=default_power,
-                                         description=description,
-                                         engagement_cost=engagement_cost,
-                                         location=location,
-                                         maximum_power=maximum_power,
-                                         minimum_power=minimum_power,
-                                         name=name,
-                                         schedule_calculated=schedule_calculated,
-                                         scheduling_horizon=scheduling_horizon,
-                                         subclass=subclass,
-                                         *args, **kwargs)  # Inherit from any parent class
+    def __init__(self, *args, **kwargs):
+        super(SimpleBuilding, self).__init__(*args, **kwargs)  # Inherit from any parent class
         self.defaultVertices = [off_peak_vertex,
                                 on_peak_vertex0,
                                 on_peak_vertex1

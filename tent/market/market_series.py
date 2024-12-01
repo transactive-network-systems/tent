@@ -3,12 +3,13 @@ import weakref
 from datetime import time, timedelta
 from typing import Union
 
+from tent import Component
 from tent.enumerations.market_state import MarketState
 from tent.enumerations.market_types import MarketTypes
 from tent.enumerations.method import Method
-from tent.utils.helpers import validate_bool
-from tent.market.price_models.hourly_average_price_model import HourlyAveragePriceModel
 from tent.market import Market
+from tent.market.price_models.hourly_average_price_model import HourlyAveragePriceModel
+from tent.utils.helpers import validate_bool
 
 
 # 240228DJH: TODO: Make MarketSeries reference another market series that is to be revised or corrected. If this is
@@ -16,7 +17,7 @@ from tent.market import Market
 #                  revised or corrected. (This is pretty low priority)
 
 
-class MarketSeries:
+class MarketSeries(Component):
     """
     An object of this class contains all the critical timing and initialization properties of the market objects in a
     series of similar market objects. These properties were initially owned by the market objects and had to be passed
@@ -33,6 +34,7 @@ class MarketSeries:
                  default_price: float = 0.05,
                  delivery_anchor_time=None,
                  delivery_lead_time: Union[timedelta, float, int] = timedelta(hours=0),
+                 description='',
                  duality_gap_threshold=0.01,
                  future_horizon: Union[timedelta, float, int] = timedelta(hours=24),
                  initial_market_state: Union[MarketState, str, int] = MarketState.Inactive,
@@ -42,13 +44,12 @@ class MarketSeries:
                  market_clearing_interval: Union[timedelta, float, int] = timedelta(hours=1),
                  market_lead_time: Union[timedelta, float, int] = timedelta(hours=0),
                  market_order=1,
-                 market_series_name='Market Series',
                  market_type: Union[MarketTypes, str, int] = MarketTypes.unknown,
                  method: Union[Method, str, int] = Method.Interpolation,
+                 name='Market Series',
                  negotiation_lead_time: Union[timedelta, float, int] = timedelta(hours=0),
                  transactive_node=None):
-        # Weak reference to myTransactiveNode object:
-        self.tn = weakref.ref(transactive_node) if transactive_node and transactive_node() else None
+        super(MarketSeries, self).__init__(description, name, transactive_node)
         self._activationLeadTime = activation_lead_time if isinstance(activation_lead_time, timedelta) \
             else timedelta(seconds=activation_lead_time)  # [timedelta] Time in market state "Active"
         self.commitment = validate_bool(commitment, 'commitment')  # [Boolean] If true, scheduled power & price are
@@ -72,7 +73,7 @@ class MarketSeries:
         self._marketLeadTime = market_lead_time if isinstance(market_lead_time, timedelta) \
             else timedelta(seconds=market_lead_time)  # [timedelta] Time in market state "MarketLead"
         self.marketOrder = int(market_order)  # [pos. integer] Ordering of sequential markets  (Unused)
-        self.marketSeriesName = str(market_series_name)  # Name of this class object. Replaces use of a market series
+        self.marketSeriesName = str(name)  # Name of this class object. Replaces use of a market series
         #                                                  name to bind markets
         self.marketType = market_type if isinstance(market_type, MarketTypes) \
             else MarketTypes[market_type]  # [MarketTypes] enumeration
@@ -122,7 +123,7 @@ class MarketSeries:
             market_series=self,
             market_clearing_time=None
         )
-        # 240221DJH: The market series, not myTransactiveNode, should keep track of its own acctive markets. We
+        # 240221DJH: The market series, not myTransactiveNode, should keep track of its own active markets. We
         #            might have to manage BOTH places until this new architecture is proven and stable.
         self.activeMarkets = [initial_market]
 
@@ -159,3 +160,64 @@ class MarketSeries:
     @property
     def initialMarketState(self):
         return self._initialMarketState
+
+    @property
+    def table_name(self):
+        return 'market_series'
+
+    def get_record(self) -> dict:
+        record = super(MarketSeries, self).get_record()
+        record.update({
+            'id': self.id,
+            'market_class': self.marketClass,
+            'commitment': self.commitment,
+            'default_price': self.defaultPrice,
+            'duality_gap_threshold': self.dualityGapThreshold,
+            'future_horizon': self.futureHorizon,
+            'initial_market_state': self.initialMarketState,
+            'market_clearing_interval': self.marketClearingInterval,
+            'interval_duration': self.intervalDuration,
+            'number_of_intervals_to_clear': self.intervalsToClear,
+            'market_order': self.marketOrder,
+            'method': self.method,
+            'delivery_anchor_time': self.deliveryAnchorTime,
+            'active_duration': self.active_duration,
+            'negotiation_duration': self.negotiationLeadTime,
+            'market_lead_duration': self.marketLeadTime,
+            'delivery_lead_duration': self.deliveryLeadTime,
+            'delivery_duration': self.deliveryLeadTime,
+            'reconciliation_duration': self.reconciliation_duration
+        })
+        return record
+
+    @classmethod
+    def get_archive_definitions(cls) -> list[dict]:
+        definitions = super(MarketSeries, cls).get_archive_definitions()
+        definitions.extend([
+            {
+                "name": "market_series",
+                "inherits": "component",
+                "columns": [
+                    {"name": "id", "foreign_key": "component.id", "kwargs": {"primary_key": True}},
+                    {"name": "market_class", "type": "String", "type_args": [255]},
+                    {"name": "commitment", "type": "Boolean"},
+                    {"name": "default_price", "type": "Float"},
+                    {"name": "duality_gap_threshold", "type": "Float"},
+                    {"name": "future_horizon", "type": "DateTimeRangeType"},
+                    {"name": "initial_market_state", "enumeration": "MarketState"},
+                    {"name": "market_clearing_interval", "type": "DateTimeRangeType"},
+                    {"name": "interval_duration", "type": "DateTimeRangeType"},
+                    {"name": "number_of_intervals_to_clear", "type": "Integer"},
+                    {"name": "market_order", "type": "Integer"},
+                    {"name": "method", "enumeration": "Method"},
+                    {"name": "delivery_anchor_time", "type": "Time"},
+                    {"name": "active_duration", "type": "DateTimeRangeType"},
+                    {"name": "negotiation_duration", "type": "DateTimeRangeType"},
+                    {"name": "market_lead_duration", "type": "DateTimeRangeType"},
+                    {"name": "delivery_lead_duration", "type": "DateTimeRangeType"},
+                    {"name": "delivery_duration", "type": "DateTimeRangeType"},
+                    {"name": "reconciliation_duration", "type": "DateTimeRangeType"}
+                ]
+            }
+        ])
+        return definitions

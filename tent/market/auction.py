@@ -86,11 +86,9 @@ class Auction(Market):
         self.converged = False
 
         # In an auction, each asset is called upon once per market clearing time to schedule its power.
-        for x in range(len(my_transactive_node.localAssets)):
-            local_asset = my_transactive_node.localAssets[x]  # the indexed local asset
-
+        for local_asset in my_transactive_node.localAssets:
             # Set each local asset's schedule flag false prior to the Negotiation market state.
-            local_asset.scheduleCalculated = False
+            local_asset.schedule_calculated = False
 
             # Call on the local asset to schedule its power.
             local_asset.schedule(self)
@@ -112,7 +110,7 @@ class Auction(Market):
             # An Auction should check that all LocalAsset objects have finished scheduling their powers.
             all_calculated = True
             for local_asset in my_transactive_node.localAssets:
-                if not local_asset.scheduleCalculated:
+                if not local_asset.schedule_calculated:
                     all_calculated = False
                     break
 

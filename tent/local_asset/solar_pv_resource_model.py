@@ -43,11 +43,11 @@ under Contract DE-AC05-76RL01830
 import logging
 import math
 
-from tent.utils.helpers import find_obj_by_ti
-from tent.enumerations.measurement_type import MeasurementType
-from tent.local_asset import LocalAsset
 from tent.containers.interval_value import IntervalValue
 from tent.enumerations.market_state import MarketState
+from tent.enumerations.measurement_type import MeasurementType
+from tent.local_asset import LocalAsset
+from tent.utils.helpers import find_obj_by_ti
 from tent.utils.log import setup_logging
 
 setup_logging()
@@ -102,7 +102,7 @@ class SolarPvResource(LocalAsset):
 
                 # A sinusoidal function is used to forecast solar generation during the normally sunny part of a day.
                 power = 0.5 * (1 + math.cos((h - 12) * 2.0 * math.pi / 12))
-                power = self.maximumPower * power
+                power = self.maximum_power * power
                 power = self.cloudFactor * power                                        # [avg.kW]
 
             # Check whether a scheduled power exists in the indexed time interval.
@@ -163,6 +163,33 @@ class SolarPvResource(LocalAsset):
         #            markets.
         # self.engagementSchedule = [x for x in self.engagementSchedule if x.timeInterval in time_intervals]
         self.engagementSchedule = [x for x in self.engagementSchedule if x.market.marketState != MarketState.Expired]
+
+    @property
+    def table_name(self):
+        return 'solar_pv_resource'
+
+    def get_record(self) -> dict:
+        record = super(SolarPvResource, self).get_record()
+        record.update({
+            'asset_id': self.id,
+            'cloud_factor': self.cloudFactor
+        })
+        return record
+
+    @classmethod
+    def get_archive_definitions(cls) -> list[dict]:
+        definitions = super(SolarPvResource, cls).get_archive_definitions()
+        definitions.extend([
+            {
+                "name": "solar_pv_resource",
+                "inherits": "local_asset",
+                "columns": [
+                    {"name": "asset_id", "foreign_key": "local_asset.id", "kwargs": {"primary_key": True}},
+                    {"name": "cloud_factor", "type": "Float"}
+                ]
+            }
+        ])
+        return definitions
 
 
 if __name__ == '__main__':

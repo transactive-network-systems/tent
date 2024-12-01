@@ -47,13 +47,14 @@ from datetime import datetime, timedelta
 from dateutil import parser
 from typing import Union
 
-from tent.enumerations.measurement_type import MeasurementType
-from tent.enumerations.measurement_unit import MeasurementUnit
+from tent import Component
 from tent.containers.interval_value import IntervalValue
 from tent.enumerations.market_state import MarketState
+from tent.enumerations.measurement_type import MeasurementType
+from tent.enumerations.measurement_unit import MeasurementUnit
 
 
-class InformationServiceModel:
+class InformationServiceModel(Component):
     # InformationServiceModel Base Class
     # An InformationServiceModel manages an InformationService and predicts or interpolates the information it provides.
 
@@ -72,7 +73,7 @@ class InformationServiceModel:
                  update_interval: Union[float, timedelta] = timedelta(hours=1),
                  transactive_node=None
                  ):
-
+        super(InformationServiceModel, self).__init__(description, name, transactive_node)
         self.tn = weakref.ref(transactive_node) if transactive_node else None
         # InformationService properties:
         self.address = str(address)  # perhaps a web address storage
@@ -151,6 +152,45 @@ class InformationServiceModel:
 
         # 200929DJH: Trim the list of predicted values. Remove any values in expired markets.
         self.predictedValues = [x for x in self.predictedValues if x.market.marketState != MarketState.Expired]
+
+    @property
+    def table_name(self):
+        return 'information_service'
+
+    def get_record(self) -> dict:
+        record = super(InformationServiceModel, self).get_record()
+        record.update({
+            'information_type': self.informationType,
+            'information_units': self.informationUnits,
+            'update_period': self.updatePeriod,
+            'update_interval': self.updateInterval
+        })
+        return record
+
+    @classmethod
+    def get_archive_definitions(cls) -> list[dict]:
+        definitions = super(InformationServiceModel, cls).get_archive_definitions()
+        definitions.extend([
+            {
+                "name": "information_service",
+                "inherits": "component",
+                "columns": [
+                    {"name": "id", "foreign_key": "component.id", "kwargs": {"primary_key": True}},
+                    {"name": "information_type", "enumeration": "MeasurementType"},
+                    {"name": "information_units", "enumeration": "MeasurementUnit"},
+                    {"name": "update_period", "type": "DateTimeRangeType"},
+                    {"name": "update_interval", "type": "DateTimeRangeType"}
+                ]
+            },
+            {
+                "name": "entity_information_service",
+                "columns": [
+                    {"name": "component", "foreign_key": "component.id", "kwargs": {"primary_key": True}},
+                    {"name": "information_service_id", "foreign_key": "information_service.id"}
+                ]
+            }
+        ])
+        return definitions
 
 
 if __name__ == '__main__':

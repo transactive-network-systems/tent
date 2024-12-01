@@ -44,10 +44,12 @@ under Contract DE-AC05-76RL01830
 
 import os
 import csv
-import dateutil.tz
 import logging
+import tzlocal
 
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
 from dateutil import parser
 from typing import Union
 
@@ -76,19 +78,22 @@ class TemperatureForecastModel(InformationServiceModel):
                  weather_file_path: str = None,
                  *args, **kwargs):
         super(TemperatureForecastModel, self).__init__(*args, **kwargs)
+        self.informationType = MeasurementType.Temperature
         self.weather_file_path = str(weather_file_path)
         self.weather_data = []
         self.last_modified = None
         try:
-            self.local_tz = dateutil.tz.tzlocal()
+            self.local_tz = tzlocal.get_localzone()
         except Exception:
             _log.warning("Problem automatically determining timezone! - Default to UTC.")
-            self.localtz = "UTC"
-            self.local_tz = dateutil.tz.gettz(self.local_tz)
+            self.local_tz = ZoneInfo('UTC')
 
         if self.weather_file_path is not None:
             self.init_weather_data()
             self.update_information = self.get_forecast_file
+            self.location = None
+            self.max_gap_time = None
+            self.oat_point_name = None
         else:
             self.update_information = self.get_forecast_weather_service
             self.location = [dict(location)] if location else []
@@ -98,6 +103,7 @@ class TemperatureForecastModel(InformationServiceModel):
             if tmy_fallback_path:
                 self.weather_file_path = str(tmy_fallback_path)
                 self.init_weather_data()
+            self.weather_file_path = None
 
     def init_weather_data(self):
         """
@@ -209,6 +215,41 @@ class TemperatureForecastModel(InformationServiceModel):
             temp = items[0]['Value']
             interval_value = IntervalValue(self, ti, mkt, MeasurementType.PredictedValue, temp)
             self.predictedValues.append(interval_value)
+
+    @property
+    def table_name(self):
+        return 'temperature_forecast_model'
+
+    def get_record(self) -> dict:
+        record = super(TemperatureForecastModel, self).get_record()
+        record.update({
+            #'local_tz': self.local_tz,
+            'location': self.location,
+            'max_gap_time': self.max_gap_time,
+            'temperature_point_name': self.oat_point_name,
+            'weather_file_path': self.weather_file_path
+        })
+        return record
+
+    @classmethod
+    def get_archive_definitions(cls) -> list[dict]:
+        definitions = super(TemperatureForecastModel, cls).get_archive_definitions()
+        definitions.extend([
+            {
+                "name": "temperature_forecast_model",
+                "inherits": "information_service",
+                "columns": [
+                    {"name": "information_service_id", "foreign_key": "information_service.id",
+                     "kwargs": {"primary_key": True}},
+                    #{"name": "local_tz", "type": "TimezoneType", "type_args": ['zoneinfo']},  # type": "String", "type_args": [255]},
+                    {"name": "location", "type": "JSON"},
+                    {"name": "max_gap_time", "type": "DateTimeRangeType"},
+                    {"name": "temperature_point_name", "type": "String", "type_args": [255]},
+                    {"name": "weather_file_path", "type": "String", "type_args": [255]}
+                ]
+            }
+        ])
+        return definitions
 
 
 if __name__ == '__main__':

@@ -123,3 +123,30 @@ class CSVMeterPoint(PullMeterPoint):
         # If key is specified, Start_Time in database will be checked
         # If a value matching the Start_Time exists, it will be returned
         return super(CSVMeterPoint, self).read_database(db, key)
+
+    @property
+    def table_name(self):
+        return 'csv_meter_point'
+
+    def get_record(self) -> dict:
+        record = super(CSVMeterPoint, self).get_record()
+        record.update({
+            'meter_id': self.id,
+            'csv_path': self.csv_path
+        })
+        return record
+
+    @classmethod
+    def get_archive_definitions(cls) -> list[dict]:
+        definitions = super(CSVMeterPoint, cls).get_archive_definitions()
+        definitions.extend([
+            {
+                "name": "csv_meter_point",
+                "inherits": "meter_point",
+                "columns": [
+                    {"name": "meter_id", "foreign_key": "meter_point.id", "kwargs": {"primary_key": True}},
+                    {"name": "csv_path", "type": "String", "type_args": [255]}
+                ]
+            }
+        ])
+        return definitions

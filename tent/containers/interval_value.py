@@ -40,15 +40,17 @@ PACIFIC NORTHWEST NATIONAL LABORATORY
 operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
+from tent import Archivable
 from tent.containers.vertex import Vertex
 
 
-class IntervalValue:
+class IntervalValue(Archivable):
     """
     An IntervalValue instance is used to keep track of a value (measurement, quality, etc.)
     with its corresponding TimeInterval instance.
     """
     def __init__(self, calling_object, time_interval, market, measurement_type, value):
+        super(IntervalValue, self).__init__()
         self.version = 0
         self.scheduled = True  # islogical(scheduled)
         # self.associatedClass = calling_object.__class__
@@ -61,7 +63,6 @@ class IntervalValue:
             self.associatedObject = calling_object.name
         except RuntimeWarning:
             self.associatedObject = 'unknown'
-        self.id = None
         self.timeInterval = time_interval
         self.market = market
         self.measurementType = measurement_type
@@ -84,6 +85,35 @@ class IntervalValue:
         }
         return interval_value_dict
 
-if __name__ == '__main__':
-    iv = IntervalValue()
+    @property
+    def data_manager(self):
+        return self.market.data_manager
 
+    @property
+    def table_name(self):
+        return 'interval_value'
+
+    def get_record(self) -> dict:
+        # TODO: Need get_record implemented.
+        raise NotImplementedError
+
+    @classmethod
+    def get_archive_definitions(cls) -> list[dict]:
+        definitions = super(IntervalValue, cls).get_archive_definitions()
+        definitions.extend([
+            {
+                "name": "interval_value",
+                "columns": [
+                    {"name": "id", "type": "Uuid", "identity": True, "kwargs": {"primary_key": True}},
+                    {"name": "time_stamp", "type": "DateTime"},
+                    {"name": "source_id", "foreign_key": "component.id"},
+                    {"name": "market_id", "foreign_key": "market.id"},
+                    {"name": "interval_id", "foreign_key": "time_interval.id"},
+                    # {"name": "record_type", "enumeration": "str"},
+                    {"name": "measurement_type", "enumeration": "MeasurementType"},
+                    {"name": "measurement_unit", "enumeration": "MeasurementUnit"},
+                    {"name": "value", "type": "Float"}
+                ]
+            }
+        ])
+        return definitions

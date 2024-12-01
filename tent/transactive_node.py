@@ -43,13 +43,15 @@ under Contract DE-AC05-76RL01830
 
 import importlib
 import logging
-import re
 
+from datetime import datetime, timezone
 from dateutil import parser
-from tzlocal import get_localzone
+from itertools import chain
 
+from tent import Archivable
+import tent.containers as containers
 from tent.market import Market
-from tent.utils.helpers import format_timestamp
+from tent.utils.helpers import format_timestamp, camel_to_snake
 from tent.utils.log import setup_logging
 from tent.utils.timer import Timer
 
@@ -57,24 +59,25 @@ setup_logging()
 _log = logging.getLogger(__name__)
 
 
-class TransactiveNode(object):
+class TransactiveNode(Archivable):
     """
     TransactiveNode is the local perspective of the computational agent among a network of such nodes.
     """
 
     def __init__(self, description='', mechanism='consensus', name='', status='unknown'):
-
         super(TransactiveNode, self).__init__()
-
         self.description = description                          # [text]
         self.mechanism = mechanism                              # future, unused in Version 2
         self.name = name                                        # [text]
+        self.registry_id = None                                 # string: An out-of-band identifier from a node registry.
         self.simulation = False
         self.simulation_start_time = Timer.get_cur_time()
         self.simulation_one_hour_in_seconds = 3600
         self.status = status                                    # future: will be enumeration
-        self.tz = get_localzone()  # TODO: The Timer does not use aware date-times. This should be fixed.
+        now = datetime.now(timezone.utc).astimezone()
+        self.tz = now.tzinfo.tzname(now)  # TODO: The Timer does not use aware date-times. This should be fixed.
 
+        self._data_manager = None
 
         # The agent must keep track of various devices and their models that are listed among these properties.
         self.informationServiceModels = []
@@ -88,6 +91,7 @@ class TransactiveNode(object):
             "description": self.description,
             "mechanism": self.mechanism,
             "name": self.name,
+            "registry_id": self.registry_id,
             "simulation": self.simulation,
             "status": self.status,
             "tz": self.tz,
@@ -107,7 +111,9 @@ class TransactiveNode(object):
         _log.debug('IN CONFIGURE NODE')
         updated_configs = self._update_node_configurations(configs)
         self._setup_timer(updated_configs)
+        self._setup_data_manager(updated_configs)
         self._setup_component_objects(updated_configs)
+        self.data_manager.init_archive()
 
     def _update_node_configurations(self, configs):
         _log.debug('IN _UPDATE_NODE_CONFIGURATIONS')
@@ -118,7 +124,9 @@ class TransactiveNode(object):
         self.description = updated_configs.get('description', self.description)
         self.mechanism = updated_configs.get('mechanism', self.mechanism)
         self.name = updated_configs.get('name', self.name)
+        self.regsitry_id = updated_configs.get('registry_id', self.registry_id)
         self.status = updated_configs.get('status', self.status)
+        self.tz = updated_configs.get('tz', self.tz)
         return updated_configs
 
     def _setup_timer(self, config):
@@ -157,33 +165,37 @@ class TransactiveNode(object):
         It is up to the individual component to manage its own configuration from its __init__ method.
         Returns list of instantiated and configured components
         """
-        first_cap_re = re.compile('(.)([A-Z][a-z]+)')
-        all_cap_re = re.compile('([a-z\d])([A-Z])')
-
-        def camel_to_snake(name):
-            s1 = first_cap_re.sub(r'\1_\2', name)
-            return all_cap_re.sub(r'\1_\2', s1).lower()
-
         components = []
         if not configs:
             return components
         for config in configs:
-            cls = config.pop('class_name')
-            # TODO: What will be the default directory for classes? Does this even make sense within a library package?
-            default_module_name = 'tent.' + camel_to_snake(cls)
-            module = config.pop('module_name', default_module_name)
-            _log.info(f'Configuring class: {cls} from module: {module}')
-            module = importlib.import_module(module)
-            config['transactive_node'] = self
-            component_class = getattr(module, cls)
+            component_class = self._get_component_class(config)
+            self.data_manager.add_tables(component_class.get_archive_definitions())
             if issubclass(component_class, Market):
                 config['first_market_in_series'] = True
             component = component_class(**config)
+            component.archive()
             components.append(component)
         dep_names = [d.name for d in components]
         if len(dep_names) != len(set(dep_names)):
             raise ValueError(f'Configured {component_type} have duplicate names: {[d.name for d in components]}')
         return components
+
+    def _setup_data_manager(self, config):
+        dm_configs = config.get('data_manager', {})
+        dm_class = self._get_component_class(dm_configs)
+        self._data_manager = dm_class(**dm_configs)
+        self.data_manager.add_tables(self.get_archive_definitions())
+
+    def _get_component_class(self, config: dict):
+        cls = config.pop('class_name')
+        # TODO: What will be the default directory for classes? Does this even make sense within a library package?
+        default_module_name = 'tent.' + camel_to_snake(cls)
+        module = config.pop('module_name', default_module_name)
+        _log.info(f'Configuring class: {cls} from module: {module}')
+        module = importlib.import_module(module)
+        config['transactive_node'] = self
+        return getattr(module, cls)
 
     def get_meters_by_attribute(self, attribute, match, first_only=False):
         return self.get_objects_by_attribute(self.meterPoints, attribute, match, first_only)
@@ -221,3 +233,74 @@ class TransactiveNode(object):
 
     def register_subscription(self, subscribe_key, callback):
         pass
+
+    @property
+    def data_manager(self):
+        return self._data_manager
+
+    @property
+    def table_name(self):
+        return 'transactive_node'
+
+    def get_record(self) -> dict:
+        return {
+            "created": self.real_time_created,
+            "description": self.description,
+            "name": self.name,
+            "registry_id": self.registry_id,
+            "simulation": self.simulation,
+            "simulation_start_time": self.simulation_start_time,
+            "simulation_one_hour_in_seconds": self.simulation_one_hour_in_seconds,
+            "tz": self.tz
+        }
+
+    @classmethod
+    def get_archive_definitions(cls):
+        # TODO: Finish code to ingest definitions & call init_archive.
+        # TODO: Mechanism to create initial entries.  How to store these until db is ready? Queue?
+        # TODO: Mechanism for queueing and storing entries. How does this relate to archive_data?
+        definitions = list(chain.from_iterable(
+            [getattr(containers, c).get_archive_definitions() for c in containers.__all__]))
+        definitions.extend([
+            {
+                "name": "transactive_node",
+                "columns": [
+                    {"name": "created", "type": "DateTime"},
+                    {"name": "description", "type": "String", "type_args": [255]},
+                    {"name": "id", "type": "Uuid", "identity": True, "kwargs": {"primary_key": True}},
+                    {"name": "name", "type": "String", "type_args": [255]},
+                    {"name": "registry_id", "type": "String", "type_args": [255], "kwargs": {"nullable": True}},
+                    {"name": "simulation", "type": "Boolean"},
+                    {"name": "simulation_start_time", "type": "DateTime"},
+                    {"name": "simulation_one_hour_in_seconds", "type": "Float"},
+                    {"name": "tz", "type": "TimezoneType", "type_args": ["zoneinfo"]}
+                ],
+                "indices": [
+                    {"name": "idx_tn_instance", "columns": ["registry_id", "name", "created"], "unique": True}
+                ]
+            },
+            {  # TODO: This doesn't belong here, but the SDCurve class isn't integrated yet.
+                "name": "sd_curve",
+                "columns": [
+                    {"name": "id", "type": "Uuid", "identity": True, "kwargs": {"primary_key": True}},
+                    {"name": "time_interval_id", "foreign_key": "time_interval.id"},
+                    {"name": "owner_id", "foreign_key": "component.id"},
+                    {"name": "parent_curve_id", "foreign_key": "sd_curve.id"},
+                    {"name": "timestamp", "type": "DateTime"},
+                    {"name": "is_default", "type": "Boolean"}
+                ]
+            },
+            {  # TODO: This doesn't belong here, but the Order class isn't integrated yet.
+                "name": "order",
+                "inherits": "sd_curve",
+                "columns": [
+                    {"name": "id", "foreign_key": "sd_curve.id", "kwargs": {"primary_key": True}},
+                    # {"name": "status", "enumeration": "enum"},
+                    # {"name": "supply_or_demand", "enumeration": "enum"},
+                    {"name": "expire_by", "type": "DateTime"}
+                ]
+            }
+        ])
+        from tent.market.market_series import MarketSeries
+        definitions.extend(MarketSeries.get_archive_definitions())  # TODO: Market Series needs real integration.
+        return definitions

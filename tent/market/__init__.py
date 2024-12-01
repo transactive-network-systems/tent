@@ -53,10 +53,7 @@ from matplotlib import pyplot as plt
 from typing import Union
 from warnings import warn
 
-from tent.utils.data_manager import append_table
-from tent.utils.helpers import (find_obj_by_ti, find_objs_by_ti, order_vertices, production, prod_cost_from_vertices,
-                                validate_bool)
-from tent.enumerations.measurement_type import MeasurementType
+from tent import Component
 from tent.containers.interval_value import IntervalValue
 from tent.containers.time_interval import TimeInterval
 from tent.containers.vertex import Vertex
@@ -64,15 +61,17 @@ from tent.enumerations.market_state import MarketState
 from tent.enumerations.market_types import MarketTypes
 from tent.enumerations.method import Method
 from tent.market.price_models import HourlyAveragePriceModel
-from tent.utils.helpers import format_timestamp
-from tent.utils.timer import Timer
+from tent.utils.data_manager import append_table
+from tent.utils.helpers import (find_obj_by_ti, find_objs_by_ti, format_timestamp, order_vertices, production,
+                                prod_cost_from_vertices, validate_bool)
 from tent.utils.log import setup_logging
+from tent.utils.timer import Timer
 
 setup_logging()
 _log = logging.getLogger(__name__)
 
 
-class Market:
+class Market(Component):
     # Market Base Class
     # At least one Market must exist (see the firstMarket object) to drive the timing with which new TimeIntervals are
     # created.
@@ -103,9 +102,6 @@ class Market:
                  transactive_node=None,
                  market_series=None):
 
-        # 240228DJH: Is there any reason we break the existing camelCase trend using descriptive attribute names?
-        #            Why not thisTransactiveNode??
-        self.tn = weakref.ref(transactive_node) if transactive_node else None
         self.marketSeries = weakref.ref(market_series) if market_series else None
 
         # 240222DJH: This is a model of how I propose to handle the many time durations of the market state machine:
@@ -186,8 +182,6 @@ class Market:
         else:
             self.marketState = MarketState.Initial
         self.marginalPrices = []  # [IntervalValue]; Values are [$/kWh]
-        # This market object's name. Use market series name as root
-        self.name = self.get_market_name()
         self.netPowers = []  # [IntervalValue]; Values are [avg.kW]
         self.nextMarketClearingTime = self.marketClearingTime + self.marketClearingInterval
         self.priceModel: HourlyAveragePriceModel = HourlyAveragePriceModel(forgetting_factor=14,
@@ -204,6 +198,12 @@ class Market:
         self.new_data_signal = False
         self.delivery_lead_schedule_power = False
 
+        # Super is called near the end so that everything has been calculated to get the market name.
+        market_name = self.get_market_name()
+        # TODO: Should there ever not be a marketSeries?
+        description = self.marketSeries.description if self.marketSeries else market_name
+        super(Market, self).__init__(description, market_name, transactive_node)
+
         # Set up market
         self.check_intervals()
         if self.tn and self.tn():
@@ -219,35 +219,35 @@ class Market:
 
     @property
     def activationLeadTime(self):
-        return self.marketSeries().activationLeadTime if self.marketSeries else self._activationLeadTime
+        return self.marketSeries().activationLeadTime if self.marketSeries and self.marketSeries() else self._activationLeadTime
 
     @property
     def deliveryLeadTime(self):
-        return self.marketSeries().deliveryLeadTime if self.marketSeries else self._deliveryLeadTime
+        return self.marketSeries().deliveryLeadTime if self.marketSeries and self.marketSeries() else self._deliveryLeadTime
 
     @property
     def intervalDuration(self):
-        return self.marketSeries().intervalDuration if self.marketSeries else self._intervalDuration
+        return self.marketSeries().intervalDuration if self.marketSeries and self.marketSeries() else self._intervalDuration
 
     @property
     def intervalsToClear(self):
-        return self.marketSeries().intervalsToClear if self.marketSeries else self._intervalsToClear
+        return self.marketSeries().intervalsToClear if self.marketSeries and self.marketSeries() else self._intervalsToClear
 
     @property
     def marketClearingInterval(self):
-        return self.marketSeries().marketClearingInterval if self.marketSeries else self._marketClearingInterval
+        return self.marketSeries().marketClearingInterval if self.marketSeries and self.marketSeries() else self._marketClearingInterval
 
     @property
     def marketLeadTime(self):
-        return self.marketSeries().marketLeadTime if self.marketSeries else self._marketLeadTime
+        return self.marketSeries().marketLeadTime if self.marketSeries and self.marketSeries() else self._marketLeadTime
 
     @property
     def initialMarketState(self):
-        return self.marketSeries().initialMarketState if self.marketSeries else self._initialMarketState
+        return self.marketSeries().initialMarketState if self.marketSeries and self.marketSeries() else self._initialMarketState
 
     @property
     def marketSeriesName(self):  # 240222DJH: I chose not to protect this at class MarketState.
-        return self.marketSeries().marketSeriesName if self.marketSeries else self._marketSeriesName
+        return self.marketSeries().marketSeriesName if self.marketSeries and self.marketSeries() else self._marketSeriesName
 
     def _calculate_clearing_time(self):
         # 240221DJH: TODO: Move this method to new market series class.
@@ -302,10 +302,10 @@ class Market:
         # 240228DJH: These next lines of code pave the way for decreasing our dependence on passing parameter
         #            my_transactive_node. Note the that the parameter has also been assigned default value None when
         #            called.
-        if self.marketSeries:
-            my_transactive_node = self.marketSeries.tn
+        if self.marketSeries and self.marketSeries():
+            my_transactive_node = self.marketSeries().tn()
         elif self.tn:
-            my_transactive_node = self.tn
+            my_transactive_node = self.tn()
         else:
             my_transactive_node = my_transactive_node
 
@@ -612,8 +612,8 @@ class Market:
 
         # 240228DJH: If this market references its MarketSeries object, then also place the market into its list of
         #            active markets.
-        if new_market.marketSeries:
-            new_market.marketSeries.activeMarkets.append(new_market)
+        if new_market.marketSeries and new_market.marketSeries():
+            new_market.marketSeries().activeMarkets.append(new_market)
 
         # 210127DJH: Save information about the new Market object into a formatted csv file.
         try:
@@ -1353,6 +1353,10 @@ class Market:
                 # 200924DJH: This logic must be revised in Version 3 to make sure OTHER market intervals are not
                 #            eliminated.
                 # self.timeIntervals = [x for x in self.timeIntervals if x.startTime != starting_time]
+                # TODO: Shouldn't this be an or condition?
+                # TODO: This entire if/else block becomes irrelevant if self.timeIntervals is a dictionary by start_time.
+                #  That would already guarantee a single interval for each start time.
+                #  self.timeIntervals is already unique to this market. We only need to check whether to create one.
                 self.timeIntervals = [x for x in self.timeIntervals
                                       if x.startTime != starting_time and x.market != self]
                 # Then append one lone time interval for this starting time.
@@ -2013,3 +2017,47 @@ class Market:
         dt = str(self.marketClearingTime)
         market_name = self.marketSeriesName.replace(' ', '_') + '_' + dt[:19]
         return market_name
+
+    @property
+    def table_name(self):
+        return 'market'
+
+    def get_record(self) -> dict:
+        record = super(Market, self).get_record()
+        record.update({
+            'prior_market_id': self.priorMarketInSeries.id if self.priorMarketInSeries else None,
+            'market_to_be_refined_id': self.marketToBeRefined.id if self.marketToBeRefined else None,
+            'market_type': self.marketType,
+            'activation_time': datetime.now(), #self.activationTime,  # TODO: Need to have actual times, not lead intervals.
+            'negotiation_start_time': datetime.now(), #self.negotiationStartTime,  # TODO: Need to have actual times, not lead intervals.
+            'market_lead_time': datetime.now(),  # self.marketLeadTime,  # TODO: Need to have actual times, not lead intervals.
+            'market_clearing_time': self.marketClearingTime,
+            'reconciliation_time': datetime.now(),#self.reconciliation_time,  # TODO: Need to have actual times, not lead intervals.
+            'expiration_time': datetime.now(), #self.expiration_time,  # TODO: Need to have actual times, not lead intervals.
+            'market_series_id': self.marketSeries().id if self.marketSeries else None  # TODO: Should there ever not be a marketSeries?
+        })
+        return record
+
+    @classmethod
+    def get_archive_definitions(cls) -> list[dict]:
+        definitions = super(Market, cls).get_archive_definitions()
+        definitions.extend([
+            {
+                "name": "market",
+                "inherits": "component",
+                "columns": [
+                    {"name": "id", "foreign_key": "component.id", "kwargs": {"primary_key": True}},
+                    {"name": "prior_market_id", "foreign_key": "market.id", "nullable": True},
+                    {"name": "market_to_be_refined_id", "foreign_key": "market.id", "nullable": True},
+                    {"name": "market_type", "enumeration": "MarketTypes"},
+                    {"name": "activation_time", "type": "DateTime"},
+                    {"name": "negotiation_start_time", "type": "DateTime"},
+                    {"name": "market_lead_time", "type": "DateTime"},
+                    {"name": "market_clearing_time", "type": "DateTime"},
+                    {"name": "reconciliation_time", "type": "DateTime"},
+                    {"name": "expiration_time", "type": "DateTime"},
+                    {"name": "market_series_id", "foreign_key": "market_series.id"}
+                ]
+            }
+        ])
+        return definitions

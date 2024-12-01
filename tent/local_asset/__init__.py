@@ -47,16 +47,15 @@ import weakref
 from datetime import timedelta
 from typing import Union
 
-from tent.utils.helpers import find_obj_by_ti, find_objs_by_ti, format_timestamp, prod_cost_from_vertices, validate_bool
-from tent.information_service_model import InformationServiceModel
+from tent import Entity
 from tent.containers.interval_value import IntervalValue
-from tent.enumerations.measurement_type import MeasurementType
+from tent.containers.time_interval import TimeInterval
+from tent.containers.vertex import Vertex
 from tent.enumerations.market_state import MarketState
 from tent.meter_point import MeterPoint
-from tent.containers.time_interval import TimeInterval
-from tent.utils.timer import Timer
+from tent.utils.helpers import find_obj_by_ti, find_objs_by_ti, format_timestamp, prod_cost_from_vertices, validate_bool
 from tent.utils.log import setup_logging
-from tent.containers.vertex import Vertex
+from tent.utils.timer import Timer
 
 setup_logging()
 _log = logging.getLogger(__name__)
@@ -65,7 +64,7 @@ _log = logging.getLogger(__name__)
 # being moved into this class.
 
 
-class LocalAsset(object):
+class LocalAsset(Entity):
     # A local asset model manages and represents a local asset object, meaning that it
     # (1) determines a power schedule across all active time intervals,
     # (2) calculates costs that are needed by system optimization, and
@@ -96,61 +95,18 @@ class LocalAsset(object):
                  minimum_power=0.0,
                  meter_points=None,
                  name='',
-                 # 200520DJH - The following Boolean property is added to give complex assets like TCC time to schedule
-                 # their powers.
-                 schedule_calculated=False, # TODO: Should this be settable in the constructor?
                  scheduling_horizon: Union[timedelta, float, int] = timedelta(hours=24),
                  subclass=None,
                  transactive_node=None):
+        super(LocalAsset, self).__init__(cost_parameters, default_vertices, description, information_services, location,
+                                         maximum_power, meter_points, minimum_power, name, transactive_node)
 
-        self.tn = weakref.ref(transactive_node) if transactive_node else None
         # These following static properties may be assigned as parameters:
-        self.costParameters = [float(cp) for cp in cost_parameters]  # [float, float, float] Coefficients of quadratic cost function
-        self.defaultPower = float(default_power)           # [avg.kW, signed] Assignable default power value(s)
-        self.description = str(description)              # [text]
-        self.engagementCost = [float(ec) for ec in engagement_cost]  # {engagement, [$]; hold, [$]; disengagement, [$]} Transition costs
-        self.location = str(location)                    # [text]
-        self.maximumPower = float(maximum_power)           # [avg.kW, signed] Asset's physical "hard" constraint
-        self.minimumPower = float(minimum_power)           # [avg.kW, signed] Asset's physical "hard" constraint
-        self.name = str(name)                            # [text]
-        # 200520DJH - The following Boolean property is added to give complex assets like TCC time to schedule
-        # their powers.
-        self.scheduleCalculated = validate_bool(schedule_calculated, 'schedule_calculated')  # Flag set True after asset has scheduled power
-        self.schedulingHorizon = scheduling_horizon if isinstance(scheduling_horizon, timedelta)\
+        self.default_power = float(default_power)           # [avg.kW, signed] Assignable default power value(s)
+        self.engagement_cost = [float(ec) for ec in engagement_cost]  # {engagement, [$]; hold, [$]; disengagement, [$]} Transition costs
+        self.scheduling_horizon = scheduling_horizon if isinstance(scheduling_horizon, timedelta)\
             else timedelta(seconds=scheduling_horizon) # [time duration] Future that price and energy shift are relevant
         self.subclass = subclass                    # Future, unused
-
-        ######
-        # These are static lists of objects that an asset must manage: These should be configured by an implementer.
-        ######
-
-        # [Vertex] Default vertices; default supply/demand curve
-        self.defaultVertices = [Vertex(float("inf"), 0.0, 1)] if default_vertices is None \
-            else Vertex.vertex_list(default_vertices)
-
-        # [InformationService] See class InformationService
-        if information_services is None:
-            self.informationServices = []
-        elif all([isinstance(ism, InformationServiceModel) for ism in information_services]):
-            self.informationServices = [ism for ism in information_services]
-        elif all([isinstance(ism, str) for ism in information_services]) and self.tn and self.tn():
-            self.informationServices = [ism for ism in
-                                        self.tn().get_isms_by_attribute('name', information_services)]
-        else:
-            raise ValueError(f'All information services assigned to LocalAsset {self.name} must be an instance of class'
-                             f' InformationServiceModel or the name of an InformationServiceModel held by the'
-                             f' TransactiveNode.')
-
-        # [MeterPoint] See class MeterPoint
-        if meter_points is None:
-            self.meterPoints = []
-        elif all([isinstance(mp, MeterPoint) for mp in meter_points]):
-            self.meterPoints = [weakref.ref(mp) for mp in meter_points]
-        elif all([isinstance(mp, str) for mp in meter_points]) and self.tn and self.tn():
-            self.meterPoints = [weakref.ref(mp) for mp in self.tn().get_meters_by_attribute('name', meter_points)]
-        else:
-            raise ValueError(f'All meter points assigned to LocalAsset {self.name} must be an instance of class'
-                             f' MeterPoint or the name of a MeterPoint held by the TransactiveNode.')
 
         # These following properties are dynamically managed and should not normally be manually configured:
         self.activeVertices = []                    # [IntervalValue] Values are [Vertex]: Demand/Supply curves
@@ -158,6 +114,7 @@ class LocalAsset(object):
         self.engagementSchedule = []                # [IntervalValue] Values are [Boolean]: True = engaged
         self.productionCosts = []                   # [IntervalValue] Values are [$]: Production costs by interval
         self.reserveMargins = []                    # [IntervalValue] Values are [avg.kW, signed]
+        self.schedule_calculated = False            # Flag set True after asset has scheduled power
         self.scheduledPowers = []                   # [IntervalValue] Values are [avg.kW, signed]
         self.totalDualCost = 0.0                    # [$] Sum of dual costs in forward time intervals
         self.totalProductionCost = 0.0              # [$, non-negative] Sum of production costs in forward intervals
@@ -178,7 +135,7 @@ class LocalAsset(object):
         #                              cost = a0 + a1*power + a2*power ** 2 [$/h].
 
         # Extract the production cost coefficients for the given object
-        a = self.costParameters
+        a = self.cost_parameters
 
         # Calculate the production (consumption) cost for the given power
         production_cost = a[0] + a[1] * power + a[2] * power ** 2  # [$/h]
@@ -207,7 +164,7 @@ class LocalAsset(object):
         self.schedule_engagement(market)  # only applied to LocalAsset class
 
         # Update vertices and calculate reserve margins if schedule powers have been calculated
-        if self.scheduleCalculated:
+        if self.schedule_calculated:
             self.update_vertices(market)
 
             # Have the objects estimate their available reserve margin.
@@ -253,7 +210,7 @@ class LocalAsset(object):
         time_intervals.sort(key=lambda x: x.startTime)
 
         # len_powers = len(self.default_powers)
-        default_value = self.defaultPower
+        default_value = self.default_power
 
         # Index through the active time intervals ti
         for i in range(len(time_intervals)):
@@ -285,12 +242,12 @@ class LocalAsset(object):
         self.scheduledPowers = [x for x in self.scheduledPowers if x.market.marketState != MarketState.Expired]
 
         # 210803DJH: Auctions use this flag, so it should probably be set after every successful scheduling of power.
-        self.scheduleCalculated = True
+        self.schedule_calculated = True
 
         sp = [(x.timeInterval.name, x.value) for x in self.scheduledPowers]
         _log.debug(f"{self.name} asset model scheduledPowers are: {sp}")
 
-        self.scheduleCalculated = True  # TODO: Added this so that vertices will be updated in schedule(). Correct?
+        self.schedule_calculated = True  # TODO: Added this so that vertices will be updated in schedule(). Correct?
 
     def schedule_engagement(self, market):
         # To assign engagement, or commitment, which is relevant to some local assets (supports future capabilities).
@@ -380,7 +337,7 @@ class LocalAsset(object):
             # the maximum operational power value in the interval and the scheduled power. The operational maximum
             # should be less than the object's hard physical power constraint, so a check is in order. Start with the
             # hard physical constraint.
-            hard_constraint = self.maximumPower  # [avg.kW]
+            hard_constraint = self.maximum_power  # [avg.kW]
 
             # Calculate the operational maximum constraint, which is the highest point on the supply/demand curve (i.e.,
             # the vertex) that represents the residual flexibility of the asset in the time interval.
@@ -449,7 +406,7 @@ class LocalAsset(object):
         # 1 - transition from false to true - engagement cost
         # 2 - no change in engagement - no cost
         # 3 - transition from true to false - disengagement cost
-        cost = self.engagementCost[1 + dif]
+        cost = self.engagement_cost[1 + dif]
 
         return cost
 
@@ -734,7 +691,7 @@ class LocalAsset(object):
         # TODO: Check that this usage of Timer() is consistent with campus simulation process
         price_horizon = []
         end_of_calculated_horizon = Timer.get_cur_time()
-        end_of_scheduling_horizon = end_of_calculated_horizon + self.schedulingHorizon
+        end_of_scheduling_horizon = end_of_calculated_horizon + self.scheduling_horizon
 
         # Case 1: Actual marginal prices offered by the market object that has requested the asset to schedule.
 
@@ -894,3 +851,43 @@ class LocalAsset(object):
             "vertices": vertices
         }
         return local_asset_dict
+
+    @property
+    def table_name(self):
+        return 'local_asset'
+
+    def get_record(self) -> dict:
+        record = super(LocalAsset, self).get_record()
+        record.update({
+            'default_power': self.default_power,
+            'engagement_cost_0': self.engagement_cost[0],
+            'engagement_cost_1': self.engagement_cost[1],
+            'engagement_cost_2': self.engagement_cost[2],
+            # 'holding_cost': self.holding_cost, TODO: Did this come from old schema?
+            # 'disengagement_cost': self.disengagement_cost, TODO: Did this come from old schema?
+            'scheduling_horizon': self.scheduling_horizon,
+            'subclass': self.subclass
+        })
+        return record
+
+    @classmethod
+    def get_archive_definitions(cls) -> list[dict]:
+        definitions = super(LocalAsset, cls).get_archive_definitions()
+        definitions.extend([
+            {
+                "name": "local_asset",
+                "inherits": "entity",
+                "columns": [
+                    {"name": "id", "foreign_key": "entity.id", "kwargs": {"primary_key": True}},
+                    {"name": "default_power", "type": "Float"},
+                    {"name": "engagement_cost_0", "type": "Float"},
+                    {"name": "engagement_cost_1", "type": "Float"},
+                    {"name": "engagement_cost_2", "type": "Float"},
+                    #{"name": "holding_cost", "type": "Float"},
+                    #{"name": "disengagement_cost", "type": "Float"},
+                    {"name": "scheduling_horizon", "type": "DateTimeRangeType"},
+                    {"name": "subclass", "type": "String", "type_args": [255]}
+                ]
+            }
+        ])
+        return definitions

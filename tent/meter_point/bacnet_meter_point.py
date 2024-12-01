@@ -169,6 +169,46 @@ class BACnetMeterPoint(PullMeterPoint):
         # If a value matching the Start_Time exists, it will be returned
         return super(BACnetMeterPoint, self).read_database(db, key)
 
+    @property
+    def table_name(self):
+        return 'bacnet_meter_point'
+
+    def get_record(self) -> dict:
+        record = super(BACnetMeterPoint, self).get_record()
+        record.update({
+            'device_address': self.bacnet_config['device_address'],
+            'target_address': self.bacnet_config['target_address'],
+            'max_apdu_len': self.bacnet_config['max_apdu_len'],
+            'seg_supported': self.bacnet_config['seg_supported'],
+            'obj_id': self.bacnet_config['obj_id'],
+            'ven_id': self.bacnet_config['ven_id'],
+            'max_per_request': self.bacnet_config['max_per_request'],
+            'request_check_interval': self.bacnet_config['request_check_interval']
+        })
+        return record
+
+    @classmethod
+    def get_archive_definitions(cls) -> list[dict]:
+        definitions = super(BACnetMeterPoint, cls).get_archive_definitions()
+        definitions.extend([
+            {
+                "name": "bacnet_meter_point",
+                "inherits": "meter_point",
+                "columns": [
+                    {"name": "device_address", "type": "String", "type_args": [255]},
+                    {"name": "target_address", "type": "String", "type_args": [255]},
+                    {"name": "max_apdu_len", "type": "Integer"},
+                    {"name": "seg_supported", "type": "String", "type_args": [255]},
+                    {"name": "obj_id", "type": "Integer"},
+                    {"name": "obj_name", "type": "String", "type_args": [255]},
+                    {"name": "ven_id", "type": "Integer"},
+                    {"name": "max_per_request", "type": "Integer"},
+                    {"name": "request_check_interval", "type": "Float"}
+                ]
+            }
+        ])
+        return definitions
+
 
 # Make sure the TaskManager singleton exists...
 task_manager = TaskManager()
