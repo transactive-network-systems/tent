@@ -1884,29 +1884,29 @@ class Market(Component):
         np = [(x.timeInterval.name, x.value) for x in self.netPowers]
         _log.debug(f"{self.name} market netPowers are: {np}")
 
-    def view_net_vertices(self):
-        """
-        If within an operating system that supports graphical data representations, this method plots a market's active
-        vertices.
-        """
-        # TODO: This needs to be reviewed. This should plot vertex power as a function of vertex price for a single
-        #       market time interval. I don't see that such a plot can be had from this method. Methods in the base
-        #       Transactive Network Template should be independent of platform. This depends on Volttron.
-        # 200211DJH: See method see_net_curve that provides a superior representation.
-        time_intervals = self.timeIntervals
-
-        def by_start_times(time_interval_list):
-            return time_interval_list.startTime
-
-        time_intervals.sort(key=by_start_times)  # 200207DJH: Is this actually used by the method??
-
-        import plotly_express as px
-
-        import pandas as pd
-        df = pd.read_csv('https://raw.githubusercontent.com/plotly/datasets/master/finance-charts-apple.csv')
-
-        fig = px.line(df, x='Date', y='AAPL.High')
-        fig.show()
+    # def view_net_vertices(self):
+    #     """
+    #     If within an operating system that supports graphical data representations, this method plots a market's active
+    #     vertices.
+    #     """
+    #     # TODO: This needs to be reviewed. This should plot vertex power as a function of vertex price for a single
+    #     #       market time interval. I don't see that such a plot can be had from this method. Methods in the base
+    #     #       Transactive Network Template should be independent of platform. This depends on Volttron.
+    #     # 200211DJH: See method see_net_curve that provides a superior representation.
+    #     time_intervals = self.timeIntervals
+    #
+    #     def by_start_times(time_interval_list):
+    #         return time_interval_list.startTime
+    #
+    #     time_intervals.sort(key=by_start_times)  # 200207DJH: Is this actually used by the method??
+    #
+    #     import plotly_express as px
+    #
+    #     import pandas as pd
+    #     df = pd.read_csv('https://raw.githubusercontent.com/plotly/datasets/master/finance-charts-apple.csv')
+    #
+    #     fig = px.line(df, x='Date', y='AAPL.High')
+    #     fig.show()
 
     def see_net_curve(self, time_interval=None, show=True):
         """
