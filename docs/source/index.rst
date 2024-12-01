@@ -12,15 +12,25 @@ documentation for details.
 
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Contents:
+   :maxdepth: 1
+   :caption: Introduction:
 
    introduction/what_is_transactive_energy
    introduction/high_level_tent_overview
    introduction/components_of_tent
    introduction/transactive_node_agent
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Design:
+
    design/identify_components
    design/build_component_configurations
    design/deploy_tn_agents
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Analysis & Visualization:
+
    analysis_and_visualization/effectiveness_metrics
    analysis_and_visualization/operational_metrics
