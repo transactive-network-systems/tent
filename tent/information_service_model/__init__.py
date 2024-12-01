@@ -48,10 +48,8 @@ from dateutil import parser
 from typing import Union
 
 from tent import Component
-from tent.containers.interval_value import IntervalValue
-from tent.enumerations.market_state import MarketState
-from tent.enumerations.measurement_type import MeasurementType
-from tent.enumerations.measurement_unit import MeasurementUnit
+from tent.containers import IntervalValue
+from tent.enumerations import MarketState, MeasurementType, MeasurementUnit
 
 
 class InformationServiceModel(Component):

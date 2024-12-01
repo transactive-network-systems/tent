@@ -45,12 +45,10 @@ import logging
 
 from warnings import warn
 
-from tent.enumerations.direction import Direction
-from tent.utils.helpers import production
-from tent.containers.interval_value import IntervalValue
+from tent.containers import IntervalValue
+from tent.enumerations import Direction, MarketTypes, MeasurementType
 from tent.market import Market
-from tent.enumerations.market_types import MarketTypes
-from tent.enumerations.measurement_type import MeasurementType
+from tent.utils.helpers import production
 from tent.utils.log import setup_logging
 
 setup_logging()

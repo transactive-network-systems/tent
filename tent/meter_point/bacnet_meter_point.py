@@ -52,12 +52,12 @@ from datetime import datetime
 from gevent.event import AsyncResult
 from queue import Queue, Empty
 
+from tent.containers import IntervalValue
+from tent.enumerations import MeasurementType
+from tent.meter_point.pull_meter_point import PullMeterPoint
 from tent.utils import headers
 from tent.utils.async_ import AsyncCall
-from tent.containers.interval_value import IntervalValue
 from tent.utils.helpers import format_timestamp
-from tent.meter_point.pull_meter_point import PullMeterPoint
-from tent.enumerations.measurement_type import MeasurementType
 
 from bacpypes.task import RecurringTask
 import bacpypes.core

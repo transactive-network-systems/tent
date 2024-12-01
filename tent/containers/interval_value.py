@@ -41,7 +41,7 @@ operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
 from tent import Archivable
-from tent.containers.vertex import Vertex
+from tent.containers import Vertex
 
 
 class IntervalValue(Archivable):

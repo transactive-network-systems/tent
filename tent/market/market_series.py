@@ -4,9 +4,7 @@ from datetime import time, timedelta
 from typing import Union
 
 from tent import Component
-from tent.enumerations.market_state import MarketState
-from tent.enumerations.market_types import MarketTypes
-from tent.enumerations.method import Method
+from tent.enumerations import MarketState, MarketTypes, Method
 from tent.market import Market
 from tent.market.price_models.hourly_average_price_model import HourlyAveragePriceModel
 from tent.utils.helpers import validate_bool

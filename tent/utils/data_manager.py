@@ -44,8 +44,8 @@ import logging
 
 from datetime import datetime
 
-from tent.containers.vertex import Vertex
-from tent.enumerations.measurement_type import MeasurementType
+from tent.containers import Vertex
+from tent.enumerations import MeasurementType
 from tent.utils.log import setup_logging
 
 setup_logging()

@@ -42,12 +42,7 @@ under Contract DE-AC05-76RL01830
 """
 import logging
 
-from datetime import timedelta
-
-from tent.enumerations.market_state import MarketState
 from tent.market.auction import Auction
-from tent.market.real_time_auction import RealTimeAuction
-from tent.utils.data_manager import append_table
 from tent.utils.log import setup_logging
 
 setup_logging()

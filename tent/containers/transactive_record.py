@@ -42,7 +42,7 @@ under Contract DE-AC05-76RL01830
 """
 
 from tent import Archivable
-from tent.containers.time_interval import TimeInterval
+from tent.containers import TimeInterval
 from tent.utils.timer import Timer
 
 

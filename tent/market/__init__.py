@@ -54,12 +54,8 @@ from typing import Union
 from warnings import warn
 
 from tent import Component
-from tent.containers.interval_value import IntervalValue
-from tent.containers.time_interval import TimeInterval
-from tent.containers.vertex import Vertex
-from tent.enumerations.market_state import MarketState
-from tent.enumerations.market_types import MarketTypes
-from tent.enumerations.method import Method
+from tent.containers import IntervalValue, TimeInterval, Vertex
+from tent.enumerations import MarketState, MarketTypes, MeasurementType, Method
 from tent.market.price_models import HourlyAveragePriceModel
 from tent.utils.data_manager import append_table
 from tent.utils.helpers import (find_obj_by_ti, find_objs_by_ti, format_timestamp, order_vertices, production,

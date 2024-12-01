@@ -88,7 +88,7 @@ class Component(Archivable):
         return definitions
 
 # Vertex cannot be imported before Archivable. (This would create a circular dependency.)
-from tent.containers.vertex import Vertex
+from tent.containers import Vertex
 
 
 class Entity(Component):

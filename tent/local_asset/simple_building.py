@@ -41,13 +41,9 @@ operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
 
-from datetime import timedelta
-
-from tent.containers.interval_value import IntervalValue
+from tent.containers import IntervalValue, Vertex
+from tent.enumerations import MarketState, MeasurementType
 from tent.local_asset import LocalAsset
-from tent.enumerations.market_state import MarketState
-from tent.enumerations.measurement_type import MeasurementType
-from tent.containers.vertex import Vertex
 
 
 off_peak_vertex = Vertex(marginal_price=float('Inf'),

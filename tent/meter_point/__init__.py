@@ -52,8 +52,7 @@ from statistics import mean
 from typing import Union
 
 from tent import Component
-from tent.enumerations.measurement_type import MeasurementType
-from tent.enumerations.measurement_unit import MeasurementUnit
+from tent.enumerations import MeasurementType, MeasurementUnit
 from tent.utils.time_series_buffer import TimeSeriesBuffer
 from tent.utils.timer import Timer
 
