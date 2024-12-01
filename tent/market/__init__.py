@@ -1333,7 +1333,7 @@ class Market(Component):
             # This is a test to see whether the interval exists.
             # 200924DJH: This check is inadequate in Version 3 because starting times are no longer necessarily unique.
             #            The criterion must be revised to make sure the time interval is also in this market.
-            # time_intervals = [x for x in self.timeIntervals if x.startTime == starting_time]
+            # time_intervals = [x for x in self.timeIntervals if x.start_time == starting_time]
             time_intervals = [x for x in self.timeIntervals if x.start_time == starting_time and x.market == self]
 
             if len(time_intervals) == 0:  # None was found. Append a new time interval to the list of time intervals.
@@ -1348,7 +1348,7 @@ class Market(Component):
                 # First remove ALL the time intervals having the current starting time.
                 # 200924DJH: This logic must be revised in Version 3 to make sure OTHER market intervals are not
                 #            eliminated.
-                # self.timeIntervals = [x for x in self.timeIntervals if x.startTime != starting_time]
+                # self.timeIntervals = [x for x in self.timeIntervals if x.start_time != starting_time]
                 # TODO: Shouldn't this be an or condition?
                 # TODO: This entire if/else block becomes irrelevant if self.timeIntervals is a dictionary by start_time.
                 #  That would already guarantee a single interval for each start time.
@@ -1892,7 +1892,7 @@ class Market(Component):
     #     time_intervals = self.timeIntervals
     #
     #     def by_start_times(time_interval_list):
-    #         return time_interval_list.startTime
+    #         return time_interval_list.start_time
     #
     #     time_intervals.sort(key=by_start_times)  # 200207DJH: Is this actually used by the method??
     #

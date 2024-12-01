@@ -95,7 +95,7 @@ class TimeInterval(Archivable):
                     {"name": "duration", "type": "DateTimeRangeType"}
                 ],
                 "indices": [
-                    {"name": "idx_ti_instance", "columns": ["market", "start_time", "duration"], "unique": True}
+                    {"name": "idx_ti_instance", "columns": ["market_id", "start_time", "duration"], "unique": True}
                 ]
             }
         ])

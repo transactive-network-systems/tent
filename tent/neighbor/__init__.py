@@ -184,8 +184,8 @@ class Neighbor(Entity):
 
         # 200929DJH: This approach is too crude for Version 3. Commenting it out. Instead, reserve margins in expired
         #            markets will be trimmed near the bottom of this method.
-        # time_interval_values = [t.startTime for t in time_intervals]
-        # self.reserveMargins = [x for x in self.reserveMargins if x.timeInterval.startTime in time_interval_values]
+        # time_interval_values = [t.start_time for t in time_intervals]
+        # self.reserveMargins = [x for x in self.reserveMargins if x.timeInterval.start_time in time_interval_values]
 
         # Index through active time intervals ti
         for i in range(len(time_intervals)):
@@ -447,8 +447,8 @@ class Neighbor(Entity):
 
         # 200929DJH: Commenting out these lines that are too crude for Version 3. Instead, scheduled powers in expired
         #            markets will be trimmed near the bottom of this method.
-        # time_interval_values = [t.startTime for t in time_intervals]
-        # self.scheduledPowers = [x for x in self.scheduledPowers if x.timeInterval.startTime in time_interval_values]
+        # time_interval_values = [t.start_time for t in time_intervals]
+        # self.scheduledPowers = [x for x in self.scheduledPowers if x.timeInterval.start_time in time_interval_values]
 
         # Index through active time intervals ti
         # NOTE 1911DJH: In Version 2, the range of this following for-loop started at 1 (i.e., at the second value). I
@@ -522,7 +522,7 @@ class Neighbor(Entity):
             #            neighbor during the prior market object.
             '''  # Original replaced logic in this comment block
             time_intervals = market.timeIntervals
-            time_intervals.sort(key=lambda x: x.startTime)
+            time_intervals.sort(key=lambda x: x.start_time)
 
             # Find current demand d that corresponds to the nearest time interval.
             cur_demand = find_obj_by_ti(self.scheduledPowers, time_intervals[0])
@@ -580,8 +580,8 @@ class Neighbor(Entity):
 
         # 200929DJH: Commenting out this approach that is too crude for Version 3. Instead, dual costs in expired
         #            markets will be removed near the bottom of this method.
-        # time_interval_values = [t.startTime for t in time_intervals]
-        # self.dualCosts = [x for x in self.dualCosts if x.timeInterval.startTime in time_interval_values]
+        # time_interval_values = [t.start_time for t in time_intervals]
+        # self.dualCosts = [x for x in self.dualCosts if x.timeInterval.start_time in time_interval_values]
 
         # 101213DJH: This next loop had been corrupted in Version 1 by starting with the second value (i.e., 1). This
         # should no longer be needed in Version 2 and the market state machine. This was found by the failure of the
@@ -643,8 +643,8 @@ class Neighbor(Entity):
 
         # 200929DJH: Commenting out this approach that is too crude for Version 3. Instead, values in expired markets
         #            will be trimmed near the bottom of this method.
-        # time_interval_values = [t.startTime for t in time_intervals]
-        # self.productionCosts = [x for x in self.productionCosts if x.timeInterval.startTime in time_interval_values]
+        # time_interval_values = [t.start_time for t in time_intervals]
+        # self.productionCosts = [x for x in self.productionCosts if x.timeInterval.start_time in time_interval_values]
 
         # This range had been corrupted in Version 1 making it start with the second value. Doing so should no longer be
         # necessary in Version 2 with it market state machine. This issue was found from a failed test.
@@ -720,7 +720,7 @@ class Neighbor(Entity):
 
         # Extract and sort active market time intervals.
         time_intervals = set(market.timeIntervals)
-        time_intervals = sorted(time_intervals, key=attrgetter('startTime'))
+        time_intervals = sorted(time_intervals, key=attrgetter('start_time'))
 
         # Get the default vertices.
         default_vertices = self.defaultVertices
@@ -910,7 +910,7 @@ class Neighbor(Entity):
                 if len(current_scheduled_power) == 0:
                     # 240206DJH: This next line must be modified to use the new price model structure, where the market
                     #            priceModel attribute is a price model clsss object, and that object owns a price table.
-                    # predicted_market_price = market.model_prices(time_interval.startTime)[0]
+                    # predicted_market_price = market.model_prices(time_interval.start_time)[0]
                     predicted_market_price = market.priceModel.get(time_interval.start_time)[0]
                     current_scheduled_power = power_from_vertices(active_vertices,
                                                                   predicted_market_price)

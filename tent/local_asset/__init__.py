@@ -203,8 +203,8 @@ class LocalAsset(Entity):
         # 200929DJH: This is a problem in Version 3 because it removes some perfectly valid scheduled powers in other
         #            active market objects. Commenting these lines out. Below, scheduled powers will be trimmed if they
         #            are in expired markets.
-        # time_interval_values = [t.startTime for t in time_intervals]
-        # self.scheduledPowers = [x for x in self.scheduledPowers if x.timeInterval.startTime in time_interval_values]
+        # time_interval_values = [t.start_time for t in time_intervals]
+        # self.scheduledPowers = [x for x in self.scheduledPowers if x.timeInterval.start_time in time_interval_values]
 
         # Sort by function lambda, assumed to be a helper function pointing to start times
         time_intervals.sort(key=lambda x: x.start_time)
@@ -264,9 +264,9 @@ class LocalAsset(Entity):
         # 200929DJH: This approach is too crude for Version 3 because engagement schedules are not unique to starting
         #            times. Instead, the values in expired markets will be trimmed near the bottom of this method.
         #            Commenting out offending lines.
-        # time_interval_values = [t.startTime for t in time_intervals]
+        # time_interval_values = [t.start_time for t in time_intervals]
         # self.engagementSchedule = [x for x in self.engagementSchedule
-        #                            if x.timeInterval.startTime in time_interval_values]
+        #                            if x.timeInterval.start_time in time_interval_values]
 
         # Index through the active time intervals.
         for i in range(len(time_intervals)):
@@ -321,8 +321,8 @@ class LocalAsset(Entity):
 
         # 200929DJH: This approach is too crude for Version 3 and is being commented out. Instead, the reserve margins
         #            in expired markets will be removed near the bottom of this method.
-        # time_interval_values = [t.startTime for t in time_intervals]
-        # self.reserveMargins = [x for x in self.reserveMargins if x.timeInterval.startTime in time_interval_values]
+        # time_interval_values = [t.start_time for t in time_intervals]
+        # self.reserveMargins = [x for x in self.reserveMargins if x.timeInterval.start_time in time_interval_values]
 
         # Index through active time intervals ti
         for i in range(len(time_intervals)):
@@ -434,8 +434,8 @@ class LocalAsset(Entity):
 
         # 200929DJH: This method for trimming the transition costs is too crude for Version 3. Commenting out. Instead,
         #            the transaction costs that lie in expired markets will be trimmed further down.
-        # time_interval_values = [t.startTime for t in time_intervals]
-        # self.transitionCosts = [x for x in self.transitionCosts if x.timeInterval.startTime in time_interval_values]
+        # time_interval_values = [t.start_time for t in time_intervals]
+        # self.transitionCosts = [x for x in self.transitionCosts if x.timeInterval.start_time in time_interval_values]
 
         # Ensure that ti is ordered by time interval start times
         time_intervals.sort(key=lambda x: x.start_time)
@@ -447,7 +447,7 @@ class LocalAsset(Entity):
             # 200929DJH: In Version 3, the engagement state must be matched to a time interval object, not its start
             #            time, which is not necessarily unique.
             # current_engagement_state = [x for x in self.engagementSchedule
-            #                             if x.timeInterval.startTime == time_intervals[i].startTime]
+            #                             if x.timeInterval.start_time == time_intervals[i].start_time]
             current_engagement_state = [x.value for x in self.engagementSchedule if x.timeInterval == time_intervals[i]]
 
             # TODO: The calculation of transition cost is not right for the first time interval (being compared to last)
@@ -456,7 +456,7 @@ class LocalAsset(Entity):
             # 200929DJH: As above, make selection based on time interval object, not its start time, which may not be
             #            unique.
             # prior_engagement_state = [x for x in self.engagementSchedule
-            #                           if x.timeInterval.startTime == time_intervals[i - 1].startTime]
+            #                           if x.timeInterval.start_time == time_intervals[i - 1].start_time]
             prior_engagement_state = [x.value for x in self.engagementSchedule
                                       if x.timeInterval == time_intervals[i - 1]]
 
@@ -703,7 +703,7 @@ class LocalAsset(Entity):
                 price_horizon.extend(market_prices)
                 # 240207DJH: This minor change should ensure that the order of price intervals does not matter:
                 start_time_of_last_interval = max([x.timeInterval.start_time for x in price_horizon])
-                # end_of_calculated_horizon = price_horizon[0].timeInterval.startTime + market.intervalDuration
+                # end_of_calculated_horizon = price_horizon[0].timeInterval.start_time + market.intervalDuration
                 end_of_calculated_horizon = start_time_of_last_interval + market.intervalDuration
                 for x in range(1, len(market_prices)):
                     end_time = price_horizon[x].timeInterval.start_time + market.intervalDuration

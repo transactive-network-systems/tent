@@ -121,7 +121,7 @@ class DayAheadAuction(Auction):
             raise ('No predecessor of ' + self.name + ' could be found.')
 
         # Gather all the day-ahead market period start times and order them.
-        market_interval_start_times = [x.startTime for x in market.timeIntervals]
+        market_interval_start_times = [x.start_time for x in market.timeIntervals]
         market_interval_start_times.sort()
 
         new_market_list = []
@@ -179,7 +179,7 @@ class DayAheadAuction(Auction):
                 new_market.priceModel = price_model
                 # TODO: This intervalToBeRefined does not seem to be used anywhere....
                 new_market.intervalToBeRefined = [x for x in market.timeIntervals
-                                                  if x.startTime == market_interval_start_times[i]]
+                                                  if x.start_time == market_interval_start_times[i]]
 
                 new_market.marketState = new_market.initialMarketState
 
