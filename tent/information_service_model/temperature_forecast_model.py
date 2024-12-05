@@ -132,25 +132,21 @@ class TemperatureForecastModel(InformationServiceModel):
     def map_forecast_to_interval(self, mkt, weather_data):
         items = []
         predicted_values = []
-        for ti in mkt.timeIntervals:
+        for ti in mkt.time_intervals:
             # Find item which has the same timestamp as ti.timeStamp
-            start_time = ti.start_time.replace(minute=0)
             previous_measurement = items
-            items = [x[1] for x in weather_data if x[0] == start_time]
+            items = [x[1] for x in weather_data if x[0] == ti.start_time.replace(minute=0)]
             # Create interval value and add it to predicted values
             if items:
-                temp = items[0]
-                interval_value = IntervalValue(self, ti, mkt, MeasurementType.PredictedValue, temp)
-                predicted_values.append(interval_value)
+                predicted_values.append((ti, items[0]))
             elif previous_measurement:
-                temp = previous_measurement[0]
-                interval_value = IntervalValue(self, ti, mkt, MeasurementType.PredictedValue, temp)
-                predicted_values.append(interval_value)
+                predicted_values.append((ti, previous_measurement[0]))
                 items = previous_measurement
             else:
                 _log.debug("Cannot assign WEATHER information for interval: {}".format(ti))
-        if len(mkt.timeIntervals) == len(predicted_values):
-            self.predictedValues = predicted_values
+        if len(mkt.time_intervals) == len(predicted_values):
+            for val in predicted_values:
+                self.predicted_values.update(*val)
             return True
         else:
             _log.debug("WEATHER data problem when assigning forecast {}".format(len(predicted_values)))
@@ -170,23 +166,18 @@ class TemperatureForecastModel(InformationServiceModel):
         """
         weather_data = self.query_weather_data()
         if not self.map_forecast_to_interval(mkt, weather_data):
-            if self.predictedValues:
-                gap_time = mkt.timeIntervals[0].start_time - self.predictedValues[0].timeInterval.start_time
+            if self.predicted_values:
+                gap_time = mkt.time_intervals[0].start_time - self.predicted_values.first.interval.start_time
                 if gap_time > self.max_gap_time:
-                    self.predictedValues = []
                     if self.weather_data:
                         _log.debug("WEATHER using fallback1 tmy data for forecast!")
                         self.get_forecast_file(mkt)
                 else:
-                    predicted_values = []
-                    for i in range(1, len(mkt.timeIntervals)):
-                        # TODO: used self.predictedValues[i-1] in TENT version, just [i] in volttron-pnnl-applications.
-                        #  Which is correct? v-p-a version was later, but may be a difference between DarkSky & CSV.
-                        #  Should reindexing be performed in subclass if necessary?
-                        interval_value = IntervalValue(self, mkt.timeIntervals[i], mkt, MeasurementType.PredictedValue,
-                                                       self.predictedValues[i].value)
-                        predicted_values.append(interval_value)
-                    self.predictedValues = predicted_values
+                    # TODO: This seems to be intended to shift values forward by one interval.
+                    #  Why do this at all? Is this really the best way to handle missing data?
+                    for i in range(1, len(mkt.time_intervals)):
+                        self.predicted_values.update(mkt.time_intervals[i],
+                                                     self.predicted_values.get_by_interval(mkt.time_intervals[i - 1]))
             else:
                 if self.weather_data:
                     _log.debug("WEATHER using fallback2 tmy data for forecast!")
@@ -195,8 +186,7 @@ class TemperatureForecastModel(InformationServiceModel):
     def get_forecast_file(self, mkt):
         self.init_weather_data()
         # Copy weather data to predictedValues
-        self.predictedValues = []
-        for ti in mkt.timeIntervals:
+        for ti in mkt.time_intervals:
             # Find item which has the same timestamp as ti.timeStamp
             start_time = ti.start_time.replace(minute=0)
             items = [x for x in self.weather_data if x['Timestamp'] == start_time]
@@ -211,10 +201,8 @@ class TemperatureForecastModel(InformationServiceModel):
                 if len(items) == 0:
                     raise Exception('No weather data for time: {}'.format(format_timestamp(ti.start_time)))
 
-            # Create interval value and add it to predicted values
-            temp = items[0]['Value']
-            interval_value = IntervalValue(self, ti, mkt, MeasurementType.PredictedValue, temp)
-            self.predictedValues.append(interval_value)
+            # Add temperature to predicted values
+            self.predicted_values.update(ti, items[0]['Value'])
 
     @property
     def table_name(self):
@@ -262,14 +250,14 @@ if __name__ == '__main__':
 
     # Create market with some time intervals
     market = Market()
-    market.marketClearingTime = datetime.now().replace(minute=0, second=0, microsecond=0)
-    market.nextMarketClearingTime = market.marketClearingTime + market.marketClearingInterval
+    market.market_clearing_time = datetime.now().replace(minute=0, second=0, microsecond=0)
+    market.next_market_clearing_time = market.market_clearing_time + market.market_clearing_interval
 
     market.check_intervals()
 
     # Test update_information
     forecaster.update_information(market)
 
-    times = [format_ts(x.timeInterval.start_time) for x in forecaster.predictedValues]
+    times = [format_ts(x.time_interval.start_time) for x in forecaster.predictedValues]
 
     print(times)

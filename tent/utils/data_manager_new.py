@@ -129,6 +129,7 @@ class LocalDataManager(DataManager):
             table_orm = self.orm.get(table_name)
             if not table_orm:
                 _log.warning(f'Attempted to archive data to non-existent table: {table_name}')
+            _log.debug(rec['data'])
             record_object = table_orm(**rec['data'])
             sess.add(record_object)
 

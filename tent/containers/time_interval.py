@@ -61,11 +61,15 @@ class TimeInterval(Archivable):
         self.start_time: datetime = start_time
 
         # The TimeInterval name is used by the transactive record, and must be unique to its market.
-        self.name: str = str(self.market.marketSeriesName) + ":" + format_ts(self.start_time)
+        self.name: str = str(self.market.market_series_name) + ":" + format_ts(self.start_time)
 
     @property
     def data_manager(self):
         return self.market.data_manager
+
+    @property
+    def end_time(self):
+        return self.start_time + self.duration
 
     @property
     def table_name(self):

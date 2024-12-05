@@ -109,29 +109,29 @@ def append_interval_value_table(method=METHOD, objects=None):
     for obj in objects:
         SOURCE_TYPE = obj.associatedClass
         SOURCE_NAME = obj.associatedObject  # 211116DJH: TODO: This should probably be the object's name.
-        MARKET_SERIES = obj.market.marketSeriesName
+        MARKET_SERIES = obj.market.market_series_name
         # 211109DJH: The use of strftime() throws errors if these datetime objects were not defined. This approach
         #            should be more tolerant.
-        if obj.market.marketClearingTime:
-            MARKET_CLEARING_DATE = obj.market.marketClearingTime.strftime(DATE_FORMAT)
-            MARKET_CLEARING_TIME = obj.market.marketClearingTime.strftime(TIME_FORMAT)
+        if obj.market.market_clearing_time:
+            MARKET_CLEARING_DATE = obj.market.market_clearing_time.strftime(DATE_FORMAT)
+            MARKET_CLEARING_TIME = obj.market.market_clearing_time.strftime(TIME_FORMAT)
         else:
             MARKET_CLEARING_DATE = ''
             MARKET_CLEARING_TIME = ''
-        if obj.timeInterval.start_time:
-            INTERVAL_STARTING_DATE = obj.timeInterval.start_time.strftime(DATE_FORMAT)
-            INTERVAL_STARTING_TIME = obj.timeInterval.start_time.strftime(TIME_FORMAT)
+        if obj.time_interval.start_time:
+            INTERVAL_STARTING_DATE = obj.time_interval.start_time.strftime(DATE_FORMAT)
+            INTERVAL_STARTING_TIME = obj.time_interval.start_time.strftime(TIME_FORMAT)
         else:
             INTERVAL_STARTING_DATE = ''
             INTERVAL_STARTING_TIME = ''
-        MEASUREMENT_TYPE = MeasurementType.get(obj.measurementType.value)
+        MEASUREMENT_TYPE = MeasurementType.get(obj.measurement_type.value)
         value_type = type(obj.value)
         if value_type != Vertex:
             VALUE_1 = obj.value
             VALUE_2 = ''
             VALUE_3 = ''
         else:
-            VALUE_1 = obj.value.marginalPrice
+            VALUE_1 = obj.value.marginal_price
             VALUE_2 = obj.value.power
             VALUE_3 = obj.value.record
         record = [TIMESTAMP, SOURCE_TYPE, SOURCE_NAME, MARKET_SERIES, MARKET_CLEARING_DATE, MARKET_CLEARING_TIME,
@@ -197,14 +197,14 @@ def append_market_object_table(method=METHOD, objects=None):
 
     for obj in objects:
         MARKET_NAME = obj.name
-        MARKET_SERIES = obj.marketSeriesName
-        NUMBER_INTERVALS = obj.intervalsToClear
-        MARKET_CLEARING_DATE = format(obj.marketClearingTime, DATE_FORMAT)
-        MARKET_CLEARING_TIME = format(obj.marketClearingTime, TIME_FORMAT)
-        start_time = min([x.start_time for x in obj.timeIntervals])
+        MARKET_SERIES = obj.market_series_name
+        NUMBER_INTERVALS = obj.intervals_to_clear
+        MARKET_CLEARING_DATE = format(obj.market_clearing_time, DATE_FORMAT)
+        MARKET_CLEARING_TIME = format(obj.market_clearing_time, TIME_FORMAT)
+        start_time = min([x.start_time for x in obj.time_intervals])
         DELIVERY_START_DATE = format(start_time, DATE_FORMAT)
         DELIVERY_START_TIME = format(start_time, TIME_FORMAT)
-        TOTAL_DELIVERY_HOURS = obj.intervalsToClear * obj.intervalDuration
+        TOTAL_DELIVERY_HOURS = obj.intervals_to_clear * obj.interval_duration
         TOTAL_GENERATION = None
         TOTAL_DEMAND = None
         TOTAL_PRODUCTION_COST = None
@@ -283,17 +283,17 @@ def append_transactive_record_table(method=METHOD, objects=None):
     appender = csv.writer(file)
 
     for obj in objects:
-        NEIGHBOR_NAME = obj.neighborName
+        NEIGHBOR_NAME = obj.neighbor_name
         DIRECTION = obj.direction
-        parts1 = obj.timeInterval.split(':')  # The record time interval is prepended with the market series name
+        parts1 = obj.time_interval.split(':')  # The record time interval is prepended with the market series name
         MARKET_SERIES = parts1[0]
         INTERVAL_STARTING_DATE = parts1[1][:4] + '-' + parts1[1][4:6] + '-' + parts1[1][6:8]
         INTERVAL_STARTING_TIME = parts1[1][9:11] + ':' + parts1[1][11:13] + ':' + parts1[1][13:15]
-        parts2 = obj.marketName.split(':')
+        parts2 = obj.market_name.split(':')
         MARKET_CLEARING_DATE = parts2[0][-13:-3]
         MARKET_CLEARING_TIME = parts2[0][-2:] + ':' + parts2[1] + ':' + parts2[2]
         RECORD = obj.record
-        PRICE = obj.marginalPrice
+        PRICE = obj.marginal_price
         POWER = obj.power
 
         record = [TIMESTAMP, NEIGHBOR_NAME, DIRECTION, MARKET_SERIES, MARKET_CLEARING_DATE,

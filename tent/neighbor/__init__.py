@@ -50,10 +50,10 @@ from operator import attrgetter
 from typing import Union
 
 from tent import Entity
-from tent.containers import IntervalValue, TransactiveRecord, Vertex
-from tent.enumerations import Direction, MarketState, MeasurementType
+from tent.containers import IntervalValue, Measurement, TransactiveRecord, Vertex
+from tent.enumerations import Direction, MarketState, MeasurementType, MeasurementUnit
 from tent.utils.data_manager import append_table
-from tent.utils.helpers import (are_different1, are_different2, find_obj_by_ti, find_objs_by_ti, format_ts,
+from tent.utils.helpers import (are_different1, are_different2, find_objs_by_ti,
                                 format_timestamp, get_duration_in_hour, order_vertices, production,
                                 prod_cost_from_vertices, validate_bool, power_from_vertices)
 from tent.utils.timer import Timer
@@ -97,55 +97,55 @@ class Neighbor(Entity):
                                        maximum_power, meter_points, minimum_power, name, transactive_node)
         self.tn = None if transactive_node is None else weakref.ref(transactive_node)
 
-        self.convergenceThreshold = float(convergence_threshold)      # [Small positive fraction]: May affect negotiations
+        self.convergence_threshold = float(convergence_threshold)      # [Small positive fraction]: May affect negotiations
         if cost_parameters is None:
             cost_parameters = [0.0, 0.0, 0.0]
-        self.costParameters = [float(cp) for cp in cost_parameters]   # 3x[float]: Parameters of quadratic production cost
-        self.demandMonth = int(demand_month)                          # [month number]: Used to reset demand charges
-        self.demandRate = float(demand_rate)                          # [$ / kW (/h)]: rate determinant
-        self.demandThreshold = float(demand_threshold)                # [kW]; current power above which demand charges accrue
-        self.demandThresholdCoef = float(demand_threshold_coef)       # Factor by which threshold is reduced in new month
-        self.description = str(description)                           # [text]
-        self.effectiveImpedance = float(effective_impedance)          # [Ohms]: (future) may be used for loss effects
-        self.friend = validate_bool(friend, 'friend')                 # [boolean]: True for collaborative, friendly Neighbor
-        self.location = str(location)                                 # [text]
-        self.lossFactor = float(loss_factor)                          # [dimensionless] 0.01 = 1% full-load loss
-        self.maximumPower = float(maximum_power)                      # [avg.kW, signed] Object's physical "hard" constraint
-        self.mechanism = mechanism                                    # future, unused
-        self.minimumPower = float(minimum_power)                      # [avg.kW, signed] Object's physical "hard" constraint
-        self.name = str(name)                                         # [text]
-        self.subclass = subclass                                      # future, unused
-        self.transactive = validate_bool(transactive, 'transactive')  # [boolean]: True for transactive neighbor
-        if isinstance(up_or_down, Direction):  # 'upstream' or 'downstream' direction of this neighbor
-            self.upOrDown = up_or_down
+        self.cost_parameters = [float(cp) for cp in cost_parameters]   # 3x[float]: Parameters of quadratic production cost
+        self.demand_month = int(demand_month)                          # [month number]: Used to reset demand charges
+        self.demand_rate = float(demand_rate)                          # [$ / kW (/h)]: rate determinant
+        self.demand_threshold = float(demand_threshold)                # [kW]; current power above which demand charges accrue
+        self.demand_threshold_coef = float(demand_threshold_coef)      # Factor by which threshold is reduced in new month
+        self.description = str(description)                            # [text]
+        self.effective_impedance = float(effective_impedance)          # [Ohms]: (future) may be used for loss effects
+        self.friend = validate_bool(friend, 'friend')                  # [boolean]: True for collaborative, friendly Neighbor
+        self.location = str(location)                                  # [text]
+        self.loss_factor = float(loss_factor)                          # [dimensionless] 0.01 = 1% full-load loss
+        self.maximum_power = float(maximum_power)                      # [avg.kW, signed] Object's physical "hard" constraint
+        self.mechanism = mechanism                                     # future, unused
+        self.minimum_power = float(minimum_power)                      # [avg.kW, signed] Object's physical "hard" constraint
+        self.name = str(name)                                          # [text]
+        self.subclass = subclass                                       # future, unused
+        self.transactive = validate_bool(transactive, 'transactive')   # [boolean]: True for transactive neighbor
+        if isinstance(up_or_down, Direction):                          # 'upstream' or 'downstream' direction of this neighbor
+            self.up_or_down = up_or_down
         elif isinstance(up_or_down, int):
-            self.upOrDown = Direction(up_or_down)
+            self.up_or_down = Direction(up_or_down)
         else:
-            self.upOrDown = Direction[up_or_down]
+            self.up_or_down = Direction[up_or_down]
 
         #########
         # These static lists are maintained by each neighbor object:
         #########
 
         # [IntervalValue] Values are [Vertices]
-        self.defaultVertices = [Vertex(float("inf"), 0.0, 1)] if default_vertices is None \
+        self.default_vertices = [Vertex(float("inf"), 0.0, 1)] if default_vertices is None \
             else Vertex.vertex_list(default_vertices)
 
         # These properties and lists are to be dynamically assigned. An implementer would usually not manually assign
         # these properties.
-        self.activeVertices = []                            # [IntervalValue] Values are [Vertex]
+        self.active_vertices = []                            # [IntervalValue] Values are [Vertex]
         self.converged = False                              # [boolean]: True if converged
-        self.convergenceFlags = []                          # [IntervalValue] Values are [Boolean]
-        self.dualCosts = []                                 # [IntervalValue] Value is [$]
-        self.mySignal = []                                  # [TransactiveRecord] Current records ready to send
-        self.productionCosts = []                           # [IntervalValue] Values are [$]
-        self.receivedSignal = []                            # [TransactiveRecord] Last records received
-        self.reserveMargins = []                            # [IntervalValue] Value is [avg.kW]
-        self.scheduledPowers = []                           # [IntervalValue] Value is [avg.kW]
-        self.sentSignal = []                                # [TransactiveRecord] Last records sent
-        self.totalDualCost = 0.0                            # [float] [$]
-        self.totalProductionCost = 0.0                      # [float] [$]
-        self.receivedCurves = None
+        self.convergence_flags = Measurement(self, MeasurementType.ConvergenceFlag, MeasurementUnit.Boolean)
+        self.dual_costs = Measurement(self, MeasurementType.DualCost, MeasurementUnit.Monetary)  # [$]
+        self.my_signal = []                                  # [TransactiveRecord] Current records ready to send
+        self.production_costs = Measurement(self, MeasurementType.ProductionCost, MeasurementUnit.Monetary)  # [$]
+        self.received_signal = []                            # [TransactiveRecord] Last records received
+        self.reserve_margins = Measurement(self, MeasurementType.ReserveMargin, MeasurementUnit.kW)  # [avg.kW]
+        self.scheduled_powers = Measurement(self, MeasurementType.ReserveMargin, MeasurementUnit.kW)# [avg.kW]
+        self.sent_signal = []                                # [TransactiveRecord] Last records sent
+        self.total_dual_cost = 0.0                            # [float] [$]
+        self.total_production_cost = 0.0                      # [float] [$]
+        self.received_curves = None
 
         # 240206DJH: This throws errors if transactive_node is None. Skipping this subscription assignment if
         #            transactive_node is None. This case should only happen in unit testing, I think.
@@ -174,25 +174,16 @@ class Neighbor(Entity):
         # OUTPUTS:
         # - updates self.reserveMargins
 
-        # Gather active time intervals ti
-        time_intervals = market.timeIntervals
-
-        # 200929DJH: This approach is too crude for Version 3. Commenting it out. Instead, reserve margins in expired
-        #            markets will be trimmed near the bottom of this method.
-        # time_interval_values = [t.start_time for t in time_intervals]
-        # self.reserveMargins = [x for x in self.reserveMargins if x.timeInterval.start_time in time_interval_values]
-
-        # Index through active time intervals ti
-        for i in range(len(time_intervals)):
+        for time_interval in market.time_intervals:
 
             # Find the maximum available power from among the active vertices in the indexed time interval, one of which
             # must represent maximum power.
-            maximum_power = find_objs_by_ti(self.activeVertices, time_intervals[i])
+            maximum_power = find_objs_by_ti(self.active_vertices, time_interval)
 
             if len(maximum_power) == 0:
 
                 # No active vertex was found. The hard constraint must be used.
-                maximum_power = self.maximumPower  # hard constraint [avg.kW, signed]
+                maximum_power = self.maximum_power  # hard constraint [avg.kW, signed]
 
             else:
 
@@ -203,45 +194,26 @@ class Neighbor(Entity):
 
                 # Check that the operational maximum from vertices does not exceed the hard physical constraint. Use the
                 # smaller of the two.
-                maximum_power = min(maximum_power, self.maximumPower)
+                maximum_power = min(maximum_power, self.maximum_power)
 
             # Find the scheduled power for this asset in the indexed time interval
-            scheduled_power = find_obj_by_ti(self.scheduledPowers, time_intervals[i])
-            scheduled_power = scheduled_power.value  # scheduled power [avg.kW]
+            scheduled_power = self.scheduled_powers.get_by_interval(time_interval)
 
             # The available reserve margin is calculated as the difference between the maximum and scheduled powers.
             # Make sure the value is not less than zero.
-            value = max(0, maximum_power - scheduled_power)  # reserve margin [avg.kW]
-
-            # Check whether a reserve margin exists in the indexed time interval.
-            interval_value = find_obj_by_ti(self.reserveMargins, time_intervals[i])
-
-            if interval_value is None:
-
-                # No reserve margin was found for the indexed time interval. Create a reserve margin interval for the
-                # calculated value
-                interval_value = IntervalValue(self, time_intervals[i], market, MeasurementType.ReserveMargin, value)
-
-                # Append the reserve margin interval value to the list of reserve margins.
-                self.reserveMargins.append(interval_value)  # IntervalValue objects
-
-            else:
-                # The reserve margin interval value already exists, simply reassign its value.
-                interval_value.value = value  # [avg.kW]
-
-        # 200929DJH: Trim any reserve margins that lie in expired markets.
-        self.reserveMargins = [x for x in self.reserveMargins if x.market.marketState != MarketState.Expired]
+            reserve_margin = max(0, maximum_power - scheduled_power.value)  # reserve margin [avg.kW]
+            self.reserve_margins.update(time_interval, reserve_margin)
 
     @staticmethod
     def find_last_message_ts(signals, ti_name, fallback_value):
 
         # Create a logical array: true if the received TransactiveRecord is in the indexed active time interval.
-        ti_signals = [s for s in signals if s.timeInterval == ti_name]
+        ti_signals = [s for s in signals if s.time_interval == ti_name]
 
         # If a signal message was found in the indexed time interval, its timestamp ts is the last time a message was
-        # sent. Otherwise, set the ts to the fallback value (eg. current time dt)
+        # sent. Otherwise, set the ts to the fallback value (e.g., current time dt)
         if len(ti_signals) > 0:
-            ts = [s.timeStamp for s in ti_signals if s.record == 0]
+            ts = [s.timestamp for s in ti_signals if s.record == 0]
             ts = ts[0]
         else:
             ts = fallback_value
@@ -273,12 +245,9 @@ class Neighbor(Entity):
         # NOTE: this method should not be called unless the balancing sub-problem and all the scheduling sub-problems
         # have been calculated and have converged.
 
-        # Gather active time intervals.
-        time_intervals = market.timeIntervals
-
         # Index through active time intervals to assess their convergence status.
         t_threshold = timedelta(minutes=5)
-        for i in range(len(time_intervals)):
+        for time_interval in market.time_intervals:
             # Capture the current datetime in the same format as for the TransactiveRecord messages.
             dt = Timer.get_cur_time()
 
@@ -287,69 +256,54 @@ class Neighbor(Entity):
 
             # Find the TransactiveRecord objects sent from the transactive Neighbor in this indexed active time
             # interval.
-            ss_ts, ss = self.find_last_message_ts(self.sentSignal, time_intervals[i].name, dt-t_threshold)
-            rs_ts, rs = self.find_last_message_ts(self.receivedSignal, time_intervals[i].name, dt)
-            ms_ts, ms = self.find_last_message_ts(self.mySignal, time_intervals[i].name, dt)
+            ss_ts, ss = self.find_last_message_ts(self.sent_signal, time_interval.name, dt - t_threshold)
+            rs_ts, rs = self.find_last_message_ts(self.received_signal, time_interval.name, dt)
+            ms_ts, ms = self.find_last_message_ts(self.my_signal, time_interval.name, dt)
 
             # Now, work through the convergence criteria.
             if len(ss) == 0:
                 # No signal has been sent in this time interval. This is the first convergence requirement. Set the
                 # convergence flag false.
-                _log.debug(f"Signal for time interval {i} ({time_intervals[i].name}). Enable send flag.")
+                _log.debug(f"Signal for time interval {time_interval.name}. Enable send flag.")
                 flag = False
 
             # received and received AFTER last sent and there is a big diff b/w ss and rs
-            elif len(rs) > 0 and rs_ts > ss_ts and are_different1(ss, rs, self.convergenceThreshold, self.name):
-                # One or more TransactiveRecord objects has been received in the indexed time interval and it has been
+            elif len(rs) > 0 and rs_ts > ss_ts and are_different1(ss, rs, self.convergence_threshold, self.name):
+                # One or more TransactiveRecord objects has been received in the indexed time interval, and it has been
                 # received AFTER the last time a message was sent. These are preconditions for the second convergence
                 # requirement. Function are_different1() checks whether the sent and received signals differ
                 # significantly. If all these conditions are true, the Neighbor is not converged.
 
                 _log.debug(f"TCC for {self.name} are_different1 returned True? Check:"
-                           f" rs={[(x.timeInterval, x.record, x.power, x.marginalPrice) for x in rs]},"
-                           f" ss={[(x.timeInterval, x.record, x.power, x.marginalPrice) for x in ss]},"
-                           f" rs_ts={rs_ts}, ss_ts={ss_ts}, threshold={self.convergenceThreshold}")
+                           f" rs={[(x.time_interval, x.record, x.power, x.marginal_price) for x in rs]},"
+                           f" ss={[(x.time_interval, x.record, x.power, x.marginal_price) for x in ss]},"
+                           f" rs_ts={rs_ts}, ss_ts={ss_ts}, threshold={self.convergence_threshold}")
 
                 flag = False
 
             # TODO: Find out why the timing does not work with t_threshold.
             # elif dt - ss_ts >= t_threshold and are_different2(ms, ss, self.convergenceThreshold, self.name):
-            elif are_different2(ms, ss, self.convergenceThreshold, self.name):
+            elif are_different2(ms, ss, self.convergence_threshold, self.name):
                 # Delay 5 min after last send AND More than 5 minutes have passed since the last time a signal was sent.
                 # This is a precondition to the third convergence criterion. Function are_different2() returns true if
                 # mySignal (ms) and the sentSignal (ss) differ significantly, meaning that local conditions have changed
                 # enough that a new, revised signal should be sent.
 
                 _log.debug(f"TCC for {self.name} are_different2 returned True? Check:"
-                           f" ms={[(x.timeInterval, x.record, x.power, x.marginalPrice) for x in ms]},"
-                           f" ss={[(x.timeInterval, x.record, x.power, x.marginalPrice) for x in ss]},"
-                           f" rs_ts={rs_ts}, ss_ts={ss_ts}, threshold={self.convergenceThreshold}")
+                           f" ms={[(x.time_interval, x.record, x.power, x.marginal_price) for x in ms]},"
+                           f" ss={[(x.time_interval, x.record, x.power, x.marginal_price) for x in ss]},"
+                           f" rs_ts={rs_ts}, ss_ts={ss_ts}, threshold={self.convergence_threshold}")
 
                 flag = False
 
-            # Check whether a convergence flag exists in the indexed time interval.
-            iv = find_obj_by_ti(self.convergenceFlags, time_intervals[i])
-
-            if iv is None:
-
-                # No convergence flag was found in the indexed time interval.
-                # Create one and append it to the list.
-                iv = IntervalValue(self, time_intervals[i], market, MeasurementType.ConvergenceFlag, flag)
-                self.convergenceFlags.append(iv)
-
-            else:
-                # A convergence flag was found to exist in the indexed time interval. Simply reassign it.
-                iv.value = flag
+            self.convergence_flags.update(time_interval, flag)
 
         # If any of the convergence flags in active time intervals is false, the overall convergence flag should be set
         # false, too. Otherwise, true, meaning the coordination sub-problem is converged with this Neighbor.
-        if any([not x.value for x in self.convergenceFlags]):
-            self.converged = False
-        else:
-            self.converged = True
+        # TODO: This works but is ugly. Measurement should be an Iterator to allow "any(self.convergent_flags)".
+        self.converged = False if any([not v.value for _, v in self.convergence_flags.all]) else True
 
-        _log.debug(f"TCC convergence flags for {self.name} are "
-                   f"{[(format_ts(f.timeInterval.start_time), f.value) for f in self.convergenceFlags]}")
+        _log.debug(f"TCC convergence flags for {self.name} are {self.convergence_flags.log_report}")
         _log.debug(f"TCC convergence flag for {self.name} is {self.converged}.")
 
     @staticmethod
@@ -373,14 +327,14 @@ class Neighbor(Entity):
             # The power is below the first vertex. Marginal price is indeterminate. Assign the marginal price of the
             # first vertex, create a warning, and return. (This should be an unlikely condition.)
             Warning('power was lower than first vertex')  # This had been commented out.
-            marginal_price = vertices[0].marginalPrice  # price [$/kWh]
+            marginal_price = vertices[0].marginal_price  # price [$/kWh]
             return marginal_price
 
         elif power >= vertices[-1].power:
             # The power is above the last vertex. Marginal price is indeterminate. Assign the marginal price of the last
             # vertex, create a warning, and return. (This should be an unlikely condition.)
             Warning('power was greater than last vertex')
-            marginal_price = vertices[-1].marginalPrice  # price [$/kWh]
+            marginal_price = vertices[-1].marginal_price  # price [$/kWh]
             return marginal_price
 
         # There are multiple vertices v. Index through them.
@@ -393,19 +347,19 @@ class Neighbor(Entity):
                     # The segment is horizontal. Marginal price is indefinite. Assign the marginal price of the second
                     # vertex and return.
                     _log.warning('segment is horizontal')
-                    marginal_price = vertices[i + 1].marginalPrice
+                    marginal_price = vertices[i + 1].marginal_price
                     return marginal_price
                 else:
                     # The segment is not horizontal. Interpolate on the segment.
                     # First, determine the segment's slope.
-                    slope = (vertices[i + 1].marginalPrice - vertices[i].marginalPrice) \
+                    slope = (vertices[i + 1].marginal_price - vertices[i].marginal_price) \
                             / (vertices[i + 1].power - vertices[i].power)  # [$/kWh/kW]
 
                     # Then interpolate to find marginal price.
-                    marginal_price = vertices[i].marginalPrice + (power - vertices[i].power) * slope  # [$/kWh]
+                    marginal_price = vertices[i].marginal_price + (power - vertices[i].power) * slope  # [$/kWh]
                     return marginal_price
 
-    # SEALED - DONOT MODIFY
+    # SEALED - DO NOT MODIFY
     # Have object schedule its power in active time intervals
     def schedule(self, market):
         self.update_dc_threshold(market)
@@ -437,61 +391,19 @@ class Neighbor(Entity):
         # OUTPUTS:
         # updates array self.scheduledPowers
 
-        # Gather the active time intervals.
-        time_intervals = market.timeIntervals  # TimeInterval
-
-        # 200929DJH: Commenting out these lines that are too crude for Version 3. Instead, scheduled powers in expired
-        #            markets will be trimmed near the bottom of this method.
-        # time_interval_values = [t.start_time for t in time_intervals]
-        # self.scheduledPowers = [x for x in self.scheduledPowers if x.timeInterval.start_time in time_interval_values]
-
-        # Index through active time intervals ti
-        # NOTE 1911DJH: In Version 2, the range of this following for-loop started at 1 (i.e., at the second value). I
-        # believe this had been done to avoid having building models schedule in the first time interval, which was
-        # usually already within its delivery period. In Version 3, the market state transition machine should be used
-        # to make sure that no negotiations take place after a market has cleared and begun delivery of its market
-        # periods.
-        for i in range(len(time_intervals)):
+        for time_interval in market.time_intervals:
 
             # Find the marginal price for the indexed time interval
-            marginal_price = find_obj_by_ti(market.marginalPrices, time_intervals[i])  # an IntervalValue
+            marginal_price = market.marginal_prices.get_by_interval(time_interval)
             if marginal_price is None:
-                marginal_price = market.priceModel.get(time_intervals[i].start_time)[0]
+                marginal_price = market.price_model.get(time_interval.start_time)[0]
             else:
                 marginal_price = marginal_price.value
 
             # Find the power that corresponds to the marginal price according to the set of active vertices in the
             # indexed time interval. Function Production() works for any power that is determined by its supply curve or
             # demand curve, as represented by the object's active vertices.
-            value = production(self, marginal_price, time_intervals[i])  # [avg. kW]
-
-            # Check to see if a scheduled power already exists in the indexed time interval.
-            interval_value = find_obj_by_ti(self.scheduledPowers, time_intervals[i])  # an IntervalValue
-
-            if interval_value is None:
-
-                # No scheduled power was found in the indexed time interval. Create the interval value and assign it the
-                # scheduled power.
-                interval_value = IntervalValue(self, time_intervals[i], market,
-                                               MeasurementType.ScheduledPower, value)
-
-                # Append the scheduled power to the list of scheduled powers
-                self.scheduledPowers.append(interval_value)
-
-            else:
-
-                # A scheduled power already exists in the indexed time interval. Simply reassign its value.
-                interval_value.value = value  # [avg. kW]
-
-        # 200929DJH: Trim values in expired markets so the list does not grow indefinitely.
-        self.scheduledPowers = [x for x in self.scheduledPowers if x.market.marketState != MarketState.Expired]
-
-        sp = [(x.timeInterval.name, x.value) for x in self.scheduledPowers]
-        #_log.debug(f"{self.name} neighbor model scheduledPowers are: {sp}")
-
-    def schedule_engagement(self):
-        # Required from AbstractModel, but not particularly useful for any Neighbor.
-        return
+            self.scheduled_powers.update(time_interval, production(self, marginal_price, time_interval))  # [avg. kW]
 
     def update_dc_threshold(self, market):
         # Keep track of the month's demand-charge threshold
@@ -507,183 +419,74 @@ class Neighbor(Entity):
 
         # Find the MeterPoint that is configured to measure average demand for this Neighbor. The determination is
         # based on the meter's MeasurementType.
-        mtr = [x for x in self.meterPoints if x.measurementType == MeasurementType.AverageDemandkW]
+        mtr = [x for x in self.meter_points if x.measurement_type == MeasurementType.AverageDemandkW]
         mtr = mtr[0] if len(mtr) > 0 else None
 
         if mtr is None:
-
+            # TODO: Would it be better to always take the max of 0.0, self.demand_threshold,
+            #  mtr.current_measurement (or maybe max in its buffer), and prior_market_powers?
+            #  If the prior market had a higher power than the meter, we would want to know that, right?
             # No appropriate MeterPoint was found. The demand threshold must be inferred.
-            # 200731DJH: In Version 3, this is  improved to update the demand threshold using the peak power from the
-            #            neighbor during the prior market object.
-            '''  # Original replaced logic in this comment block
-            time_intervals = market.timeIntervals
-            time_intervals.sort(key=lambda x: x.start_time)
-
-            # Find current demand d that corresponds to the nearest time interval.
-            cur_demand = find_obj_by_ti(self.scheduledPowers, time_intervals[0])
-
-            # Update the inferred demand
-            # d = None if cur_demand == [] else cur_demand.value
-            # d = cur_demand.value if len(cur_demand > 0) else 0.0
-            if cur_demand is None:
-                d = 0.0
-            elif type(cur_demand) == 'list' and len(cur_demand) == 0:
-                d = 0.0
-            else:
-                d = cur_demand.value
-
-            self.demandThreshold = max([0, self.demandThreshold, d])  # [avg.kW]
-            '''  # begin new logic to replace the above block ***
-            prior_market = market.priorMarketInSeries
+            prior_market = market.prior_market_in_series
             if prior_market is None:
                 return
-            prior_market_powers = [x.value for x in self.scheduledPowers
-                                   if x.market == prior_market]
-            if prior_market_powers is not None and len(prior_market_powers) != 0:
-                prior_peak = max(prior_market_powers)
-                self.demandThreshold = max([0, self.demandThreshold, prior_peak])
-            else:
-                self.demandThreshold = float('inf')
-            # _log.debug(f"measurement: {d} threshold: {self.demandThreshold}")
-
-                # 211102DJH: This next line will cause problems if a "dummy" market has been partially configured at
-                #            startup. It is preferable to keep the demandThreshold constant instead.
-                # self.demandThreshold = float('inf')
-                pass
+            prior_mkt_pwrs = [v.value for k, v in self.scheduled_powers.all if k.market == prior_market()]
+            self.demand_threshold = max([0.0, self.demand_threshold, *prior_mkt_pwrs]) if prior_mkt_pwrs else float('inf')
+            # TODO: Why do we go to inf if there are not prior market powers. There could still be a demand_threshold,
+            #  and the logic seems rather different than maxing that with 0....
         else:
             # An appropriate MeterPoint was found. The demand threshold may be updated from the MeterPoint.
 
             # Update the demand threshold.
-            self.demandThreshold = max([0, self.demandThreshold, mtr.current_measurement or 0])  # [avg.kW]
-            # _log.debug("Meter: {} measurement: {} threshold: {}".format(mtr.name,
-            #                                                            mtr.current_measurement,
-            #                                                            self.demandThreshold))
+            self.demand_threshold = max([0.0, self.demand_threshold, mtr.current_measurement or 0.0])  # [avg.kW]
 
         # The demand threshold should be reset in a new month. First find the current month number mon.
         mon = Timer.get_cur_time().month
 
-        if mon != self.demandMonth:
+        if mon != self.demand_month:
             # This must be the start of a new month. The demand threshold must be reset. For now, "resetting" means
             # using a fraction (e.g., 80%) of the final demand threshold in the prior month.
-            self.demandThreshold = self.demandThresholdCoef * self.demandThreshold
-            self.demandMonth = mon
+            self.demand_threshold = self.demand_threshold_coef * self.demand_threshold
+            self.demand_month = mon
 
     def update_dual_costs(self, market):
+        for time_interval in market.time_intervals:
 
-        # Gather the active time intervals.
-        time_intervals = market.timeIntervals
-
-        # 200929DJH: Commenting out this approach that is too crude for Version 3. Instead, dual costs in expired
-        #            markets will be removed near the bottom of this method.
-        # time_interval_values = [t.start_time for t in time_intervals]
-        # self.dualCosts = [x for x in self.dualCosts if x.timeInterval.start_time in time_interval_values]
-
-        # 101213DJH: This next loop had been corrupted in Version 1 by starting with the second value (i.e., 1). This
-        # should no longer be needed in Version 2 and the market state machine. This was found by the failure of the
-        # method's test.
-        for i in range(0, len(time_intervals)):
-
-            # Find the marginal price mp for the indexed time interval in the given market
-            marginal_price = find_obj_by_ti(market.marginalPrices, time_intervals[i])
-            marginal_price = marginal_price.value
-
-            # Find the scheduled power for the neighbor in the indexed time interval.
-            scheduled_power = find_obj_by_ti(self.scheduledPowers, time_intervals[i])
-            scheduled_power = scheduled_power.value
-
-            # Find the production cost in the indexed time interval.
-            production_cost = find_obj_by_ti(self.productionCosts, time_intervals[i])
-            production_cost = production_cost.value
+            # Find marginal price, scheduled power, and production costs for the indexed time interval in this market
+            marginal_price = market.marginal_prices.get_by_interval(time_interval)
+            scheduled_power = self.scheduled_powers.get_by_interval(time_interval)
+            production_cost = self.production_costs.get_by_interval(time_interval)
 
             # Dual cost in the time interval is calculated as production cost, minus the product of marginal price,
             # scheduled power, and the duration of the time interval.
-            interval_duration = get_duration_in_hour(time_intervals[i].duration)
-
+            interval_duration = get_duration_in_hour(time_interval.duration)
             dual_cost = production_cost - (marginal_price * scheduled_power * interval_duration)  # a dual cost [$]
-
-            # Check whether a dual cost exists in the indexed time interval
-            interval_value = find_obj_by_ti(self.dualCosts, time_intervals[i])
-
-            if interval_value is None:
-
-                # No dual cost was found in the indexed time interval. Create an interval value and assign it the
-                # calculated value.
-                interval_value = IntervalValue(self, time_intervals[i], market, MeasurementType.DualCost, dual_cost)
-
-                # Append the new interval value to the list of active interval values.
-                self.dualCosts.append(interval_value)
-
-            else:
-
-                # The dual cost value was found to already exist in the indexed time interval. Simply reassign it the
-                # new calculated value.
-                interval_value.value = dual_cost  # a dual cost [$]
-
-        # Ensure that only active time intervals are in the list of dual costs.
-        # NOTE: This was found to have been commented out for some reason. ????????????????????????????????????????
-        # 200929DJH: Fixed to work in Version 3. Values in expired markets are trimmed.
-        # self.dualCosts = [x for x in self.dualCosts if x.timeInterval in time_intervals]
-        self.dualCosts = [x for x in self.dualCosts if x.market.marketState != MarketState.Expired]
+            self.dual_costs.update(time_interval, dual_cost)
 
         # Sum the total dual cost and save the value
         # 200929DJH: This sum should be for only values in the current market.
-        # self.totalDualCost = sum([x.value for x in self.dualCosts])  # total dual cost [$]
-        self.totalDualCost = sum([x.value for x in self.dualCosts if x.market.marketState != MarketState.Expired])
+        # TODO: If there are multiple markets running simultaneously, won't the second assignment clobber the first?
+        self.total_dual_cost = self.dual_costs.total(market)
 
-        dc = [(x.timeInterval.name, x.value) for x in self.dualCosts]
-        _log.debug(f"{self.name} neighbor model dual costs are: {dc}")
+        _log.debug(f"{self.name} neighbor model dual costs are: {self.dual_costs.log_report}")
 
     def update_production_costs(self, market):
-        time_intervals = market.timeIntervals
-
-        # 200929DJH: Commenting out this approach that is too crude for Version 3. Instead, values in expired markets
-        #            will be trimmed near the bottom of this method.
-        # time_interval_values = [t.start_time for t in time_intervals]
-        # self.productionCosts = [x for x in self.productionCosts if x.timeInterval.start_time in time_interval_values]
-
-        # This range had been corrupted in Version 1 making it start with the second value. Doing so should no longer be
-        # necessary in Version 2 with it market state machine. This issue was found from a failed test.
-        for i in range(0, len(time_intervals)):
+        for time_interval in market.time_intervals:
 
             # Get the scheduled power in the indexed time interval.
-            scheduled_power = find_obj_by_ti(self.scheduledPowers, time_intervals[i])
-            scheduled_power = scheduled_power.value
+            scheduled_power = self.scheduled_powers.get_by_interval(time_interval).value
 
             # Call on function that calculates production cost pc based on the vertices of the supply or demand curve.
-            production_cost = prod_cost_from_vertices(self, time_intervals[i], scheduled_power)  # prod cost [$]
+            production_cost = prod_cost_from_vertices(self, time_interval, scheduled_power)  # prod cost [$]
 
-            # Check to see if the production cost value has been defined for the indexed time interval.
-            interval_value = find_obj_by_ti(self.productionCosts, time_intervals[i])
-
-            if interval_value is None:
-
-                # The production cost value has not been defined in the indexed time interval. Create it and assign its
-                # value pc.
-                interval_value = IntervalValue(self, time_intervals[i], market,
-                                               MeasurementType.ProductionCost,
-                                               production_cost)
-
-                # Append the production cost to the list of active production cost values.
-                self.productionCosts.append(interval_value)
-
-            else:
-
-                # The production cost value already exists in the indexed time interval. Simply reassign its value.
-                interval_value.value = production_cost  # production cost [$]
-
-        # Ensure that only active time intervals are in the list of active production costs.
-        # NOTE: This was found to have been commented out. ??????????????????????????????????????????????
-        # 200929DJH: Corrected to work in Version 3.
-        # self.productionCosts = [x for x in self.productionCosts if x.timeInterval in time_intervals]
-        self.productionCosts = [x for x in self.productionCosts if x.market.marketState != MarketState.Expired]
+            self.production_costs.update(time_interval, production_cost)
 
         # Sum the total production cost.
         # 200929DJH: Corrected for Version 3. Sum must be taken only for values in current market.
-        # self.totalProductionCost = sum([x.value for x in self.productionCosts])  # total production cost [$]
-        self.totalProductionCost = sum([x.value for x in self.productionCosts if x.market == market])
+        # TODO: If there are multiple markets running simultaneously, won't the second assignment clobber the first?
+        self.total_production_cost = self.production_costs.total(market)
 
-        pc = [(x.timeInterval.name, x.value) for x in self.productionCosts]
-        _log.debug(f"{self.name} neighbor model production costs are: {pc}")
+        _log.debug(f"{self.name} neighbor model production costs are: {self.production_costs.log_report}")
 
     def update_vertices(self, market):
         # Update the active vertices that define Neighbors' residual flexibility in the form of supply or demand curves.
@@ -713,92 +516,66 @@ class Neighbor(Entity):
 
         # (1) Generate active vertices for the non-transactive or transactive neighbor object.
 
-        # Extract and sort active market time intervals.
-        time_intervals = set(market.timeIntervals)
-        time_intervals = sorted(time_intervals, key=attrgetter('start_time'))
-
         # Get the default vertices.
-        default_vertices = self.defaultVertices
-        if len(default_vertices) == 0:
-            # No default vertices are found. Warn and return.
-            Warning('No default vertices were found for neighbor object ' + str(self.name)
-                    + '. No active vertices can be created.')
-            """
-            _log.warning('At least one default vertex must be defined for neighbor model %s. '
-                         'Scheduling was not performed' % (self.name))
-            """
+        if not self.default_vertices:
+            _log.warning(f'No default vertices were found for neighbor object {self.name}. '
+                    'No active vertices can be created and scheduling was not performed')
             return
 
-        for i in range(len(time_intervals)):
+        time_intervals = sorted(set(market.time_intervals), key=attrgetter('start_time'))
 
-            # Pick out the indexed time interval. Corresponding time interval names are used in the received signals.
-            time_interval = time_intervals[i]
-            time_interval_name = time_interval.name
+        for time_interval in time_intervals:
 
-            # Clean up the neighbor's active vertices. Remove any vertices that happen to exist already in this time
-            # interval. These will be re-created. (This makes for simpler code logic that first determining if the
-            # vertex exists and alternatively replacing its value or creating a new vertex.)
-            # 200925DJH: Checked this logic for Version 3. It should be fine because the time interval is unique both to
-            #            the starting time and a market.
-            self.activeVertices = [x for x in self.activeVertices if x.timeInterval != time_interval]
+            self.active_vertices = [x for x in self.active_vertices if x.time_interval != time_interval]
 
             if not self.transactive:
                 # 200702DJH: Implementers, please replace this method for non-transactive neighbor boundary conditions
                 #            that are more sophisticated than this.
 
                 # The neighbor is not transactive. Default vertices were found. Index through the default vertices.
-                for k in range(len(default_vertices)):
-
-                    # Pick out the indexed default vertex.
-                    default_vertex = default_vertices[k]
-
+                for default_vertex in self.default_vertices:
                     # Check for and correct treatment of a lone default vertex marginal price.
-                    if len(default_vertices) == 1:
-                        default_vertex.marginalPrice = float('inf')
+                    if len(self.default_vertices) == 1:
+                        default_vertex.marginal_price = float('inf')
                         default_vertex.record = 0
 
                     # Create an active vertex interval value in the indexed time interval.
-                    self.activeVertices.append(IntervalValue(calling_object=self,
-                                                             time_interval=time_interval,
-                                                             market=market,
-                                                             measurement_type=MeasurementType.ActiveVertex,
-                                                             value=default_vertex
-                                                             )
-                                               )
-                    _log.debug(self.activeVertices)
+                    self.active_vertices.append(IntervalValue(calling_object=self,
+                                                              time_interval=time_interval,
+                                                              market=market,
+                                                              measurement_type=MeasurementType.ActiveVertex,
+                                                              value=default_vertex
+                                                              )
+                                                )
+                    _log.debug(self.active_vertices)
             elif self.transactive:
 
                 # The neighbor is transactive. Check for transactive records in the indexed time interval and market.
-                received_vertices = [x for x in self.receivedSignal if x.timeInterval == time_interval_name]
+                received_vertices = [x for x in self.received_signal if x.time_interval == time_interval.name]
 
-                if len(received_vertices) == 0:
-
+                if not received_vertices:
                     # No received transactive records were found for the indexed time interval. Default value(s) must
                     # be used. This should be an abnormal condition except upon startup of iterative market methods.
                     # Raise a warning.
-                    Warning('No received transactive signal was found for transactive neighbor '
-                                         + str(self.name) + ' in time interval ' + str(time_interval.name))
+                    Warning(f'No received transactive signal was found for transactive neighbor {self.name}'
+                            f' in time interval {time_interval.name}')
 
                     # Index through the default vertices.
-                    for k in range(len(default_vertices)):
-
-                        # Pick out the indexed default vertex
-                        default_vertex = default_vertices[k]
-
+                    for default_vertex in self.default_vertices:
                         # Check for and correct treatment of a lone default vertex marginal price.
-                        if len(default_vertices) == 1:
-                            default_vertex.marginalPrice = float('inf')
+                        if len(self.default_vertices) == 1:
+                            default_vertex.marginal_price = float('inf')
                             default_vertex.record = 0
 
                         # Create an active vertex interval value in the indexed time interval and append it to the
                         # neighbor's list of active vertices.
-                        self.activeVertices.append(IntervalValue(calling_object=self,
-                                                                 time_interval=time_interval,
-                                                                 market=market,
-                                                                 measurement_type=MeasurementType.ActiveVertex,
-                                                                 value=default_vertex
-                                                                 )
-                                                   )
+                        self.active_vertices.append(IntervalValue(calling_object=self,
+                                                                  time_interval=time_interval,
+                                                                  market=market,
+                                                                  measurement_type=MeasurementType.ActiveVertex,
+                                                                  value=default_vertex
+                                                                  )
+                                                    )
 
                 else:
 
@@ -809,18 +586,14 @@ class Neighbor(Entity):
                     # 211208DJH: This mew method not only orders vertices but also checks for and fixes irrationality.
                     #            The method order_vertices() has also been improved to apply sequential record numbers.
                     # received_vertices = order_vertices(received_vertices)
-                    [received_vertices, count] = Vertex.check_rationality(received_vertices, action="fix_up")
+                    [received_vertices, _] = Vertex.check_rationality(received_vertices, action="fix_up")
 
                     # Index through the vertices in the received transactive records for the indexed time interval.
-                    for k in range(len(received_vertices)):
-
-                        # Pick out the indexed received vertex.
-                        received_vertex = received_vertices[k]
-
+                    for received_vertex in received_vertices:
                         # Create working values of power and prices from the received vertices.
                         power = received_vertex.power
                         cost = received_vertex.cost
-                        marginal_price = received_vertex.marginalPrice
+                        marginal_price = received_vertex.marginal_price
                         record = received_vertex.record
 
                         # Check for and correct treatment of a lone default vertex marginal price.
@@ -831,22 +604,21 @@ class Neighbor(Entity):
                         # Create a corresponding (price,power) pair (aka "active vertex") using the received power and
                         # marginal price. See struct Vertex(). Then append the vertex to the neighbor's active vertices.
                         # 200803DJH: I've added property 'record' to Vertex.
-                        self.activeVertices.append(IntervalValue(calling_object=self,
-                                                                 time_interval=time_interval,
-                                                                 market=market,
-                                                                 measurement_type=MeasurementType.ActiveVertex,
-                                                                 value=Vertex(marginal_price=marginal_price,
+                        self.active_vertices.append(IntervalValue(calling_object=self,
+                                                                  time_interval=time_interval,
+                                                                  market=market,
+                                                                  measurement_type=MeasurementType.ActiveVertex,
+                                                                  value=Vertex(marginal_price=marginal_price,
                                                                               prod_cost=cost,
                                                                               power=power,
                                                                               record=record
                                                                               )
-                                                                 )
-                                                   )
+                                                                  )
+                                                    )
 
             else:
-
                 # Logic should not arrive here. Error.
-                raise RuntimeWarning('Neighbor ' + self.name + ' must be either transactive or not.')
+                raise RuntimeWarning(f'Neighbor {self.name} must be either transactive or not.')
 
         # **************************************************************************************************************
         # Update active vertices to include the impacts of marginal losses and demand charges. *************************
@@ -854,39 +626,31 @@ class Neighbor(Entity):
 
         # Recall the current demand threshold that applies to this neighbor in this month, and assign it to the active
         # threshold that may increase while indexing through the time intervals.
-        demand_threshold = self.demandThreshold
+        demand_threshold = self.demand_threshold
         active_threshold = copy(demand_threshold)
 
         # Index again through the active market time intervals.
         new_active_vertices = []
-        for t in range(len(time_intervals)):
-
-            # Pick out the indexed time interval.
-            time_interval = time_intervals[t]
+        for time_interval in time_intervals:
 
             # Collect the active vertices that are in this time interval (and market). These will be acted upon to
             # include effects of losses and demand charges.
-            active_vertices = [x.value for x in self.activeVertices if x.timeInterval == time_interval]
+            active_vertices = [x.value for x in self.active_vertices if x.time_interval == time_interval]
 
             # clean up the active vertices by removing any of its interval values that are in this time interval. These
             # vertices will be re-created once they have become updated.
-            self.activeVertices = [x for x in self.activeVertices if x.timeInterval != time_interval]
+            self.active_vertices = [x for x in self.active_vertices if x.time_interval != time_interval]
 
             # Include the impacts of marginal losses for power that is RECEIVED from this neighbor.
             # Note: This impact can be turned off by assigning property the neighbor 'lossFactor' = 0.
-            if self.lossFactor != 0:
+            if self.loss_factor != 0:
                 active_vertices = self.include_marginal_losses(vertices=active_vertices)
 
             # Include the impacts of demand charges that are imposed on any power that is RECEIVED from this neighbor.
             # Check to see if the neighbor has a scheduled power in this time interval.
             # Note that this logic may be turned off by simply setting property demandRate = 0.
 
-            if self.demandRate != 0:
-                # 201009DJH: I found this error in these commented lines. The conditional is trying to compare a string
-                # and time interval object. How was this permitted by PyCharm?
-                # current_scheduled_power = [x.value for x in self.scheduledPowers
-                #                            if x.timeInterval.name == time_interval]
-
+            if self.demand_rate != 0:
                 # 211014DJH: This logic had to be changes for auctions. First, the inclusion of demand charges into the
                 #            vertices should not rely on the existence of scheduled powers, which do not typically exist
                 #            at this point for auctions. Second an alternative to the scheduled power must be inferred
@@ -899,18 +663,12 @@ class Neighbor(Entity):
 
                 # Update the active threshold. This is easy if the current market interval has a corresponding
                 # scheduled power.
-                current_scheduled_power = [x.value for x in self.scheduledPowers if x.timeInterval == time_interval]
+                current_scheduled_power = self.scheduled_powers.get_by_interval(time_interval)
 
                 # However, if the power is not yet scheduled (price is not known), the power must be inferred:
-                if len(current_scheduled_power) == 0:
-                    # 240206DJH: This next line must be modified to use the new price model structure, where the market
-                    #            priceModel attribute is a price model clsss object, and that object owns a price table.
-                    # predicted_market_price = market.model_prices(time_interval.start_time)[0]
-                    predicted_market_price = market.priceModel.get(time_interval.start_time)[0]
-                    current_scheduled_power = power_from_vertices(active_vertices,
-                                                                  predicted_market_price)
-                else:
-                    current_scheduled_power = current_scheduled_power[0]
+                if not current_scheduled_power:
+                    predicted_market_price = market.price_model.get(time_interval.start_time)[0]
+                    current_scheduled_power = power_from_vertices(active_vertices, predicted_market_price)
 
                 # Regardless how scheduled power was found, the temporary active threshold is updated within the series
                 # of time intervals in this market object.
@@ -933,303 +691,298 @@ class Neighbor(Entity):
                                            )
 
         # 211109DJH: Place the updated new active vertices among active vertices.
-        self.activeVertices.extend(new_active_vertices)
+        self.active_vertices.extend(new_active_vertices)
 
         # 211109DJH: Save the newly updated vertices to a CSV file.
+        # TODO: Replace append_table, if necessary, with archive functionality.
         append_table(obj=new_active_vertices)
 
         # 200929DJH: Trim any active vertices that lie in expired markets so that the list will not grow indefinitely.
-        self.activeVertices = [x for x in self.activeVertices if x.market.marketState != MarketState.Expired]
+        self.active_vertices = [x for x in self.active_vertices if x.market.market_state != MarketState.Expired]
 
-    def old_update_vertices(self, market):
-        # Update the active vertices that define Neighbors' residual flexibility in the form of supply or demand curves.
-        #
-        # The active vertices of non-transactive neighbors are relatively constant. Active vertices must be created for
-        # new active time intervals. Vertices may be affected by demand charges, too, as new demand-charge thresholds
-        # are becoming established.
-        #
-        # The active vertices of transactive neighbors are also relatively constant. New vertices must be created for
-        # new active time intervals. But active vertices must also be checked and updated whenever a new transactive
-        # signal is received.
-        #
-        # PRESUMPTIONS:
-        # - time intervals are up-to-date
-        # - at least one default vertex has been defined, should all other efforts to establish meaningful vertices fail
-        #
-        # INPUTS:
-        # market - Market object
-        #
-        # OUTPUTS:
-        # Updates self.activeVertices - an array of IntervalValues that contain Vertex() structs
-        # TODO: Consider eliminating the try-catch pairs in "update_vertices" to improve code structure.
-
-        # Extract active time intervals.
-        time_intervals = market.timeIntervals
-
-        for i in range(len(time_intervals)):
-
-            # Flag for logging demand charge 1st time only
-            # TODO: Check this logic for logging demand charge
-            dc_logged = False
-
-            # Get the default vertices.
-            default_vertices = self.defaultVertices
-
-            if len(default_vertices) == 0:
-                # No default vertices are found. Warn and return.
-                _log.warning(f'At least one default vertex must be defined for neighbor model {self.name}. '
-                             f'Scheduling was not performed')
-                return
-
-            if not self.transactive:
-                # 200702DJH: Implementers, please replace this method for non-transctive neighbor boundary conditions
-                #            that are more sophisticated than this.
-
-                # Neighbor is not transactive. Default vertices were found. Index through the default vertices.
-                for k in range(len(default_vertices)):
-
-                    # Get the indexed default vertex.
-                    value = default_vertices[k]
-
-                    # Create an active vertex interval value in the indexed time interval.
-                    interval_value = IntervalValue(self, time_intervals[i], market, MeasurementType.ActiveVertex, value)
-
-                    # Append the active vertex to the list of active vertices
-                    self.activeVertices.append(interval_value)
-
-            elif self.transactive:
-
-                # Neighbor is transactive. Check for transactive records in the indexed time interval.
-                received_vertices = [x for x in self.receivedSignal if x.timeInterval == time_intervals[i].name]
-
-                if len(received_vertices) == 0:
-
-                    # No received transactive records address the indexed time interval. Default value(s) must be used.
-                    # Default vertices were found. Index through the default vertices.
-                    for k in range(len(default_vertices)):  # for k = 1:len(default_vertices)
-
-                        # Get the indexed default vertex
-                        value = default_vertices[k]
-
-                        # Create an active vertex interval value in the indexed time interval.
-                        interval_value = IntervalValue(self, time_intervals[i], market, MeasurementType.ActiveVertex,
-                                                       value)  # an IntervalValue
-
-                        # Append the active vertex to the list of active vertices.
-                        self.activeVertices.append(interval_value)
-
-                else:
-
-                    # at least 1 vertex received. One or more transactive records have been received concerning the
-                    # indexed time interval. Use these to re-create active Vertices.
-
-                    # Sort the received_vertices (which happen to be TransactiveRecords) by increasing price and power.
-                    received_vertices = order_vertices(received_vertices)
-
-                    # Prepare for demand charge vertices.
-
-                    # This flag will be replace by its preceding ordered vertex index if any of the vertices are found
-                    # to exceed the current demand threshold.
-                    demand_charge_flag = 0  # simply a flag
-
-                    # The demand-charge threshold is based on the actual measured peak this month, but it may also be
-                    # superseded in predicted time intervals prior to the currently indexed one.
-                    # Start with the metered demand threshold.
-                    demand_charge_threshold = self.demandThreshold  # [avg.kW]
-
-                    # Calculate the peak in time intervals that come before the one now indexed by i.
-                    # Get all the scheduled powers.
-                    prior_power = self.scheduledPowers  # [avg.kW]
-
-                    if len(prior_power) < i + 1:
-
-                        # Especially the first iteration can encounter missing scheduled power values. Place these out
-                        # of the way by assigning them as small as possible. The current demand threshold will always
-                        # trump this value.
-                        prior_power = [float("-inf")]  # -inf
-
-                    else:
-
-                        # The scheduled powers look fine. Pick out the ones that are indexed prior to the currently
-                        # indexed value.
-                        prior_power = [x.value for x in prior_power[0:i + 1]]
-
-                    # Pick out the maximum power from the prior scheduled power values.
-                    predicted_prior_peak = max(prior_power)  # [avg.kW]
-
-                    # The demand-charge threshold for the indexed time interval should be the larger of the current and
-                    # predicted peaks.
-                    demand_charge_threshold = max([demand_charge_threshold, predicted_prior_peak])  # [avg.kW]
-
-                    # Index through the vertices in the received transactive records for the indexed time interval.
-                    for k in range(len(received_vertices)):
-
-                        # Create working values of power and marginal price from the received vertices.
-                        power = received_vertices[k].power
-                        marginal_price = received_vertices[k].marginalPrice
-
-                        # If the Neighbor power is positive (importation of electricity), then the value may be affected
-                        # by losses. The available power is diminished (compared to what was sent), and the effective
-                        # marginal price is increased (because myTransactiveNode is paying for electricity that it does
-                        # not receive).
-                        if power > 0:
-                            try:
-                                factor1 = (power / self.maximumPower) ** 2
-                                factor2 = 1 + factor1 * self.lossFactor
-                                power = power / factor2
-                                marginal_price = marginal_price * factor2
-                                '''
-                                if (self.tn is not None
-                                    and self.system_loss_topic != ''
-                                    and received_vertices[k].record == 0):
-                                    msg = {
-                                        'ts': received_vertices[k].timeInterval,
-                                        'predicted_clear_power': power,
-                                        'max_power': self.maximumPower,
-                                        'factor1': factor1,
-                                        'factor2': factor2,
-                                        'vertex_record': received_vertices[k].record,
-                                        'demand_charge_threshold': demand_charge_threshold
-                                    }
-                                    # If this is uncommented, publication should be handled in a subclass or callback!
-                                    self.publish_system(peer='pubsub',
-                                                        topic=self.system_loss_topic,
-                                                        message=msg)
-                                '''
-
-                                # If there are multiple transactive records in the indexed time interval, we don't need
-                                # to create a vertex for Record #0. Record #0 is the balance point, which must lie on
-                                # existing segments of the supply or demand curve. This is moved here instead of staying
-                                # at the beginning of the loop is because we want to log system loss
-                                if len(received_vertices) >= 3 and received_vertices[k].record == 0:
-                                    continue  # jumps out of for loop to next iteration
-
-                                if power > demand_charge_threshold:
-                                    # The power is greater than the anticipated demand threshold. Demand charges are in
-                                    # play. Set a flag.
-                                    demand_charge_flag = k
-
-                                # Publish to db
-                                '''
-                                if self.tn is not None and self.dc_threshold_topic != '' \
-                                        and k == len(received_vertices)-1:
-                                    dc_flag = "has demand charge"
-                                    if not demand_charge_flag:
-                                        dc_flag = "no demand charge"
-                                    dc_msg = {
-                                        'ts': received_vertices[k].timeInterval,
-                                        'dc_flag': dc_flag,
-                                        'demand_charge_threshold': demand_charge_threshold,
-                                        'predicted_power_peak': predicted_prior_peak,
-                                        'max_predicted_power': power
-                                    }
-                                    # If this is uncommented, publication should be handled in a subclass or callback!
-                                    self.publish_demand_charges(peer='pubsub',
-                                                                topic=self.dc_threshold_topic,
-                                                                message=dc_msg)
-                                '''
-                                # Debug negative price & demand charge
-                                _log.debug(f"power: {power} - demand charge threshold:"
-                                           f" {demand_charge_threshold} - predicted power peak: {predicted_prior_peak}")
-                                _log.debug(f"prior power: {prior_power}")
-                                _log.debug(f"received vertices:"
-                                           f" {[(v.timeInterval, v.power) for v in received_vertices]}")
-                            except:
-                                _log.error(f"{self.name} has power {power} AND object ({self.name})"
-                                           f" maxPower {self.maximumPower} and minPower {self.minimumPower}")
-                                raise
-                        # Create a corresponding (price,power) pair (aka "active vertex") using the received power and
-                        # marginal price. See struct Vertex().
-                        value = Vertex(marginal_price, received_vertices[k].cost, power, None)
-
-                        # Create an active vertex interval value for the vertex in the indexed time interval.
-                        interval_value = IntervalValue(self, time_intervals[i], market,
-                                                       MeasurementType.ActiveVertex, value)
-
-                        # Append the active vertex to the list of active vertices.
-                        self.activeVertices.append(interval_value)
-
-                    # DEMAND CHARGES
-                    # Check whether the power of any of the vertices was found to be larger than the current demand-
-                    # charge threshold, as would be indicated by this flag being a value other than 0.
-                    if demand_charge_flag != 0:
-
-                        # log.debug("DEMAND CHARGE 1")
-                        # Demand charges are in play. Get the newly updated active vertices for this transactive
-                        # Neighbor again in the indexed time interval.
-                        vertices = [x.value for x in self.activeVertices if
-                                    x.timeInterval.start_time == time_intervals[i].start_time]
-
-                        # Find the marginal price that would correspond to the demand-charge threshold, based on the
-                        # newly updated (but excluding the effects of demand charges) active vertices in the indexed
-                        # time interval.
-                        marginal_price = self.marginal_price_from_vertices(demand_charge_threshold, vertices)  # [$/kWh]
-
-                        # Create the first of two vertices at the intersection of the demand-charge threshold and the
-                        # supply or demand curve from prior to the application of demand charges.
-                        vertex = Vertex(marginal_price, 0, demand_charge_threshold)
-
-                        # Create an IntervalValue for the active vertex.
-                        interval_value = IntervalValue(self, time_intervals[i], market,
-                                                       MeasurementType.ActiveVertex, vertex)
-
-                        # Store the new active vertex interval value
-                        self.activeVertices.append(interval_value)
-
-                        # Create the marginal price of the second of the two new vertices, augmented by the demand rate.
-                        marginal_price = marginal_price + self.demandRate  # [$/kWh]
-
-                        # Create the second vertex.
-                        vertex = Vertex(marginal_price, 0, demand_charge_threshold)
-
-                        # ... and the interval value for the second vertex,
-                        interval_value = IntervalValue(self, time_intervals[i], market,
-                                                       MeasurementType.ActiveVertex, vertex)
-
-                        # ... and finally store the active vertex.
-                        self.activeVertices.append(interval_value)
-
-                        # Check that vertices having power greater than the demand threshold have their marginal prices
-                        # reflect the demand charges. Start by picking out those in the currently indexed time interval.
-                        interval_values = [x for x in self.activeVertices
-                                           if x.timeInterval.start_time == time_intervals[i].start_time]
-
-                        # Index through the current active vertices in the indexed time interval. At this point, these
-                        # include vertices from both prior to and after the introduction of demand-charge vertices.
-                        for k in range(len(interval_values)):
-
-                            # Extract the indexed vertex.
-                            vertex = interval_values[k].value
-
-                            # Extract the power of the indexed vertex.
-                            vertex_power = vertex.power  # [avg.kW]
-
-                            if vertex_power > demand_charge_threshold:
-
-                                # The indexed vertex's power exceeds the demand-charge threshold. Increment the vertex's
-                                # marginal price with the demand rate.
-                                vertex.marginalPrice = vertex.marginalPrice + self.demandRate
-
-                                # ... and re-store the vertex in its IntervalValue
-                                interval_values[k].value = vertex  # an IntervalValue
-
-                    else:
-                        pass
-                        _log.debug("NO DEMAND CHARGE 1")
-
-            else:
-
-                # Logic should not arrive here. Error.
-                raise f'Neighbor {self.name} must be either transactive or not.'
-
-        av = [(x.timeInterval.name, x.value.marginalPrice, x.value.power) for x in self.activeVertices]
-        _log.debug(f"{self.name} neighbor model active vertices are: {av}")
+    # def old_update_vertices(self, market):
+    #     # Update the active vertices that define Neighbors' residual flexibility in the form of supply or demand curves.
+    #     #
+    #     # The active vertices of non-transactive neighbors are relatively constant. Active vertices must be created for
+    #     # new active time intervals. Vertices may be affected by demand charges, too, as new demand-charge thresholds
+    #     # are becoming established.
+    #     #
+    #     # The active vertices of transactive neighbors are also relatively constant. New vertices must be created for
+    #     # new active time intervals. But active vertices must also be checked and updated whenever a new transactive
+    #     # signal is received.
+    #     #
+    #     # PRESUMPTIONS:
+    #     # - time intervals are up-to-date
+    #     # - at least one default vertex has been defined, should all other efforts to establish meaningful vertices fail
+    #     #
+    #     # INPUTS:
+    #     # market - Market object
+    #     #
+    #     # OUTPUTS:
+    #     # Updates self.activeVertices - an array of IntervalValues that contain Vertex() structs
+    #     # TODO: Consider eliminating the try-catch pairs in "update_vertices" to improve code structure.
+    #
+    #     # Extract active time intervals.
+    #     time_intervals = market.time_intervals
+    #
+    #     for i in range(len(time_intervals)):
+    #
+    #         # Flag for logging demand charge 1st time only
+    #         # TODO: Check this logic for logging demand charge
+    #         dc_logged = False
+    #
+    #         # Get the default vertices.
+    #         default_vertices = self.default_vertices
+    #
+    #         if not default_vertices:
+    #             # No default vertices are found. Warn and return.
+    #             _log.warning(f'At least one default vertex must be defined for neighbor model {self.name}. '
+    #                          f'Scheduling was not performed')
+    #             return
+    #
+    #         if not self.transactive:
+    #             # 200702DJH: Implementers, please replace this method for non-transactive neighbor boundary conditions
+    #             #            that are more sophisticated than this.
+    #
+    #             # Neighbor is not transactive. Default vertices were found. Index through the default vertices.
+    #             for default_vertex in default_vertices:
+    #
+    #                 # Create an active vertex interval value in the indexed time interval.
+    #                 interval_value = IntervalValue(self, time_intervals[i], market, MeasurementType.ActiveVertex, default_vertex)
+    #
+    #                 # Append the active vertex to the list of active vertices
+    #                 self.active_vertices.append(interval_value)
+    #
+    #         elif self.transactive:
+    #
+    #             # Neighbor is transactive. Check for transactive records in the indexed time interval.
+    #             received_vertices = [x for x in self.received_signal if x.time_interval == time_intervals[i].name]
+    #
+    #             if not received_vertices:
+    #
+    #                 # No received transactive records address the indexed time interval. Default value(s) must be used.
+    #                 # Default vertices were found. Index through the default vertices.
+    #                 for default_vertex in default_vertices:  # for k = 1:len(default_vertices)
+    #
+    #                     # Create an active vertex interval value in the indexed time interval.
+    #                     interval_value = IntervalValue(self, time_intervals[i], market, MeasurementType.ActiveVertex,
+    #                                                    default_vertex)  # an IntervalValue
+    #
+    #                     # Append the active vertex to the list of active vertices.
+    #                     self.active_vertices.append(interval_value)
+    #
+    #             else:
+    #
+    #                 # at least 1 vertex received. One or more transactive records have been received concerning the
+    #                 # indexed time interval. Use these to re-create active Vertices.
+    #
+    #                 # Sort the received_vertices (which happen to be TransactiveRecords) by increasing price and power.
+    #                 received_vertices = order_vertices(received_vertices)
+    #
+    #                 # Prepare for demand charge vertices.
+    #
+    #                 # This flag will be replace by its preceding ordered vertex index if any of the vertices are found
+    #                 # to exceed the current demand threshold.
+    #                 demand_charge_flag = 0  # simply a flag
+    #
+    #                 # The demand-charge threshold is based on the actual measured peak this month, but it may also be
+    #                 # superseded in predicted time intervals prior to the currently indexed one.
+    #                 # Start with the metered demand threshold.
+    #                 demand_charge_threshold = self.demand_threshold  # [avg.kW]
+    #
+    #                 # Calculate the peak in time intervals that come before the one now indexed by i.
+    #                 # Get all the scheduled powers.
+    #                 prior_power = self.scheduled_powers  # [avg.kW]
+    #
+    #                 if len(prior_power) < i + 1:
+    #
+    #                     # Especially the first iteration can encounter missing scheduled power values. Place these out
+    #                     # of the way by assigning them as small as possible. The current demand threshold will always
+    #                     # trump this value.
+    #                     prior_power = [float("-inf")]  # -inf
+    #
+    #                 else:
+    #
+    #                     # The scheduled powers look fine. Pick out the ones that are indexed prior to the currently
+    #                     # indexed value.
+    #                     prior_power = [x.value for x in prior_power[0:i + 1]]
+    #
+    #                 # Pick out the maximum power from the prior scheduled power values.
+    #                 predicted_prior_peak = max(prior_power)  # [avg.kW]
+    #
+    #                 # The demand-charge threshold for the indexed time interval should be the larger of the current and
+    #                 # predicted peaks.
+    #                 demand_charge_threshold = max([demand_charge_threshold, predicted_prior_peak])  # [avg.kW]
+    #
+    #                 # Index through the vertices in the received transactive records for the indexed time interval.
+    #                 for k in range(len(received_vertices)):
+    #
+    #                     # Create working values of power and marginal price from the received vertices.
+    #                     power = received_vertices[k].power
+    #                     marginal_price = received_vertices[k].marginal_price
+    #
+    #                     # If the Neighbor power is positive (importation of electricity), then the value may be affected
+    #                     # by losses. The available power is diminished (compared to what was sent), and the effective
+    #                     # marginal price is increased (because myTransactiveNode is paying for electricity that it does
+    #                     # not receive).
+    #                     if power > 0:
+    #                         try:
+    #                             factor1 = (power / self.maximum_power) ** 2
+    #                             factor2 = 1 + factor1 * self.loss_factor
+    #                             power = power / factor2
+    #                             marginal_price = marginal_price * factor2
+    #                             '''
+    #                             if (self.tn is not None
+    #                                 and self.system_loss_topic != ''
+    #                                 and received_vertices[k].record == 0):
+    #                                 msg = {
+    #                                     'ts': received_vertices[k].timeInterval,
+    #                                     'predicted_clear_power': power,
+    #                                     'max_power': self.maximumPower,
+    #                                     'factor1': factor1,
+    #                                     'factor2': factor2,
+    #                                     'vertex_record': received_vertices[k].record,
+    #                                     'demand_charge_threshold': demand_charge_threshold
+    #                                 }
+    #                                 # If this is uncommented, publication should be handled in a subclass or callback!
+    #                                 self.publish_system(peer='pubsub',
+    #                                                     topic=self.system_loss_topic,
+    #                                                     message=msg)
+    #                             '''
+    #
+    #                             # If there are multiple transactive records in the indexed time interval, we don't need
+    #                             # to create a vertex for Record #0. Record #0 is the balance point, which must lie on
+    #                             # existing segments of the supply or demand curve. This is moved here instead of staying
+    #                             # at the beginning of the loop is because we want to log system loss
+    #                             if len(received_vertices) >= 3 and received_vertices[k].record == 0:
+    #                                 continue  # jumps out of for loop to next iteration
+    #
+    #                             if power > demand_charge_threshold:
+    #                                 # The power is greater than the anticipated demand threshold. Demand charges are in
+    #                                 # play. Set a flag.
+    #                                 demand_charge_flag = k
+    #
+    #                             # Publish to db
+    #                             '''
+    #                             if self.tn is not None and self.dc_threshold_topic != '' \
+    #                                     and k == len(received_vertices)-1:
+    #                                 dc_flag = "has demand charge"
+    #                                 if not demand_charge_flag:
+    #                                     dc_flag = "no demand charge"
+    #                                 dc_msg = {
+    #                                     'ts': received_vertices[k].timeInterval,
+    #                                     'dc_flag': dc_flag,
+    #                                     'demand_charge_threshold': demand_charge_threshold,
+    #                                     'predicted_power_peak': predicted_prior_peak,
+    #                                     'max_predicted_power': power
+    #                                 }
+    #                                 # If this is uncommented, publication should be handled in a subclass or callback!
+    #                                 self.publish_demand_charges(peer='pubsub',
+    #                                                             topic=self.dc_threshold_topic,
+    #                                                             message=dc_msg)
+    #                             '''
+    #                             # Debug negative price & demand charge
+    #                             _log.debug(f"power: {power} - demand charge threshold:"
+    #                                        f" {demand_charge_threshold} - predicted power peak: {predicted_prior_peak}")
+    #                             _log.debug(f"prior power: {prior_power}")
+    #                             _log.debug(f"received vertices:"
+    #                                        f" {[(v.time_interval, v.power) for v in received_vertices]}")
+    #                         except:
+    #                             _log.error(f"{self.name} has power {power} AND object ({self.name})"
+    #                                        f" maxPower {self.maximum_power} and minPower {self.minimum_power}")
+    #                             raise
+    #                     # Create a corresponding (price,power) pair (aka "active vertex") using the received power and
+    #                     # marginal price. See struct Vertex().
+    #                     value = Vertex(marginal_price, received_vertices[k].cost, power, None)
+    #
+    #                     # Create an active vertex interval value for the vertex in the indexed time interval.
+    #                     interval_value = IntervalValue(self, time_intervals[i], market,
+    #                                                    MeasurementType.ActiveVertex, value)
+    #
+    #                     # Append the active vertex to the list of active vertices.
+    #                     self.active_vertices.append(interval_value)
+    #
+    #                 # DEMAND CHARGES
+    #                 # Check whether the power of any of the vertices was found to be larger than the current demand-
+    #                 # charge threshold, as would be indicated by this flag being a value other than 0.
+    #                 if demand_charge_flag != 0:
+    #
+    #                     # log.debug("DEMAND CHARGE 1")
+    #                     # Demand charges are in play. Get the newly updated active vertices for this transactive
+    #                     # Neighbor again in the indexed time interval.
+    #                     vertices = [x.value for x in self.active_vertices if
+    #                                 x.time_interval.start_time == time_intervals[i].start_time]
+    #
+    #                     # Find the marginal price that would correspond to the demand-charge threshold, based on the
+    #                     # newly updated (but excluding the effects of demand charges) active vertices in the indexed
+    #                     # time interval.
+    #                     marginal_price = self.marginal_price_from_vertices(demand_charge_threshold, vertices)  # [$/kWh]
+    #
+    #                     # Create the first of two vertices at the intersection of the demand-charge threshold and the
+    #                     # supply or demand curve from prior to the application of demand charges.
+    #                     vertex = Vertex(marginal_price, 0, demand_charge_threshold)
+    #
+    #                     # Create an IntervalValue for the active vertex.
+    #                     interval_value = IntervalValue(self, time_intervals[i], market,
+    #                                                    MeasurementType.ActiveVertex, vertex)
+    #
+    #                     # Store the new active vertex interval value
+    #                     self.active_vertices.append(interval_value)
+    #
+    #                     # Create the marginal price of the second of the two new vertices, augmented by the demand rate.
+    #                     marginal_price = marginal_price + self.demand_rate  # [$/kWh]
+    #
+    #                     # Create the second vertex.
+    #                     vertex = Vertex(marginal_price, 0, demand_charge_threshold)
+    #
+    #                     # ... and the interval value for the second vertex,
+    #                     interval_value = IntervalValue(self, time_intervals[i], market,
+    #                                                    MeasurementType.ActiveVertex, vertex)
+    #
+    #                     # ... and finally store the active vertex.
+    #                     self.active_vertices.append(interval_value)
+    #
+    #                     # Check that vertices having power greater than the demand threshold have their marginal prices
+    #                     # reflect the demand charges. Start by picking out those in the currently indexed time interval.
+    #                     interval_values = [x for x in self.active_vertices
+    #                                        if x.time_interval.start_time == time_intervals[i].start_time]
+    #
+    #                     # Index through the current active vertices in the indexed time interval. At this point, these
+    #                     # include vertices from both prior to and after the introduction of demand-charge vertices.
+    #                     for k in range(len(interval_values)):
+    #
+    #                         # Extract the indexed vertex.
+    #                         vertex = interval_values[k].value
+    #
+    #                         # Extract the power of the indexed vertex.
+    #                         vertex_power = vertex.power  # [avg.kW]
+    #
+    #                         if vertex_power > demand_charge_threshold:
+    #
+    #                             # The indexed vertex's power exceeds the demand-charge threshold. Increment the vertex's
+    #                             # marginal price with the demand rate.
+    #                             vertex.marginal_price = vertex.marginal_price + self.demand_rate
+    #
+    #                             # ... and re-store the vertex in its IntervalValue
+    #                             interval_values[k].value = vertex  # an IntervalValue
+    #
+    #                 else:
+    #                     pass
+    #                     _log.debug("NO DEMAND CHARGE 1")
+    #
+    #         else:
+    #
+    #             # Logic should not arrive here. Error.
+    #             raise f'Neighbor {self.name} must be either transactive or not.'
+    #
+    #     av = [(x.time_interval.name, x.value.marginal_price, x.value.power) for x in self.active_vertices]
+    #     _log.debug(f"{self.name} neighbor model active vertices are: {av}")
 
     def prep_transactive_signal(self, market, this_transactive_node):
         # Prepare transactive records to send to a transactive neighbor. The prepared transactive signal should
         # represent the residual flexibility offered to the transactive neighbor in the form of a supply or demand
         # curve.
-        # NOTE: the flexibility of the prepared transactive signals refers to LOCAL value. Therefore this method does
+        # NOTE: the flexibility of the prepared transactive signals refers to LOCAL value. Therefore, this method does
         # not make modifications for power losses or demand charges, both of which are being modeled as originating with
         # the RECIPIENT of power.
         # FUTURE: The numbers of vertices may be restricted to emulate various auction mechanisms.
@@ -1290,22 +1043,15 @@ class Neighbor(Entity):
             # log.warning('Neighbor must be transactive')
             return
 
-        # Gather unique active market time intervals.
-        time_intervals = market.timeIntervals
-
         # These thresholds are initialized here and used during the assessment of demand charges.
-        demand_threshold = -self.demandThreshold
+        demand_threshold = -self.demand_threshold
         active_threshold = demand_threshold
 
         # 210303DJH: Create a list to gather new signal records.
         new_signal = []
 
         # Index through the active time intervals.
-        for i in range(len(time_intervals)):
-
-            # Pick out the indexed market time interval.
-            time_interval = time_intervals[i]
-            time_interval_name = time_interval.name
+        for time_interval in market.time_intervals:
 
             # Create the vertices of the net supply or demand curve, EXCLUDING this transactive neighbor (i.e., "tnm").
             # NOTE: It is important that the transactive neighbor is excluded.
@@ -1313,15 +1059,15 @@ class Neighbor(Entity):
 
             # This should be rare, Warn if no vertices are found.
             if vertices is None:
-                RuntimeError('No summed vertices were found in method prep_transactive_signal for neighbor '
-                               + self.name + ' in time interval ' + time_interval_name)
+                RuntimeError(f'No summed vertices were found in method prep_transactive_signal for neighbor '
+                             f'{self.name} in time interval {time_interval.name}')
 
             # Find the minimum and maximum powers from the summed vertices. These are soft constraints that represent a
             # range of flexibility. The range will usually be excessively large from the supply side, much smaller from
             # the demand side.
             vertex_powers = [x.power for x in vertices]  # [avg.kW]
-            minimum_power = max(-self.maximumPower, min(vertex_powers))  # [avg.kW]
-            maximum_power = min(-self.minimumPower, max(vertex_powers))  # [avg.kW]
+            minimum_power = max(-self.maximum_power, min(vertex_powers))  # [avg.kW]
+            maximum_power = min(-self.minimum_power, max(vertex_powers))  # [avg.kW]
 
             # If flexibility is being offered (i.e., more than one vertex), then we must make sure there exist vertices
             # at the extrema of the flexibility range.
@@ -1350,7 +1096,7 @@ class Neighbor(Entity):
                 # TODO: Is it intended for this assertion to stop execution of the agent? It ends progress, but not execution.
                 assert len(vertices) == 1, ([f'Unexpected flexibility logic in module {self.name}'
                                              f' method prep_transactive_signal()'])
-                vertices[0].marginalPrice = float('inf')
+                vertices[0].marginal_price = float('inf')
                 vertices[0].record = 0
 
             # Trim the list of vertices to remove any that are outside the soft flexibility range.
@@ -1362,16 +1108,16 @@ class Neighbor(Entity):
             # 0.
             # NOTE: This correction should be done before correcting for marginal losses because demand charges are
             # presumed to apply to actual metered demand.
-            if self.demandRate != 0:
-                scheduled_power = [x.value for x in self.scheduledPowers if x.timeInterval == time_interval]
-                if scheduled_power is not None and len(scheduled_power) != 0:
-                    active_threshold = min(active_threshold, scheduled_power[0])
+            if self.demand_rate != 0:
+                scheduled_power = self.scheduled_powers.get_by_interval(time_interval)
+                if scheduled_power:
+                    active_threshold = min(active_threshold, scheduled_power)
                 vertices = self.remove_demand_charges(vertices=vertices, threshold=active_threshold)
 
             # Remove the impacts of marginal losses to place the vertices into the perspective of the remote neighbor to
             # which a transactive signal will be sent. Note that the effects of losses can be ignored by making the loss
             # factor = 0.
-            if self.lossFactor != 0:
+            if self.loss_factor != 0:
                 vertices = self.remove_marginal_losses(vertices=vertices)
 
             # The vertices are now suitable for creating transactive records that represent the remote agent
@@ -1383,7 +1129,7 @@ class Neighbor(Entity):
             #           market series.
             #           TODO: Revisit this issue for the case when successive markets in a market series overlap. But
             #            maybe this is OK if only the active ones are recorded, even if they overlap.
-            self.mySignal = [x for x in self.mySignal if x.timeInterval != time_interval_name]
+            self.my_signal = [x for x in self.my_signal if x.time_interval != time_interval.name]
 
             # Represent the corrected vertices as transactive records and store them in mySignal, where they are ready
             # to send to the remote neighbor.
@@ -1391,25 +1137,21 @@ class Neighbor(Entity):
             #            maintain this practice for Version 3 because auction markets do not resolve their scheduled
             #            powers before sending transactive signals.
 
-            for v in range(len(vertices)):
-
-                # Pick out the indexed vertex.
-                vertex = vertices[v]
-
+            for v, vertex in enumerate(vertices):
                 # 210126DJH: Appending Transactive Record with new properties that help with data collection provenance.
-                new_record = TransactiveRecord(time_interval=time_interval_name,
+                new_record = TransactiveRecord(time_interval=time_interval.name,
                                                neighbor_name=self.name,
                                                direction='prepared',
                                                market_name=market.name,
                                                record=int(v),
-                                               marginal_price=vertex.marginalPrice,
+                                               marginal_price=vertex.marginal_price,
                                                power=vertex.power,
                                                cost=0
                                                )
                 new_signal.append(new_record)
 
         # 210303DJH: Extend the new signal records to mySignal.
-        self.mySignal.extend(new_signal)
+        self.my_signal.extend(new_signal)
 
         # 210303DJH: Save a copy of the newly prepared signal records to a CSV file.
         if new_signal:
@@ -1420,9 +1162,9 @@ class Neighbor(Entity):
         all_markets = [x for x in this_transactive_node.markets]
         valid_time_interval_names = []
         for i in range(len(all_markets)):
-            valid_time_interval_names.extend([x.name for x in all_markets[i].timeIntervals])
-        self.mySignal = [x for x in self.mySignal
-                                            if x.timeInterval in valid_time_interval_names]
+            valid_time_interval_names.extend([x.name for x in all_markets[i].time_intervals])
+        self.my_signal = [x for x in self.my_signal
+                          if x.time_interval in valid_time_interval_names]
 
     def send_transactive_signal(self, market, this_transactive_node):
         # Send transactive records to a transactive neighbor.
@@ -1451,11 +1193,11 @@ class Neighbor(Entity):
             return
 
         # Collect current transactive records concerning myTransactiveNode.
-        # 210127DJH: Adding parameter 'market" to those sent to send_transactive_signal(). The market should be used to
+        # 210127DJH: Adding parameter 'market' to those sent to send_transactive_signal(). The market should be used to
         #            make sure that only transactive records that are relevant to the current market are sent.
         # 210303DJH: How on earth did this pass unit testing with a reference to undefined marketName???
         # transactive_records = [x for x in self.mySignal if x.market == market.marketName]
-        transactive_records = [x for x in self.mySignal if x.marketName == market.name]
+        transactive_records = [x for x in self.my_signal if x.market_name == market.name]
 
         if len(transactive_records) == 0:  # No signal records are ready to send
             _log.warning(f"No transactive records were found. No transactive signal can be sent to {self.name}.")
@@ -1464,15 +1206,15 @@ class Neighbor(Entity):
         # 210127DJH: These new parameters will help us keep track of record provenance.
         for transactive_record in transactive_records:
             transactive_record.direction = 'sent'
-            transactive_record.neighborName = self.name
-            transactive_record.marketName = market.name
+            transactive_record.neighbor_name = self.name
+            transactive_record.market_name = market.name
 
         # Publish the signal (if TN subclass implements messaging).
         this_transactive_node.issue_signal(self.name, transactive_records)
 
         # Save the sent TransactiveRecord messages (i.e., sentSignal) as a copy of the calculated set that was drawn
         # upon by this method (i.e., mySignal).
-        self.sentSignal.extend(transactive_records)
+        self.sent_signal.extend(transactive_records)
 
         # 210127DJH: Save the newly sent transactive records to a formatted csv table.
         if transactive_records:
@@ -1482,9 +1224,9 @@ class Neighbor(Entity):
         active_markets = [x for x in this_transactive_node.markets]
         active_time_intervals = []
         for active_market in active_markets:
-            active_time_intervals.extend(active_market.timeIntervals)
+            active_time_intervals.extend(active_market.time_intervals)
         active_time_interval_names = [x.name for x in active_time_intervals]
-        self.sentSignal = [x for x in self.sentSignal if x.timeInterval in active_time_interval_names]
+        self.sent_signal = [x for x in self.sent_signal if x.time_interval in active_time_interval_names]
 
         # Return transactive records to allow further processing by subclasses.
         return transactive_records
@@ -1504,7 +1246,6 @@ class Neighbor(Entity):
                          'No signal is read.')
             return
         if curves is None:
-            # _log.warning(f'{market.name}  Received Transactive signal is None. {this_transactive_node.name}')
             _log.warning(f'Received Transactive signal is None. {tn.name}')
             return
         elif isinstance(curves, dict) and 'curves' in curves:
@@ -1513,9 +1254,9 @@ class Neighbor(Entity):
         # 201013DJH: The neighbor's list of received transactive records must be reinitialized so that it will not grow
         #            indefinitely. Only the latest records are relevant. See the end of method prep_transactive_signal()
         #            if more sophistication is warranted.
-        self.receivedSignal = []
+        self.received_signal = []
         # 210126DJH: TODO: Robert or Shwetha, class curves must be updated with the new properties of TransactiveRecord
-        #            class, please, to keep data collection straight. The new properties are
+        #               class, please, to keep data collection straight. The new properties are
         #             (1) TransactiveRecord.neighborName  # text name of Neighbor object
         #             (2) TransactiveRecord.direction  # Indication from among {'sent', 'received', or 'prepared'}
         #             (3) TransactiveRecord.marketName  # text reference to Market.name.
@@ -1524,10 +1265,6 @@ class Neighbor(Entity):
         newly_received_records = []
 
         for curve in curves:
-            # 210303DJH: This trick is not needed if the market is received as a parameter. The market name can be used
-            #            directly.
-            # market_name = curve['timeInterval'].split(':')
-            # market_name = market_name[0]
             if curve['marketName'] in [m.name for m in tn.markets]:
                 new_record = TransactiveRecord(time_interval=curve['timeInterval'],
                                                neighbor_name=self.name,
@@ -1539,19 +1276,20 @@ class Neighbor(Entity):
                                                cost=float(curve['cost'])
                                                )
                 newly_received_records.append(new_record)
-        self.receivedSignal.extend(newly_received_records)
+        self.received_signal.extend(newly_received_records)
 
         # 210127DJH: Save the newly received records to a formatted csv table.
+        # TODO: Ensure append_table has been replaced by archive system.
         if newly_received_records:
             append_table(obj=newly_received_records)
 
-        # 210127DJH: Trim the receviedSignal list to remove any expired markets and time intervals.
+        # 210127DJH: Trim the received_signal list to remove any expired markets and time intervals.
         active_markets = [x for x in tn.markets]
         active_time_intervals = []
         for active_market in active_markets:
-            active_time_intervals.extend(active_market.timeIntervals)
+            active_time_intervals.extend(active_market.time_intervals)
         active_time_interval_names = [x.name for x in active_time_intervals]
-        self.receivedSignal = [x for x in self.receivedSignal if x.timeInterval in active_time_interval_names]
+        self.received_signal = [x for x in self.received_signal if x.time_interval in active_time_interval_names]
 
     def update_costs(self, market):
         """
@@ -1566,19 +1304,16 @@ class Neighbor(Entity):
         """
 
         # Initialize sums of production and dual costs.
-        self.totalProductionCost = 0.0
-        self.totalDualCost = 0.0
+        self.total_production_cost = 0.0
+        self.total_dual_cost = 0.0
 
         # Have object update and store its production and dual costs in each active time interval
         self.update_production_costs(market)
         self.update_dual_costs(market)
 
         # Sum total production and dual costs through all time intervals.
-        # 200929DJH: These sums must occur in the same market.
-        # self.totalProductionCost = sum([x.value for x in self.productionCosts])
-        #         # self.totalDualCost = sum([x.value for x in self.dualCosts])
-        self.totalProductionCost = sum([x.value for x in self.productionCosts if x.market == market])
-        self.totalDualCost = sum([x.value for x in self.dualCosts if x.market == market])
+        self.total_production_cost = self.production_costs.total(market)
+        self.total_dual_cost = self.dual_costs.total(market)
 
     def include_marginal_losses(self, vertices):
         # This method corrects supply from neighbors based on transport inefficiency and the impact of transport losses
@@ -1620,12 +1355,12 @@ class Neighbor(Entity):
         # Create a deep copy of the provided list of vertices so that they will not be corrupted.
         corrected_vertices = deepcopy(vertices)
 
-        if self.maximumPower is None or self.maximumPower <= 0:
+        if self.maximum_power is None or self.maximum_power <= 0:
             print('WARNING: Method Neighbor.include_losses requires that a full maximum power value > 0 be assigned. '
                                  'No losses were applied.')
             return corrected_vertices
 
-        if type(self.lossFactor) != float or self.lossFactor <= 0:
+        if type(self.loss_factor) != float or self.loss_factor <= 0:
             print('WARNING: Property lossFactor must be a small positive number. No losses were applied.')
             return corrected_vertices
 
@@ -1634,8 +1369,7 @@ class Neighbor(Entity):
             return corrected_vertices
 
         # Get on with the business of reviewing and correcting the input vertices.
-        for x in range(len(corrected_vertices)):
-            vertex = corrected_vertices[x]
+        for vertex in corrected_vertices:
             # Losses apply to only imported, not exported, power in the current practice. Calculate the effective
             # received power and price.
             # Assumptions:
@@ -1646,17 +1380,17 @@ class Neighbor(Entity):
             #   losses.
             if vertex.power > 0:
                 # 210907DJH: Checked this next calculation of power based on supplier's power.
-                power = vertex.power * (1 - self.lossFactor * (vertex.power / self.maximumPower))
+                power = vertex.power * (1 - self.loss_factor * (vertex.power / self.maximum_power))
                 # Make sure that the reduced power is not greater than the maximum capacity referred to the demand side.
-                if power > self.maximumPower * (1 - self.lossFactor):
-                    power = self.maximumPower * (1 - self.lossFactor)
+                if power > self.maximum_power * (1 - self.loss_factor):
+                    power = self.maximum_power * (1 - self.loss_factor)
                 # Correct the supplier's LMP to include marginal losses.
                 # 210907DJH: Checked this next calculation of marginal loss price based on supply neighbor's marginal
                 #            price and its stated power. If cost is taken as the product of supply neighbor's marginal
                 #            price and supply energy, this marginal price at the recipient location is equivalent to the
                 #            first variation of the cost with change in received power.
-                vertex.marginalPrice = vertex.marginalPrice \
-                                       / (1 - 2 * (vertex.power / self.maximumPower) * self.lossFactor)
+                vertex.marginal_price = vertex.marginal_price \
+                                        / (1 - 2 * (vertex.power / self.maximum_power) * self.loss_factor)
                 vertex.power = power
 
         return corrected_vertices
@@ -1669,9 +1403,7 @@ class Neighbor(Entity):
 
         corrected_vertices = deepcopy(vertices)
 
-        for x in range(len(corrected_vertices)):
-            vertex = corrected_vertices[x]
-
+        for vertex in corrected_vertices:
             if vertex.power < 0:
                 # ASSUMPTIONS:
                 # - self.maximumPower is the transport actual constraint power magnitude from the supply perspective.
@@ -1683,23 +1415,23 @@ class Neighbor(Entity):
                 # sign convention for demand.
                 # 210907DJH: Confirmed that this calculated power indeed recovers the supply neighbor power as a
                 #            function of local demand from this neighbor.
-                power = -(self.maximumPower / (2 * self.lossFactor)) \
-                    * (1 - (1 - 4 * (-vertex.power/self.maximumPower) * self.lossFactor) ** 0.5)
+                power = -(self.maximum_power / (2 * self.loss_factor)) \
+                    * (1 - (1 - 4 * (-vertex.power / self.maximum_power) * self.loss_factor) ** 0.5)
 
-                if power < -self.maximumPower:
-                    power = -self.maximumPower
+                if power < -self.maximum_power:
+                    power = -self.maximum_power
 
                 # 210907DJH: I found that this next function that finds a supply neighbor's marginal price from the
                 #            local  agent's marginal price and received power does not perfectly recover the price and
                 #            thereby remove all the impacts of losses. This may have been due to its use of the recently
                 #            estimated neighbor supply. The discrepancy was minor, but it could accumulate in iterative
                 #            systems.
-                #            The replacement function was found to perfectly find the neighbor's orignial marginal
+                #            The replacement function was found to perfectly find the neighbor's original marginal
                 #            price, less loss impacts. It uses the local import power instead of the estimated
                 #            neighbor's export power.
                 # vertex.marginalPrice = vertex.marginalPrice * (1 - 2 * (-power / self.maximumPower) * self.lossFactor)
-                vertex.marginalPrice = vertex.marginalPrice * \
-                                       (1 + 4 * self.lossFactor * vertex.power / self.maximumPower) ** 0.5
+                vertex.marginal_price = vertex.marginal_price * \
+                                        (1 + 4 * self.loss_factor * vertex.power / self.maximum_power) ** 0.5
 
                 vertex.power = power
 
@@ -1744,7 +1476,7 @@ class Neighbor(Entity):
 
         # If there was only one vertex, its marginal price will also be the threshold price.
         if minimum_power == maximum_power:
-            threshold_price = corrected_vertices[0].marginalPrice
+            threshold_price = corrected_vertices[0].marginal_price
 
         # Regardless, the default condition is that the other threshold price is the same as the first. (The other
         # threshold price may be needed for the second vertex that may become created at the threshold.)
@@ -1756,13 +1488,13 @@ class Neighbor(Entity):
         affected_vertices = [x for x in corrected_vertices if x.power > threshold]
         for av in range(len(affected_vertices)):
             affected_vertex = affected_vertices[av]
-            affected_vertex.marginalPrice = affected_vertex.marginalPrice + self.demandRate
+            affected_vertex.marginal_price = affected_vertex.marginal_price + self.demand_rate
 
         # Find unaffected vertices that lie below the threshold.
         unaffected_vertices = [x for x in corrected_vertices if x.power < threshold]
 
         # Find any existing vertices that lie ON the threshold.
-        threshold_vertex_prices = [x.marginalPrice for x in corrected_vertices if x.power == threshold]
+        threshold_vertex_prices = [x.marginal_price for x in corrected_vertices if x.power == threshold]
 
         # If any vertex exists on the threshold, a vertex will need to be created at the minimum marginal price of the
         # vertex or vertices, not necessarily the same value as was found above.
@@ -1783,7 +1515,7 @@ class Neighbor(Entity):
                                       )
 
         if minimum_power <= threshold < maximum_power:
-            corrected_vertices.append(Vertex(marginal_price=other_threshold_price + self.demandRate,
+            corrected_vertices.append(Vertex(marginal_price=other_threshold_price + self.demand_rate,
                                              prod_cost=0,
                                              power=threshold
                                              )
@@ -1817,7 +1549,7 @@ class Neighbor(Entity):
         if threshold > 0:
             threshold = 0
 
-        threshold_price = corrected_vertices[0].marginalPrice
+        threshold_price = corrected_vertices[0].marginal_price
         # Determine the price that corresponds to the threshold power for this set of vertices. This should be done
         # before any of the vertices' marginal prices have been changed.
         if minimum_power <= threshold <= maximum_power:
@@ -1825,7 +1557,7 @@ class Neighbor(Entity):
 
         # If there was only one vertex, its marginal price will also be the threshold price.
         if minimum_power == maximum_power:
-            threshold_price = corrected_vertices[0].marginalPrice
+            threshold_price = corrected_vertices[0].marginal_price
 
         # Regardless, the default condition is that the other threshold price is the same as the first. (The other
         # threshold price may be needed for the second vertex that may become created at the threshold.)
@@ -1836,13 +1568,13 @@ class Neighbor(Entity):
         affected_vertices = [x for x in corrected_vertices if x.power < threshold]
         for av in range(len(affected_vertices)):
             affected_vertex = affected_vertices[av]
-            affected_vertex.marginalPrice = affected_vertex.marginalPrice - self.demandRate
+            affected_vertex.marginal_price = affected_vertex.marginal_price - self.demand_rate
 
         # Find unaffected vertices that lie above the threshold.
         unaffected_vertices = [x for x in corrected_vertices if x.power > threshold]
 
         # Find any existing vertices that lie ON the threshold.
-        threshold_vertex_prices = [x.marginalPrice for x in corrected_vertices if x.power == threshold]
+        threshold_vertex_prices = [x.marginal_price for x in corrected_vertices if x.power == threshold]
 
         # If any vertex exists on the threshold, a vertex will need to be created at the maximum marginal price of the
         # vertex or vertices, not necessarily the same value as was found above.
@@ -1865,7 +1597,7 @@ class Neighbor(Entity):
                                       )
 
         if minimum_power < threshold <= maximum_power:
-            corrected_vertices.append(Vertex(marginal_price=other_threshold_price - self.demandRate,
+            corrected_vertices.append(Vertex(marginal_price=other_threshold_price - self.demand_rate,
                                              prod_cost=0,
                                              power=threshold
                                              )
@@ -1880,7 +1612,7 @@ class Neighbor(Entity):
         #            time interval, the set of curves sent to this method should all reside in the same time interval.
 
         # Find the set of unique time intervals among the list curves.
-        time_intervals = set([x.timeInterval for x in curves])
+        time_intervals = set([x.time_interval for x in curves])
 
         if len(time_intervals) != 1:
             raise Warning('The curves sent to Neighbor.curves_to_curves should all be in the same time interval.')
@@ -1888,7 +1620,7 @@ class Neighbor(Entity):
         # Initialize the list of vertices that is to be returned.
         vertices = []
 
-        # Index through each curves and convert its properties into Vertex properties.
+        # Index through each curve and convert its properties into Vertex properties.
         for c in range(len(curves)):
             # Pick out indexed curve.
             curve = curves[c]
@@ -1904,9 +1636,9 @@ class Neighbor(Entity):
         return vertices
 
     def get_dict(self):
-        scheduled_powers = [(format_timestamp(x.timeInterval.start_time), x.value) for x in self.scheduledPowers]
-        received_signal = [(x.timeInterval, x.marginalPrice, x.power) for x in self.receivedSignal]
-        sent_signal = [(x.timeInterval, x.marginalPrice, x.power) for x in self.sentSignal]
+        scheduled_powers = [(format_timestamp(k.start_time), v.value) for k, v in self.scheduled_powers.all]
+        received_signal = [(x.time_interval, x.marginal_price, x.power) for x in self.received_signal]
+        sent_signal = [(x.time_interval, x.marginal_price, x.power) for x in self.sent_signal]
 
         neighbor_dict = {
             "isTransactive": self.transactive,
@@ -1926,16 +1658,16 @@ class Neighbor(Entity):
         record.update({
             'id': self.id,
             # 'last_updated': self.last_updated, TODO: Did this come from old schema?
-            'convergence_threshold': self.convergenceThreshold,
-            'demand_month': self.demandMonth,
-            'demand_rate': self.demandRate,
-            'demand_threshold': self.demandThreshold,
-            'demand_threshold_coefficient': self.demandThresholdCoef,
-            'effective_impedance': self.effectiveImpedance,
+            'convergence_threshold': self.convergence_threshold,
+            'demand_month': self.demand_month,
+            'demand_rate': self.demand_rate,
+            'demand_threshold': self.demand_threshold,
+            'demand_threshold_coefficient': self.demand_threshold_coef,
+            'effective_impedance': self.effective_impedance,
             'friend': self.friend,
-            'loss_factor': self.lossFactor,
+            'loss_factor': self.loss_factor,
             'transactive': self.transactive,
-            'up_or_down': self.upOrDown
+            'up_or_down': self.up_or_down
         })
         return record
 

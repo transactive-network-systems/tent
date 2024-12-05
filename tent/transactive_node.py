@@ -80,10 +80,10 @@ class TransactiveNode(Archivable):
         self._data_manager = None
 
         # The agent must keep track of various devices and their models that are listed among these properties.
-        self.informationServiceModels = []
-        self.localAssets = []
+        self.information_service_models = []
+        self.local_assets = []
         self.markets = []
-        self.meterPoints = []
+        self.meter_points = []
         self.neighbors = []
 
         self.default_config = {
@@ -97,9 +97,9 @@ class TransactiveNode(Archivable):
             "tz": self.tz,
 
             # component Objects:
-            "meterPoints": self.meterPoints,
-            "informationServiceModels": self.informationServiceModels,
-            "localAssets": self.localAssets,
+            "meter_points": self.meter_points,
+            "information_service_models": self.information_service_models,
+            "local_assets": self.local_assets,
             "markets": self.markets,
             "neighbors": self.neighbors
         }
@@ -124,7 +124,7 @@ class TransactiveNode(Archivable):
         self.description = updated_configs.get('description', self.description)
         self.mechanism = updated_configs.get('mechanism', self.mechanism)
         self.name = updated_configs.get('name', self.name)
-        self.regsitry_id = updated_configs.get('registry_id', self.registry_id)
+        self.registry_id = updated_configs.get('registry_id', self.registry_id)
         self.status = updated_configs.get('status', self.status)
         self.tz = updated_configs.get('tz', self.tz)
         return updated_configs
@@ -145,12 +145,12 @@ class TransactiveNode(Archivable):
         # Configure TransactiveNode Component Classes
         _log.debug('IN _SETUP_COMPONENT_OBJECTS')
         try:
-            self.meterPoints = self._configure_components(config.get('meterPoints'), 'MeterPoints')
+            self.meter_points = self._configure_components(config.get('meter_points'), 'Meter Points')
             _log.debug('DONE WITH METER_POINTS')
-            self.informationServiceModels = self._configure_components(config.get('informationServiceModels'),
-                                                                        'InformationServiceModels')
+            self.information_service_models = self._configure_components(config.get('information_service_models'),
+                                                                        'Information Service Models')
             _log.debug('DONE WITH ISM')
-            self.localAssets = self._configure_components(config.get('localAssets'), 'LocalAssets')
+            self.local_assets = self._configure_components(config.get('local_assets'), 'Local Assets')
             _log.debug('DONE WITH ASSETS')
             self.neighbors = self._configure_components(config.get('neighbors'), 'Neighbors')
             _log.debug('DONE WITH NEIGHBORS')
@@ -160,7 +160,7 @@ class TransactiveNode(Archivable):
             _log.error("ERROR PROCESSING CONFIGURATION {}".format(e))
             raise
 
-    def _configure_components(self, configs, component_type):
+    def _configure_components(self, configs, component_type: str):
         """Instantiates and configures each component object defined in a passed list of configurations.
         It is up to the individual component to manage its own configuration from its __init__ method.
         Returns list of instantiated and configured components
@@ -198,16 +198,16 @@ class TransactiveNode(Archivable):
         return getattr(module, cls)
 
     def get_meters_by_attribute(self, attribute, match, first_only=False):
-        return self.get_objects_by_attribute(self.meterPoints, attribute, match, first_only)
+        return self.get_objects_by_attribute(self.meter_points, attribute, match, first_only)
 
     def get_isms_by_attribute(self, attribute, match, first_only=False):
-        return self.get_objects_by_attribute(self.informationServiceModels, attribute, match, first_only)
+        return self.get_objects_by_attribute(self.information_service_models, attribute, match, first_only)
 
     def get_markets_by_attribute(self, attribute, match, first_only=False):
         return self.get_objects_by_attribute(self.markets, attribute, match, first_only)
 
     def get_assets_by_attribute(self, attribute, match, first_only=False):
-        return self.get_objects_by_attribute(self.localAssets, attribute, match, first_only)
+        return self.get_objects_by_attribute(self.local_assets, attribute, match, first_only)
 
     def get_neighbors_by_attribute(self, attribute, match, first_only=False):
         return self.get_objects_by_attribute(self.neighbors, attribute, match, first_only)

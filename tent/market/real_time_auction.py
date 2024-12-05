@@ -85,9 +85,8 @@ class RealTimeAuction(Auction):
         k = 4*14
         # A good practice upon entering the delivery period is to update the market's price model using the final
         # marginal prices.
-        final_prices = self.marginalPrices
-        for x in range(len(final_prices)):
-            self.priceModel.update(final_prices[x].timeInterval.start_time, final_prices[x].value)
+        for time_interval, final_price in self.marginal_prices:
+            self.price_model.update(time_interval.start_time, final_price.value)
         # Tell Local Assets it is time to actuate.
         self._actuate_assets(my_transactive_node)
 

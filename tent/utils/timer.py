@@ -61,13 +61,8 @@ class Timer(object):
         cur_time = datetime.now()
         if cls.simulation:
             ratio = 3600 / cls.sim_one_hr_in_sec
-            # print(f'ratio is: {ratio}')
-            # print(f'cur_time is: {cur_time}')
-            # print(f'created_time is: {cls.created_time}')
             time_diff = cur_time - cls.created_time
             simulation_time_diff = time_diff * ratio
-            # print(f'sim_start_time: {cls.sim_start_time}')
-            # print(f'simulation_time_diff: {simulation_time_diff}')
             cur_time = cls.sim_start_time + simulation_time_diff
 
         return cur_time

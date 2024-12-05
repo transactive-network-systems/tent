@@ -63,18 +63,18 @@ def test_update_vertices():
     dt = datetime.now()
     dt = dt.replace(hour=1, month=1)  # an example LLH hour
     test_neighbor = BulkSupplierDC()
-    test_neighbor.maximumPower = 100
-    test_neighbor.minimumPower = 0
-    test_neighbor.lossFactor = 0
-    test_neighbor.demandRate = 0  # CAUTION: the method makes sure this is as in the supplier table.
-    test_neighbor.demandThreshold = 101  # Placing this just above the vertices' power range
+    test_neighbor.maximum_power = 100
+    test_neighbor.minimum_power = 0
+    test_neighbor.loss_factor = 0
+    test_neighbor.demand_rate = 0  # CAUTION: the method makes sure this is as in the supplier table.
+    test_neighbor.demand_threshold = 101  # Placing this just above the vertices' power range
     test_market = Market()
     test_market.neighbors = [test_neighbor]
     test_time_interval = TimeInterval(market=test_market, duration=timedelta(hours=1), start_time=dt)
-    test_market.timeIntervals = [test_time_interval]
+    test_market.time_intervals = [test_time_interval]
     # 210803DJH: The market clearing time must be defined because it is needed by the new data_manager.py for
     #            IntervalValue objects.
-    test_market.marketClearingTime = dt
+    test_market.market_clearing_time = dt
 
     try:
         test_neighbor.update_vertices(test_market)
@@ -86,28 +86,28 @@ def test_update_vertices():
                                                    + str(len(test_neighbor.activeVertices))
     assert test_neighbor.activeVertices[0].value.power in [0, 100], 'First active vertex power was not as expected.'
     assert test_neighbor.activeVertices[1].value.power in [0, 100], 'Second active vertex power was not as expected.'
-    assert test_neighbor.activeVertices[0].value.marginalPrice == 0.0366, \
+    assert test_neighbor.activeVertices[0].value.marginal_price == 0.0366, \
         'First active vertex marginal price is not as expected: ' \
-        + str(test_neighbor.activeVertices[0].value.marginalPrice)
-    assert test_neighbor.activeVertices[1].value.marginalPrice == 0.0366, \
+        + str(test_neighbor.activeVertices[0].value.marginal_price)
+    assert test_neighbor.activeVertices[1].value.marginal_price == 0.0366, \
         'Second active vertex marginal price is not as expected: ' \
-        + str(test_neighbor.activeVertices[1].value.marginalPrice)
+        + str(test_neighbor.activeVertices[1].value.marginal_price)
 
     print('Case 2: Same as Case 1, but let demand charges be in play. ')
     dt = datetime(2021, 3, 3, 13)
     # dt = dt.replace(hour=10, month=1)  # an example HLH hour
     test_neighbor = BulkSupplierDC()
-    test_neighbor.maximumPower = 100
-    test_neighbor.minimumPower = 0
-    test_neighbor.lossFactor = 0
-    test_neighbor.demandRate = 0  # CAUTION: the method makes sure this is as in the supplier table.
-    test_neighbor.demandThreshold = 50  # Placing this in the middle of the vertices' power range
+    test_neighbor.maximum_power = 100
+    test_neighbor.minimum_power = 0
+    test_neighbor.loss_factor = 0
+    test_neighbor.demand_rate = 0  # CAUTION: the method makes sure this is as in the supplier table.
+    test_neighbor.demand_threshold = 50  # Placing this in the middle of the vertices' power range
     test_market = Market()
     test_market.neighbors = [test_neighbor]
     test_time_interval = TimeInterval(market=test_market, duration=timedelta(hours=1), start_time=dt)
-    test_market.timeIntervals = [test_time_interval]
+    test_market.time_intervals = [test_time_interval]
     # 210803DJH: data_manager.py requires that the market be assigned a market clearing time.
-    test_market.marketClearingTime = dt
+    test_market.market_clearing_time = dt
 
     try:
         test_neighbor.update_vertices(test_market)
@@ -127,7 +127,7 @@ def test_update_vertices():
                                                               + str(test_neighbor.activeVertices[2].value.power)
     assert test_neighbor.activeVertices[3].value.power == 100, 'Fourth active vertex power was not as expected: '\
                                                                + str(test_neighbor.activeVertices[3].value.power)
-    assert [test_neighbor.activeVertices[x].value.marginalPrice for x in range(4)] == \
+    assert [test_neighbor.activeVertices[x].value.marginal_price for x in range(4)] == \
            [0.03641, 0.03641, 9.31641, 9.31641], 'Marginal prices were not as expected.'
 
     print('test_update_vertices() ran to completion.\n')

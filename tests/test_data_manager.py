@@ -173,7 +173,7 @@ class TestAppendTransactiveRecordTable:
             market_clearing_time=dt
         )
 
-        self.test_market.name = self.test_market.marketSeriesName.replace(' ', '_') + '_' + str(dt)[:19]
+        self.test_market.name = self.test_market.market_series_name.replace(' ', '_') + '_' + str(dt)[:19]
         self.test_vertex = Vertex(marginal_price=0,
                                   prod_cost=0,
                                   power=0)
@@ -241,13 +241,13 @@ class TestAppendMarketObjectTable:
             market_series_name='test_market_series',
             market_clearing_time=dt
         )
-        self.test_market.name = self.test_market.marketSeriesName.replace(' ', '_') + '_' + str(dt)[:19]
+        self.test_market.name = self.test_market.market_series_name.replace(' ', '_') + '_' + str(dt)[:19]
         self.test_vertex = Vertex(marginal_price=0,
                                   prod_cost=0,
                                   power=0)
         self.test_value = 1234.5678
         self.test_interval = TimeInterval(market=self.test_market, duration=dur, start_time=dt)
-        self.test_market.timeIntervals = [self.test_interval]
+        self.test_market.time_intervals = [self.test_interval]
         self.test_iv = IntervalValue(calling_object=self.test_neighbor,
                                      time_interval=self.test_interval,
                                      market=self.test_market,

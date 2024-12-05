@@ -43,10 +43,9 @@ under Contract DE-AC05-76RL01830
 import logging
 import math
 
-from tent.containers import IntervalValue
-from tent.enumerations import MarketState, MeasurementType
+from datetime import datetime
+
 from tent.local_asset import LocalAsset
-from tent.utils.helpers import find_obj_by_ti
 from tent.utils.log import setup_logging
 
 setup_logging()
@@ -77,91 +76,34 @@ class SolarPvResource(LocalAsset):
         # h - hour (presumes 24-hour clock, local time)
         # *************************************************************************
 
-        # Gather active time intervals
-        time_intervals = market.timeIntervals
-
         # Index through the active time intervals ti
-        for i in range(len(time_intervals)):
+        for time_interval in market.time_intervals:
 
             # Production will be estimated from the time-of-day at the center of the time interval.
-            time_of_day = time_intervals[i].start_time + time_intervals[i].duration / 2  # a datetime
-
-            # extract a fractional representation of the hour-of-day
-            h = time_of_day.hour
-            m = time_of_day.minute
-            h = h + m / 60  # Time_of_day stated as fractional hours
+            time_of_day: datetime = time_interval.start_time + time_interval.duration / 2
+            hour_of_day: float = time_of_day.hour + time_of_day.minute / 60  # Time_of_day stated as fractional hours
 
             # Estimate solar generation as a sinusoidal function of daylight hours.
-            if h < 5.5 or h > 17.5:
-
-                # The time is outside the time of solar production. Set power to zero.
-                power = 0.0  # [avg.kW]
-
+            if hour_of_day < 5.5 or hour_of_day > 17.5:
+                power = 0.0  # The time is outside the time of solar production. Set power to zero. [avg.kW]
             else:
-
                 # A sinusoidal function is used to forecast solar generation during the normally sunny part of a day.
-                power = 0.5 * (1 + math.cos((h - 12) * 2.0 * math.pi / 12))
-                power = self.maximum_power * power
-                power = self.cloudFactor * power                                        # [avg.kW]
+                clear_sky_power = 0.5 * (1 + math.cos((hour_of_day - 12) * 2.0 * math.pi / 12))
+                power = self.maximum_power * clear_sky_power * self.cloudFactor  # [avg.kW]
 
-            # Check whether a scheduled power exists in the indexed time interval.
-            interval_value = find_obj_by_ti(self.scheduledPowers, time_intervals[i])
-            if interval_value is None:
-
-                # No scheduled power value is found in the indexed time interval. Create and store one.
-                interval_value = IntervalValue(self, time_intervals[i], market, MeasurementType.ScheduledPower, power)
-
-                # Append the scheduled power to the list of scheduled powers.
-                self.scheduledPowers.append(interval_value)
-
-            else:
-                # A scheduled power already exists in the indexed time interval. Simply reassign its value.
-                interval_value.value = power                                                # [avg.kW]
+            # Create or update scheduled power for the indexed time interval to calculated power.
+            self.scheduled_powers.update(time_interval, power)
 
             # Assign engagement schedule in the indexed time interval NOTE: The assignment of engagement schedule, if
             # used, will often be assigned during the scheduling of power, not separately as demonstrated here.
             # Check whether an engagement schedule exists in the indexed time interval
-            interval_value = find_obj_by_ti(self.engagementSchedule, time_intervals[i])
 
-            # NOTE: this template assigns engagement value as true (i.e., engaged).
-            val = True  # Asset is committed or engaged
+            # Set asset as committed or engaged for this interval.
+            self.engagement_schedule.update(time_interval, True)
 
-            if interval_value is None:
+        self.schedule_calculated = True
 
-                # No engagement schedule was found in the indexed time interval. Create an interval value and assign its
-                # value.
-                interval_value = IntervalValue(self, time_intervals[i], market, MeasurementType.EngagementSchedule, val)
-
-                # Append the interval value to the list of active interval values
-                self.engagementSchedule.append(interval_value)
-
-            else:
-
-                # An engagement schedule was found in the indexed time interval. Simpy reassign its value.
-                interval_value.value = val  # [$]
-
-        # Remove any extra scheduled powers
-        # 200929DJH: In Version 3, this is problematic because valid scheduled powers can exist in other markets and
-        #            should not be deleted. This was causing valid scheduled powers to be eliminated. Let's try
-        #            eliminating the scheduled powers that are in expired markets.
-        # self.scheduledPowers = [x for x in self.scheduledPowers if x.timeInterval in time_intervals]
-        self.scheduledPowers = [x for x in self.scheduledPowers if x.market.marketState != MarketState.Expired]
-
-        # TODO: This step may not be necessary for Python environment because of the way it does garbage cleanup.
-        # Remove any extra engagement schedule values
-        self.engagementSchedule = [x for x in self.engagementSchedule if x.timeInterval in time_intervals]
-        self.scheduleCalculated = True
-        _log.debug(f"Market: {market.name} schedule_power {self.scheduledPowers}")
-        for power in self.scheduledPowers:
-            _log.debug(f"schedule_power Market {power.market.name}, time interval: {power.timeInterval.start_time},"
-                       f" power value: {power.value} ")
-
-        # Remove any extra engagement schedule values
-        # 200929DJH: In Version 3, this is problematic because valid scheduled engagements can exist in other markets
-        #            and should not be deleted. Let's try eliminating the scheduled engagements that are in expired
-        #            markets.
-        # self.engagementSchedule = [x for x in self.engagementSchedule if x.timeInterval in time_intervals]
-        self.engagementSchedule = [x for x in self.engagementSchedule if x.market.marketState != MarketState.Expired]
+        _log.debug(f"Scheduled_powers for market: {market.name} --- {self.scheduled_powers.log_report}")
 
     @property
     def table_name(self):

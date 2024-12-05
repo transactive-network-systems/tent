@@ -106,24 +106,24 @@ class Entity(Component):
             else Vertex.vertex_list(default_vertices)
 
         # [InformationService] See class InformationService
-        self.informationServices = WeakSet()
+        self.information_services = WeakSet()
         information_services = information_services if information_services is not None else []
         if all([isinstance(ism, Component) for ism in information_services]):
-            self.informationServices.update(information_services)
+            self.information_services.update(information_services)
         elif all([isinstance(ism, str) for ism in information_services]) and self.tn and self.tn():
-            self.informationServices.update(self.tn().get_isms_by_attribute('name', information_services))
+            self.information_services.update(self.tn().get_isms_by_attribute('name', information_services))
         else:
             raise ValueError(f'All information services assigned to LocalAsset {self.name} must be an instance of class'
                              f' InformationServiceModel or the name of an InformationServiceModel held by the'
                              f' TransactiveNode.')
 
         # [MeterPoint] See class MeterPoint
-        self.meterPoints = WeakSet()
+        self.meter_points = WeakSet()
         meter_points = meter_points if meter_points is not None else []
         if all([isinstance(mp, Component) for mp in meter_points]):
-            self.meterPoints.update(meter_points)
+            self.meter_points.update(meter_points)
         elif all([isinstance(mp, str) for mp in meter_points]) and self.tn and self.tn():
-            self.meterPoints.update(self.tn().get_meters_by_attribute('name', meter_points))
+            self.meter_points.update(self.tn().get_meters_by_attribute('name', meter_points))
         else:
             raise ValueError(f'All meter points assigned to LocalAsset {self.name} must be an instance of class'
                              f' MeterPoint or the name of a MeterPoint held by the TransactiveNode.')
@@ -146,11 +146,11 @@ class Entity(Component):
         records = records if records else []
         records.extend([
             {'table_name': 'entity_meter_point', 'data': {'component': self.id, 'meter_point_id': m.id}}
-            for m in self.meterPoints
+            for m in self.meter_points
         ])
         records.extend([
             {'table_name': 'entity_information_service', 'data': {'component': self.id, 'information_service_id': i.id}}
-            for i in self.informationServices
+            for i in self.information_services
         ])
         super(Entity, self).archive(records)
 

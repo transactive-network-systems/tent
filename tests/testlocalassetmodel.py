@@ -97,11 +97,11 @@ def test_calculate_reserve_margin():
     ti = TimeInterval(mkt, dur, st)
 
     # Store time interval
-    test_mkt.timeIntervals = [ti]
+    test_mkt.time_intervals = [ti]
 
     # Establish test object that is a LocalAsset.
     test_model = LocalAsset()
-    test_model.scheduledPowers = [
+    test_model.scheduled_powers = [
         IntervalValue(test_model, ti, test_mkt, MeasurementType.ScheduledPower, 0.0)]
     test_model.maximum_power = 100
 
@@ -113,9 +113,9 @@ def test_calculate_reserve_margin():
     except RuntimeWarning as cause:
         print('  The test encountered errors', cause)
 
-    assert len(test_model.reserveMargins) == 1, 'An unexpected number of results were stored'
+    assert len(test_model.reserve_margins) == 1, 'An unexpected number of results were stored'
 
-    assert test_model.reserveMargins[0].value == test_model.maximum_power, \
+    assert test_model.reserve_margins[0].value == test_model.maximum_power, \
                                                                 'The method did not use the available maximum power'
 
     # create some vertices and store them
@@ -133,7 +133,7 @@ def test_calculate_reserve_margin():
     except RuntimeWarning as cause:
         print('  The test encountered errors', cause)
 
-    assert test_model.reserveMargins[0].value == 10, 'The method should have used vertex for comparison'
+    assert test_model.reserve_margins[0].value == 10, 'The method should have used vertex for comparison'
 
     print("  Case 3: test with maximum power less than maximum vertex")
     test_model.maximum_power = 5
@@ -143,10 +143,10 @@ def test_calculate_reserve_margin():
     except RuntimeWarning as cause:
         print('  The test encountered errors', cause)
 
-    assert test_model.reserveMargins[0].value == 5, 'The method should have used maximum power for comparison'
+    assert test_model.reserve_margins[0].value == 5, 'The method should have used maximum power for comparison'
 
     print("  Case 4: test with scheduled power greater than maximum vertex")
-    test_model.scheduledPowers[0].value = 20
+    test_model.scheduled_powers[0].value = 20
     test_model.maximum_power = 500
     try:
         test_model.calculate_reserve_margin(test_mkt)
@@ -154,7 +154,7 @@ def test_calculate_reserve_margin():
     except RuntimeWarning as cause:
         print('  The test encountered errors', cause)
 
-    assert test_model.reserveMargins[0].value == 0, 'The method should have assigned zero for a neg. result'
+    assert test_model.reserve_margins[0].value == 0, 'The method should have assigned zero for a neg. result'
 
     # Success.
     print('Method test_calculate_reserve_margin() ran to completion.\n')
@@ -212,7 +212,7 @@ def test_engagement_cost():
     test_model = LocalAsset()
 
     #   Assign engagement costs for [dissengagement, hold, engagement]
-    test_model.engagement_cost = [1, 2, 3]
+    test_model.engagement_costs = [1, 2, 3]
 
     # TEST 1
     print('  Test 1a: Normal transition input arguments [-1,0,1]')
@@ -292,7 +292,7 @@ def test_schedule_engagement():
     ti.append(TimeInterval(mkt, dur, st))
 
     #   store time intervals
-    test_mkt.timeIntervals = ti
+    test_mkt.time_intervals = ti
 
     #   Establish test model that is a LocalAsset.
     test_model = LocalAsset()
@@ -306,10 +306,10 @@ def test_schedule_engagement():
         print("  The case encountered errors.", cause)
 
     #   Were the right number of engagement schedule values created?
-    assert len(test_model.engagementSchedule) == 2, 'The method did not store the engagement schedule'
+    assert len(test_model.engagement_schedule) == 2, 'The method did not store the engagement schedule'
 
     # Where the correct scheduled engagement values stored?
-    assert len([x.value for x in test_model.engagementSchedule if x.value != 1]) == 0, \
+    assert len([x.value for x in test_model.engagement_schedule if x.value != 1]) == 0, \
         'The stored engagement schedule was not as expected'
     """
     if len([x.value for x in test_model.engagementSchedule if x.value != 1]) > 0:
@@ -324,7 +324,7 @@ def test_schedule_engagement():
     ti.append(TimeInterval(mkt, dur, st))
 
     #   Re-store time intervals
-    test_mkt.timeIntervals = ti
+    test_mkt.time_intervals = ti
 
     #   Run next test case.
     print("  Case 2: Adding a third time interval.")
@@ -335,11 +335,11 @@ def test_schedule_engagement():
         print("  The method encountered errors.", cause)
 
     #   Was the new time interval used?
-    assert len(test_model.engagementSchedule) == 3, 'The method apparently failed to create a new engagement'
+    assert len(test_model.engagement_schedule) == 3, 'The method apparently failed to create a new engagement'
 
     # Were the existing time interval values reassigned properly?
     # if any([test_model.engagementSchedule.value] != true * ones(1, 3)):
-    assert all([x.value == 1 for x in test_model.engagementSchedule]), \
+    assert all([x.value == 1 for x in test_model.engagement_schedule]), \
         'The existing list was not augmented as expected'
 
     # Success.
@@ -371,7 +371,7 @@ def test_schedule_power():
     ti.append(TimeInterval(mkt, dur, st))
 
     #   Store time intervals
-    test_mkt.timeIntervals = ti
+    test_mkt.time_intervals = ti
 
     #   Establish test model that is a LocalAsset with a default power
     #   property.
@@ -387,11 +387,11 @@ def test_schedule_power():
         print("  The method encountered errors", cause)
 
     #   Were the right number of scheduled power values created?
-    assert len(test_model.scheduledPowers) == 2, 'The method did not store the right number of results'
+    assert len(test_model.scheduled_powers) == 2, 'The method did not store the right number of results'
 
     # Where the correct scheduled power values stored?
     # if any([test_model.scheduledPowers.value] != test_model.defaultPower * ones(1, 2))
-    assert all([x.value == test_model.default_power for x in test_model.scheduledPowers]), \
+    assert all([x.value == test_model.default_power for x in test_model.scheduled_powers]), \
         'The stored scheduled powers were not as expected'
 
     # Change the default power.
@@ -402,7 +402,7 @@ def test_schedule_power():
     ti.append(TimeInterval(mkt, dur, st))
 
     #   Re-store time intervals
-    test_mkt.timeIntervals = ti
+    test_mkt.time_intervals = ti
 
     #   Run next test case.
     print("  Case 2: Power is scheduled for three time intervals.")
@@ -413,10 +413,10 @@ def test_schedule_power():
         print("  The method encountered errors", cause)
 
     #   Was the new time interval used?
-    assert len(test_model.scheduledPowers) == 3, 'The method failed to create a new scheduled power'
+    assert len(test_model.scheduled_powers) == 3, 'The method failed to create a new scheduled power'
 
     # Were the existing time intervals reassigned properly?
-    assert all([x.value == test_model.default_power for x in test_model.scheduledPowers]), \
+    assert all([x.value == test_model.default_power for x in test_model.scheduled_powers]), \
         '- existing scheduled powers were not reassigned properly'
 
     # Success.
@@ -435,21 +435,21 @@ def test_update_dual_costs():
     #   Create and store a TimeInterval object.
     dt = datetime.now()  # datetime that may be used for most datetime arguments
     time_interval = TimeInterval(test_market, timedelta(hours=1), dt)
-    test_market.timeIntervals = [time_interval]
+    test_market.time_intervals = [time_interval]
 
     #   Create and store a marginal price IntervalValue object.
-    test_market.marginalPrices = [
+    test_market.marginal_prices = [
         IntervalValue(test_market, time_interval, test_market, MeasurementType.MarginalPrice, 0.1)]
 
     #   Create a test LocalAsset.
     test_model = LocalAsset()
 
     #   Create and store a scheduled power IntervalValue in the active time interval.
-    test_model.scheduledPowers = [
+    test_model.scheduled_powers = [
         IntervalValue(test_model, time_interval, test_market, MeasurementType.ScheduledPower, 100)]
 
     #   Create and store a production cost IntervalValue in the active time interval.
-    test_model.productionCosts = [
+    test_model.production_costs = [
         IntervalValue(test_model, time_interval, test_market, MeasurementType.ProductionCost, 1000)]
 
     # TEST 1
@@ -461,9 +461,9 @@ def test_update_dual_costs():
     except RuntimeWarning as cause:
         print('  The test encountered errors', cause)
 
-    assert len(test_model.dualCosts) == 1, 'The wrong number of dual cost values was created'
+    assert len(test_model.dual_costs) == 1, 'The wrong number of dual cost values was created'
 
-    dual_cost = test_model.dualCosts[0].value
+    dual_cost = test_model.dual_costs[0].value
 
     assert dual_cost == (1000 - 100 * 0.1), 'An unexpected dual cost value was found'
 
@@ -471,7 +471,7 @@ def test_update_dual_costs():
     print('- Test 2: Reassignment of an existing dual cost')
 
     #   Configure the test by modifying the marginal price value.
-    test_market.marginalPrices[0].value = 0.2
+    test_market.marginal_prices[0].value = 0.2
 
     try:
         test_model.update_dual_costs(test_market)
@@ -479,9 +479,9 @@ def test_update_dual_costs():
     except RuntimeWarning as cause:
         print('  The test encountered errors', cause)
 
-    assert len(test_model.dualCosts) == 1, 'The wrong number of dual cost values was created'
+    assert len(test_model.dual_costs) == 1, 'The wrong number of dual cost values was created'
 
-    dual_cost = test_model.dualCosts[0].value
+    dual_cost = test_model.dual_costs[0].value
 
     assert dual_cost == (1000 - 100 * 0.2), 'An unexpected dual cost value was found'
 
@@ -501,13 +501,13 @@ def test_update_production_costs():
     #   Create and store a TimeInterval.
     dt = datetime.now()  # datetime that may be used for most datetime arguments
     time_interval = TimeInterval(test_market, timedelta(hours=1), dt)
-    test_market.timeIntervals = [time_interval]
+    test_market.time_intervals = [time_interval]
 
     #   Create a test LocalAsset.
     test_model = LocalAsset()
 
     #   Create and store a scheduled power IntervalValue in the active time interval.
-    test_model.scheduledPowers = [
+    test_model.scheduled_powers = [
         IntervalValue(test_model, time_interval, test_market, MeasurementType.ScheduledPower, 50)]
 
     #   Create and store some active vertices IntervalValues in the active time interval.
@@ -528,16 +528,16 @@ def test_update_production_costs():
     except RuntimeWarning as cause:
         print('  - the method encountered errors', cause)
 
-    assert len(test_model.productionCosts) == 1, 'The wrong number of production costs was created'
+    assert len(test_model.production_costs) == 1, 'The wrong number of production costs was created'
 
-    production_cost = test_model.productionCosts[0].value
+    production_cost = test_model.production_costs[0].value
     assert production_cost == 1007.5, 'An unexpected production cost value was found'
 
     # TEST 2
     print('- Test 2: Reassignment of an existing production cost')
 
     #   Configure the test by modifying the scheduled power value.
-    test_model.scheduledPowers[0].value = 150
+    test_model.scheduled_powers[0].value = 150
 
     try:
         test_model.update_production_costs(test_market)
@@ -545,9 +545,9 @@ def test_update_production_costs():
     except RuntimeWarning as cause:
         print('  - the method encountered errors', cause)
 
-    assert len(test_model.productionCosts) == 1, 'The wrong number of productions was created'
+    assert len(test_model.production_costs) == 1, 'The wrong number of productions was created'
 
-    production_cost = test_model.productionCosts[0].value
+    production_cost = test_model.production_costs[0].value
 
     assert production_cost == 1015, 'An unexpected dual cost value was found'
 
@@ -566,13 +566,13 @@ def test_update_vertices():
     #   Create and store a TimeInterval.
     dt = datetime.now()  # datetime that may be used for most datetime arguments
     time_interval = TimeInterval(test_market, timedelta(hours=1), dt)
-    test_market.timeIntervals = [time_interval]
+    test_market.time_intervals = [time_interval]
 
     #   Create a test LocalAsset.
     test_model = LocalAsset()
 
     #   Create and store a scheduled power IntervalValue in the active time interval.
-    test_model.scheduledPowers = [
+    test_model.scheduled_powers = [
         IntervalValue(test_model, time_interval, test_market, MeasurementType.ScheduledPower, 50)]
 
     #   Create maximum and minimum powers.
@@ -622,15 +622,15 @@ def test_get_extended_prices():
                                market=test_market,
                                measurement_type='test',
                                value=price)
-    test_market.timeIntervals = [test_interval]
-    test_market.marginalPrices = [test_price]
+    test_market.time_intervals = [test_interval]
+    test_market.marginal_prices = [test_price]
     test_mtn = TransactiveNode()
     test_mtn.markets = [test_market]
-    test_mtn.localAssets = [test_asset_model]
+    test_mtn.local_assets = [test_asset_model]
 
-    assert len(test_market.marginalPrices) == 1, 'The market was supposed to have a marginal price'
+    assert len(test_market.marginal_prices) == 1, 'The market was supposed to have a marginal price'
     assert datetime.now() + test_asset_model.scheduling_horizon \
-           < test_market.timeIntervals[0].start_time + test_market.intervalDuration, \
+           < test_market.time_intervals[0].start_time + test_market.interval_duration, \
         'For this test, the existing marginal price intervals should not extend beyond the scheduling horizon.'
 
     try:
@@ -666,12 +666,12 @@ def test_get_extended_prices():
         market_clearing_time=now
     )
 
-    test_market.timeIntervals = [test_interval0]
-    test_market.marginalPrices = [test_price0]
+    test_market.time_intervals = [test_interval0]
+    test_market.marginal_prices = [test_price0]
 
     prior_market = Market(
-        market_series_name=test_market.marketSeriesName,
-        market_clearing_time=test_market.marketClearingTime - timedelta(hours=1)
+        market_series_name=test_market.market_series_name,
+        market_clearing_time=test_market.market_clearing_time - timedelta(hours=1)
     )
 
     test_interval1 = TimeInterval(prior_market, timedelta(hours=1), now)
@@ -688,19 +688,19 @@ def test_get_extended_prices():
                                 measurement_type='test',
                                 value=price1)
 
-    prior_market.timeIntervals = [test_interval1, test_interval2]
-    prior_market.marginalPrices = [test_price1, test_price2]
+    prior_market.time_intervals = [test_interval1, test_interval2]
+    prior_market.marginal_prices = [test_price1, test_price2]
 
-    test_market.priorMarketInSeries = prior_market  # Important pointer to preceding market interval in market series.
+    test_market.prior_market_in_series = prior_market  # Important pointer to preceding market interval in market series.
 
     test_mtn = TransactiveNode()
     test_mtn.markets = [prior_market, test_market]
-    test_mtn.localAssets = [test_asset_model]
+    test_mtn.local_assets = [test_asset_model]
 
-    assert len(test_market.marginalPrices) == 1, 'The market was supposed to have a marginal price'
-    assert len(prior_market.marginalPrices) == 2, "The prior market should have had two prices"
-    assert test_market.marketSeriesName == prior_market.marketSeriesName, 'The market names must be the same'
-    assert test_market.priorMarketInSeries == prior_market, "The market must point to its predecessor in market series"
+    assert len(test_market.marginal_prices) == 1, 'The market was supposed to have a marginal price'
+    assert len(prior_market.marginal_prices) == 2, "The prior market should have had two prices"
+    assert test_market.market_series_name == prior_market.market_series_name, 'The market names must be the same'
+    assert test_market.prior_market_in_series == prior_market, "The market must point to its predecessor in market series"
 
     try:
         price_set = test_asset_model.get_extended_prices(test_market)
@@ -736,12 +736,12 @@ def test_get_extended_prices():
                                 market=test_market,
                                 measurement_type='test',
                                 value=price0)
-    test_market.timeIntervals = [test_interval0]
-    test_market.marginalPrices = [test_price0]
+    test_market.time_intervals = [test_interval0]
+    test_market.marginal_prices = [test_price0]
 
     prior_market = Market(
-        market_series_name=test_market.marketSeriesName,
-        market_clearing_time=test_market.marketClearingTime - timedelta(hours=1)
+        market_series_name=test_market.market_series_name,
+        market_clearing_time=test_market.market_clearing_time - timedelta(hours=1)
     )
     test_interval1 = TimeInterval(prior_market, timedelta(hours=1), now)
     test_interval2 = TimeInterval(prior_market, timedelta(hours=1), now + timedelta(hours=1))
@@ -756,14 +756,14 @@ def test_get_extended_prices():
                                 market=prior_market,
                                 measurement_type='test',
                                 value=price1)
-    prior_market.timeIntervals = [test_interval1, test_interval2]
-    prior_market.marginalPrices = [test_price1, test_price2]
+    prior_market.time_intervals = [test_interval1, test_interval2]
+    prior_market.marginal_prices = [test_price1, test_price2]
 
-    test_market.priorMarketInSeries = prior_market
+    test_market.prior_market_in_series = prior_market
 
     corrected_market = Market(
         market_series_name="Corrected Market",
-        market_clearing_time=test_market.marketClearingTime - timedelta(hours=2),
+        market_clearing_time=test_market.market_clearing_time - timedelta(hours=2),
         interval_duration=timedelta(hours=1)
     )
     price2 = 20
@@ -783,19 +783,19 @@ def test_get_extended_prices():
                                 market=corrected_market,
                                 measurement_type='test',
                                 value=price2)
-    corrected_market.timeIntervals = [test_interval1, test_interval2, test_interval3]
-    corrected_market.marginalPrices = [test_price3, test_price4, test_price5]
+    corrected_market.time_intervals = [test_interval1, test_interval2, test_interval3]
+    corrected_market.marginal_prices = [test_price3, test_price4, test_price5]
 
     test_market.priorRefinedMarket = corrected_market
 
     test_mtn = TransactiveNode()
     test_mtn.markets = [corrected_market, prior_market, test_market]
-    test_mtn.localAssets = [test_asset_model]
+    test_mtn.local_assets = [test_asset_model]
 
-    assert len(test_market.marginalPrices) == 1, 'The market was supposed to have a marginal price'
-    assert len(prior_market.marginalPrices) == 2, "The prior market should have had two prices"
-    assert len(corrected_market.marginalPrices) == 3, 'The corrected market should have three prices'
-    assert test_market.marketSeriesName == prior_market.marketSeriesName, 'The market names must be the same'
+    assert len(test_market.marginal_prices) == 1, 'The market was supposed to have a marginal price'
+    assert len(prior_market.marginal_prices) == 2, "The prior market should have had two prices"
+    assert len(corrected_market.marginal_prices) == 3, 'The corrected market should have three prices'
+    assert test_market.market_series_name == prior_market.market_series_name, 'The market names must be the same'
 
     try:
         price_set = test_asset_model.get_extended_prices(test_market)
@@ -828,22 +828,22 @@ def test_get_extended_prices():
                                 market=test_market,
                                 measurement_type='test',
                                 value=price0)
-    test_market.timeIntervals = [test_interval0]
-    test_market.marginalPrices = [test_price0]
-    test_market.priorMarketInSeries = None
+    test_market.time_intervals = [test_interval0]
+    test_market.marginal_prices = [test_price0]
+    test_market.prior_market_in_series = None
     test_market.priorRefinedMarket = None
     avg_price = 30
     # std_price = 0.1
     # test_market.priceModel = [avg_price, std_price] * 24  # Critical to this test
     # ff = 14
     # price_dict = dict([(x, [avg_price] * ff) for x in range(1, 25)])
-    test_market.priceModel = HourlyAveragePriceModel(default_price=avg_price)
+    test_market.price_model = HourlyAveragePriceModel(default_price=avg_price)
     test_mtn = TransactiveNode()
     test_mtn.markets = [test_market]
-    test_mtn.localAssets = [test_asset_model]
+    test_mtn.local_assets = [test_asset_model]
 
-    assert len(test_market.marginalPrices) == 1, 'The market was supposed to have a marginal price'
-    assert len(test_market.priceModel.current_model) == 24, 'A price model must exist for all 2 * 24 hours'
+    assert len(test_market.marginal_prices) == 1, 'The market was supposed to have a marginal price'
+    assert len(test_market.price_model.current_model) == 24, 'A price model must exist for all 2 * 24 hours'
 
     try:
         price_set = test_asset_model.get_extended_prices(test_market)
@@ -879,12 +879,12 @@ def test_get_extended_prices():
 
     test_market.priorRefinedMarket = None
 
-    test_market.priceModel = None
+    test_market.price_model = None
 
     test_mtn = TransactiveNode()
     test_mtn.markets = [test_market]
 
-    assert type(test_market.defaultPrice) == float, 'A valid default price must be defined'
+    assert type(test_market.default_price) == float, 'A valid default price must be defined'
 
     try:
         price_set = test_asset_model.get_extended_prices(test_market)

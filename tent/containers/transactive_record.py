@@ -42,7 +42,7 @@ under Contract DE-AC05-76RL01830
 """
 
 from tent import Archivable
-from tent.containers import TimeInterval
+from tent.containers.time_interval import TimeInterval
 from tent.utils.timer import Timer
 
 
@@ -67,16 +67,16 @@ class TransactiveRecord(Archivable):
         if isinstance(time_interval, TimeInterval):
 
             # A TimeInterval object argument must be represented by its text name.
-            self.timeInterval = time_interval.name
+            self.time_interval = time_interval.name
 
         else:
 
             # Argument ti is most likely received as a text string name. Further validation might be used to make sure
             # that ti is a valid name of an active time interval.
-            self.timeInterval = str(time_interval)
+            self.time_interval = str(time_interval)
 
         self.record = record                                # a record number (0 refers to the balance point)
-        self.marginalPrice = marginal_price                 # marginal price [$/kWh]
+        self.marginal_price = marginal_price                 # marginal price [$/kWh]
         self.power = power                                  # power [avg.kW]
         # self.powerUncertainty = power_uncertainty  # relative [dimensionless]
         self.cost = cost                                    # ?
@@ -87,11 +87,11 @@ class TransactiveRecord(Archivable):
 
         # Finally, always append the timestamp that captures when the record is created.
         # TODO: Is this consistent with Timer() methods that are used with simulations?
-        self.timeStamp = Timer.get_cur_time()
+        self.timestamp = Timer.get_cur_time()
 
         # 210126DJH: Property "neighbor" is introduced to assist with data collection. If the name of the associated
         #            Neighbor object is not captured, a Transactive Record can not be traced to the correct Neighbor.
-        self.neighborName = neighbor_name
+        self.neighbor_name = neighbor_name
 
         # 210126DJH: This is a new reference to the source of a record from among ["received", "sent", "prepared"]. It
         #            is important to data collection.
@@ -101,12 +101,12 @@ class TransactiveRecord(Archivable):
 
         # 210126DJH: This is a new reference to the market in which the transactive record is relevant. A policy has
         #            emerged to name Market objects by prepending the clearing time with the market series name.
-        self.marketName = market_name
+        self.market_name = market_name
 
     def get_dict(self):
         transactive_record_dict = {
-            "timeInterval": self.timeInterval,
-            "marginalPrice": self.marginalPrice,
+            "timeInterval": self.time_interval,
+            "marginalPrice": self.marginal_price,
             "power": self.power
         }
         return transactive_record_dict

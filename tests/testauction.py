@@ -69,32 +69,32 @@ def test_while_in_negotiation():
 
     test_market = Auction()
     test_market.converged = False
-    test_market.marketState = MarketState.Active
+    test_market.market_state = MarketState.Active
 
     dt = datetime.now()
     test_interval = TimeInterval(test_market, timedelta(hours=1), dt)
 
-    test_market.timeIntervals = [test_interval]
+    test_market.time_intervals = [test_interval]
 
     test_agent = TransactiveNode()
     test_agent.markets = [test_market]
-    test_agent.localAssets = [test_asset]
+    test_agent.local_assets = [test_asset]
 
     assert test_market.converged is False, 'The test market should start out not converged'
-    assert test_market.marketState == MarketState.Active
+    assert test_market.market_state == MarketState.Active
 
     try:
         test_market.transition_from_active_to_negotiation(test_agent)
-        test_market.marketState = MarketState.Negotiation
+        test_market.market_state = MarketState.Negotiation
         test_market.while_in_negotiation(test_agent)
         print('    - The method ran without errors')
     except RuntimeWarning:
         print('    - ERRORS ENCOUNTERED')
 
 #    assert test_market.converged is True, 'The market should be converged'
-    assert test_market.marketState == MarketState.Negotiation, \
+    assert test_market.market_state == MarketState.Negotiation, \
             'The market should not have changed from the negotiation state'
-    assert len(test_asset.scheduledPowers) == 1, 'Precisely one scheduled power should have been assigned'
+    assert len(test_asset.scheduled_powers) == 1, 'Precisely one scheduled power should have been assigned'
 
     print('  test_while_in_negotiation() ran to completion.\n')
     pass
@@ -106,22 +106,22 @@ def test_while_in_market_lead():
 
     test_neighbor = Neighbor()
     test_neighbor.transactive = False
-    test_neighbor.upOrDown = Direction.unknown
+    test_neighbor.up_or_down = Direction.unknown
     test_neighbor.name = 'Test_Neighbor'
 
     test_market = Auction()
-    test_market.marketState = MarketState.MarketLead
+    test_market.market_state = MarketState.MarketLead
 
     dt = datetime.now()
     test_interval = TimeInterval(test_market, timedelta(hours=1), dt)
 
-    test_market.timeIntervals = [test_interval]
+    test_market.time_intervals = [test_interval]
 
     test_agent = TransactiveNode()
     test_agent.markets = [test_market]
     test_agent.neighbors = [test_neighbor]
 
-    assert test_market.marketState == MarketState.MarketLead
+    assert test_market.market_state == MarketState.MarketLead
 
     try:
         test_market.while_in_market_lead(test_agent)
@@ -129,17 +129,17 @@ def test_while_in_market_lead():
     except RuntimeWarning:
         print('    - ERRORS ENCOUNTERED')
 
-    assert test_market.marketState == MarketState.MarketLead, \
+    assert test_market.market_state == MarketState.MarketLead, \
                                                     'The market should not have changed from the market lead state'
-    assert test_neighbor.upOrDown == Direction.downstream, \
+    assert test_neighbor.up_or_down == Direction.downstream, \
                                                     'The undefined direction should have been assigned downstream'
-    assert len(test_neighbor.scheduledPowers) == 0, \
+    assert len(test_neighbor.scheduled_powers) == 0, \
                                               'One scheduled power should have been scheduled by the test neighbor'
 
     print('  CASE 2: An upstream neighbor is added.')
 
     upstream_neighbor = Neighbor()
-    upstream_neighbor.upOrDown = Direction.upstream
+    upstream_neighbor.up_or_down = Direction.upstream
 
     # test_agent.neighbors.append(upstream_neighbor)
     test_agent.neighbors = [upstream_neighbor]
@@ -173,16 +173,16 @@ def test_while_in_delivery_lead():
     now = datetime.now()
     test_neighbor = Neighbor()
     test_neighbor.transactive = False
-    test_neighbor.upOrDown = Direction.upstream
-    test_neighbor.scheduledPowers = []
+    test_neighbor.up_or_down = Direction.upstream
+    test_neighbor.scheduled_powers = []
     mtn.neighbors = [test_neighbor]
     test_asset = LocalAsset()
-    mtn.localAssets = [test_asset]
+    mtn.local_assets = [test_asset]
     test_auction = Auction()
-    test_auction.marginalPrices = []
+    test_auction.marginal_prices = []
     mtn.markets = test_auction
     test_time_interval = TimeInterval(test_auction, timedelta(hours=1), now)
-    test_auction.timeIntervals = [test_time_interval]
+    test_auction.time_intervals = [test_time_interval]
     test_vertex1 = Vertex(0.1, 0, 0)
     test_vertex2 = Vertex(0.2, 0, 100)
     test_vertex3 = Vertex(pinf, 0, -50)
@@ -192,15 +192,15 @@ def test_while_in_delivery_lead():
                                          test_vertex2)
     test_interval_value3 = IntervalValue(test_auction, test_time_interval, test_auction, 'active vertex',
                                          test_vertex3)
-    test_neighbor.defaultVertices = [test_vertex1, test_vertex2]
-    test_neighbor.activeVertices = []
+    test_neighbor.default_vertices = [test_vertex1, test_vertex2]
+    test_neighbor.active_vertices = []
     test_asset.activeVertices = [test_interval_value3]
     test_neighbor.demand_rate = 0
-    test_neighbor.lossFactor = 0
+    test_neighbor.loss_factor = 0
 
-    assert len(test_auction.marginalPrices) == 0, 'The test should start with the auction having no marginal prices'
-    assert len(test_neighbor.scheduledPowers) == 0, 'The upstream neighbor should initially have no scheduled powers.'
-    assert len(test_asset.scheduledPowers) == 0, 'The local asset should be configured with no scheduled powers.'
+    assert len(test_auction.marginal_prices) == 0, 'The test should start with the auction having no marginal prices'
+    assert len(test_neighbor.scheduled_powers) == 0, 'The upstream neighbor should initially have no scheduled powers.'
+    assert len(test_asset.scheduled_powers) == 0, 'The local asset should be configured with no scheduled powers.'
 
     try:
         test_auction.while_in_delivery_lead(mtn)
@@ -208,14 +208,14 @@ def test_while_in_delivery_lead():
     except RuntimeWarning:
         print('    - ERRORS ENCOUNTERED')
 
-    assert len(test_auction.marginalPrices) == 1, 'The auction should have created precisely one marginal price.'
-    assert round(test_auction.marginalPrices[0].value, 4) == 0.1500, \
-        ['The interpolated price should be 0.15 in this case, not ' + str(test_auction.marginalPrices[0].value) + '.']
-    assert len(test_neighbor.scheduledPowers) == 1, 'The upstream neighbor should have one scheduled power assigned.'
-    assert round(test_neighbor.scheduledPowers[0].value, 4) == 50.0000, \
+    assert len(test_auction.marginal_prices) == 1, 'The auction should have created precisely one marginal price.'
+    assert round(test_auction.marginal_prices[0].value, 4) == 0.1500, \
+        ['The interpolated price should be 0.15 in this case, not ' + str(test_auction.marginal_prices[0].value) + '.']
+    assert len(test_neighbor.scheduled_powers) == 1, 'The upstream neighbor should have one scheduled power assigned.'
+    assert round(test_neighbor.scheduled_powers[0].value, 4) == 50.0000, \
             ['The upstream neighbor\'s scheduled power should be 50 kW, not '
-                            + str(round(test_neighbor.scheduledPowers[0].value, 4)) + '']
-    assert len(test_asset.scheduledPowers) == 1, 'The local asset should have found a power at the cleared market price.'
+             + str(round(test_neighbor.scheduled_powers[0].value, 4)) + '']
+    assert len(test_asset.scheduled_powers) == 1, 'The local asset should have found a power at the cleared market price.'
 
     # CASE 2 ***********************************************************************************************************
     print('    CASE 2: Same as Case 1, '
@@ -225,19 +225,19 @@ def test_while_in_delivery_lead():
     mtn = TransactiveNode()
     now = datetime.now()
     test_neighbor = Neighbor()
-    test_neighbor.upOrDown = Direction.upstream
+    test_neighbor.up_or_down = Direction.upstream
     test_neighbor.transactive = True
-    test_neighbor.scheduledPowers = []
-    test_neighbor.maximumPower = 100  # Assignment of maximumPower = 0 may lead to divide-by-0 error.
-    test_neighbor.lossFactor = 0  # Losses are turned off so that the interpolation may be easily calculated.
+    test_neighbor.scheduled_powers = []
+    test_neighbor.maximum_power = 100  # Assignment of maximumPower = 0 may lead to divide-by-0 error.
+    test_neighbor.loss_factor = 0  # Losses are turned off so that the interpolation may be easily calculated.
     mtn.neighbors = [test_neighbor]
     test_asset = LocalAsset()
-    mtn.localAssets = [test_asset]
+    mtn.local_assets = [test_asset]
     test_auction = Auction()
-    test_auction.marginalPrices = []
+    test_auction.marginal_prices = []
     mtn.markets = test_auction
     test_time_interval = TimeInterval(test_auction, timedelta(hours=1), now)
-    test_auction.timeIntervals = [test_time_interval]
+    test_auction.time_intervals = [test_time_interval]
     test_vertex1 = Vertex(0.1, 0, 0)
     test_vertex2 = Vertex(0.2, 0, 100)
     test_vertex3 = Vertex(pinf, 0, -50)
@@ -247,17 +247,17 @@ def test_while_in_delivery_lead():
                                          test_vertex2)
     test_interval_value3 = IntervalValue(test_auction, test_time_interval, test_auction, 'active vertex',
                                          test_vertex3)
-    test_neighbor.activeVertices = []  # THIS IS DIFFERENT FROM CASE 1 ************************************************
+    test_neighbor.active_vertices = []  # THIS IS DIFFERENT FROM CASE 1 ************************************************
     # test_neighbor.receivedSignal = [TransactiveRecord(test_time_interval, 1, 0.1, 0),
     #                                                            TransactiveRecord(test_time_interval, 2, 0.2, 100)]
-    test_neighbor.receivedSignal = [TransactiveRecord(time_interval=test_time_interval,
-                                                      record=1,
-                                                      marginal_price=0.1,
-                                                      power=0.0,
-                                                      neighbor_name=test_neighbor.name,
-                                                      direction='received',
-                                                      market_name=test_auction.name),
-                                    TransactiveRecord(time_interval=test_time_interval,
+    test_neighbor.received_signal = [TransactiveRecord(time_interval=test_time_interval,
+                                                       record=1,
+                                                       marginal_price=0.1,
+                                                       power=0.0,
+                                                       neighbor_name=test_neighbor.name,
+                                                       direction='received',
+                                                       market_name=test_auction.name),
+                                     TransactiveRecord(time_interval=test_time_interval,
                                                       record=2,
                                                       marginal_price=0.2,
                                                       power=100,
@@ -266,11 +266,11 @@ def test_while_in_delivery_lead():
                                                       market_name=test_auction.name)]
     test_asset.activeVertices = [test_interval_value3]
 
-    assert len(test_auction.marginalPrices) == 0, 'The test should start with the auction having no marginal prices'
-    assert len(test_neighbor.scheduledPowers) == 0, 'The upstream neighbor should initially have no scheduled powers.'
-    assert len(test_neighbor.activeVertices) == 0, \
+    assert len(test_auction.marginal_prices) == 0, 'The test should start with the auction having no marginal prices'
+    assert len(test_neighbor.scheduled_powers) == 0, 'The upstream neighbor should initially have no scheduled powers.'
+    assert len(test_neighbor.active_vertices) == 0, \
                                         'This case should start with no active vertices for the upstream neighbor'
-    assert len(test_neighbor.receivedSignal) == 2, \
+    assert len(test_neighbor.received_signal) == 2, \
                                             'This case should begin with the upstream neighbor assigned 2 records.'
 
     try:
@@ -279,13 +279,13 @@ def test_while_in_delivery_lead():
     except RuntimeWarning:
         print('    - ERRORS ENCOUNTERED')
 
-    assert len(test_auction.marginalPrices) == 1, 'The auction should have created precisely one marginal price.'
-    assert round(test_auction.marginalPrices[0].value, 4) == 0.1500, \
-        ['The interpolated price should be 0.15 in this case, not ' + str(test_auction.marginalPrices[0].value) + '.']
-    assert len(test_neighbor.scheduledPowers) == 1, 'The upstream neighbor should have one scheduled power assigned.'
-    assert round(test_neighbor.scheduledPowers[0].value, 4) == 50.0000, \
+    assert len(test_auction.marginal_prices) == 1, 'The auction should have created precisely one marginal price.'
+    assert round(test_auction.marginal_prices[0].value, 4) == 0.1500, \
+        ['The interpolated price should be 0.15 in this case, not ' + str(test_auction.marginal_prices[0].value) + '.']
+    assert len(test_neighbor.scheduled_powers) == 1, 'The upstream neighbor should have one scheduled power assigned.'
+    assert round(test_neighbor.scheduled_powers[0].value, 4) == 50.0000, \
             ['The upstream neighbor\'s scheduled power should be 50 kW, not '
-                            + str(round(test_neighbor.scheduledPowers[0].value, 4)) + '']
+             + str(round(test_neighbor.scheduled_powers[0].value, 4)) + '']
 
     print('  test_while_in_delivery_lead() ran to completion.\n')
     pass

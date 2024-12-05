@@ -61,4 +61,6 @@ class MeasurementUnit(Enum):
     kVARh = 3
     kW = 4
     kWh = 5
-    Unknown = 6
+    Monetary = 6
+    Boolean = 7
+    Unknown = 40

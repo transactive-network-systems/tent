@@ -109,7 +109,7 @@ class TestCSVMeterPoint(unittest.TestCase):
                 # Verify that all values are IntervalValues
                 assert isinstance(self.test_csv_meter.meter_intervals[x], IntervalValue)
                 # Verify that timestamps match csv
-                self.assertEqual(self.test_csv_meter.meter_intervals[x].timeInterval.start_time,
+                self.assertEqual(self.test_csv_meter.meter_intervals[x].time_interval.start_time,
                                  self.test_df["Timestamp"][x])
                 # Verify that values match csv value intervals
                 self.assertEqual(self.test_csv_meter.meter_intervals[x].value,
@@ -122,8 +122,8 @@ class TestCSVMeterPoint(unittest.TestCase):
         print("\nCASE 2: Read from CSV with unequal timestamps")
         # Verify nothing is stored in meter_intervals
         assert len(self.test_csv_meter.meter_intervals) == 0
-        # 240229DJH: Property intervalsToClear has become a protected property.
-        self.test_market._intervalsToClear += 1
+        # 240229DJH: Property intervals_to_clear has become a protected property.
+        self.test_market._intervals_to_clear += 1
         self.test_market.check_intervals()
         # Read in all values in csv
         self.test_csv_meter.read_meter(self.test_market)
@@ -137,7 +137,7 @@ class TestCSVMeterPoint(unittest.TestCase):
 
                 assert isinstance(self.test_csv_meter.meter_intervals[x], IntervalValue)
                 # Verify that timestamps match csv
-                self.assertEqual(self.test_csv_meter.meter_intervals[x].timeInterval.start_time,
+                self.assertEqual(self.test_csv_meter.meter_intervals[x].time_interval.start_time,
                                  self.test_df["Timestamp"][x])
                 # Verify that values match csv value intervals
                 self.assertEqual(self.test_csv_meter.meter_intervals[x].value,

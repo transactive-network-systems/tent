@@ -47,9 +47,9 @@ from datetime import timedelta
 from typing import Union
 
 from tent import Entity
-from tent.containers import IntervalValue, TimeInterval, Vertex
-from tent.enumerations import MarketState, MeasurementType
-from tent.utils.helpers import find_obj_by_ti, find_objs_by_ti, format_timestamp, prod_cost_from_vertices
+from tent.containers import IntervalValue, Measurement, TimeInterval, Vertex
+from tent.enumerations import MarketState, MeasurementType, MeasurementUnit
+from tent.utils.helpers import find_objs_by_ti, format_timestamp, prod_cost_from_vertices
 from tent.utils.log import setup_logging
 from tent.utils.timer import Timer
 
@@ -84,7 +84,7 @@ class LocalAsset(Entity):
                  default_power=0.0,
                  default_vertices=None,
                  description='',
-                 engagement_cost=(0.0, 0.0, 0.0),
+                 engagement_costs=(0.0, 0.0, 0.0),
                  information_services=None,
                  location='',
                  maximum_power=0.0,
@@ -99,22 +99,22 @@ class LocalAsset(Entity):
 
         # These following static properties may be assigned as parameters:
         self.default_power = float(default_power)           # [avg.kW, signed] Assignable default power value(s)
-        self.engagement_cost = [float(ec) for ec in engagement_cost]  # {engagement, [$]; hold, [$]; disengagement, [$]} Transition costs
+        self.engagement_costs = [float(ec) for ec in engagement_costs]  # {engagement, [$]; hold, [$]; disengagement, [$]} Transition costs
         self.scheduling_horizon = scheduling_horizon if isinstance(scheduling_horizon, timedelta)\
             else timedelta(seconds=scheduling_horizon) # [time duration] Future that price and energy shift are relevant
         self.subclass = subclass                    # Future, unused
 
         # These following properties are dynamically managed and should not normally be manually configured:
         self.activeVertices = []                    # [IntervalValue] Values are [Vertex]: Demand/Supply curves
-        self.dualCosts = []                         # [IntervalValue] Values are [$]: Dual costs by interval
-        self.engagementSchedule = []                # [IntervalValue] Values are [Boolean]: True = engaged
-        self.productionCosts = []                   # [IntervalValue] Values are [$]: Production costs by interval
-        self.reserveMargins = []                    # [IntervalValue] Values are [avg.kW, signed]
+        self.dual_costs = Measurement(self, MeasurementType.DualCost, MeasurementUnit.Monetary)
+        self.engagement_schedule = Measurement(self, MeasurementType.EngagementSchedule, MeasurementUnit.Boolean)  # True = engaged
+        self.production_costs = Measurement(self, MeasurementType.ProductionCost, MeasurementUnit.Monetary)
+        self.reserve_margins = Measurement(self, MeasurementType.ReserveMargin, MeasurementUnit.kW) # [avg.kW, signed]
         self.schedule_calculated = False            # Flag set True after asset has scheduled power
-        self.scheduledPowers = []                   # [IntervalValue] Values are [avg.kW, signed]
-        self.totalDualCost = 0.0                    # [$] Sum of dual costs in forward time intervals
-        self.totalProductionCost = 0.0              # [$, non-negative] Sum of production costs in forward intervals
-        self.transitionCosts = []                   # [IntervalValue] Values are [$]: Transition costs
+        self.scheduled_powers = Measurement(self, MeasurementType.ScheduledPower, MeasurementUnit.kW)  # [avg.kW, signed]
+        self.total_dual_cost = 0.0                    # [$] Sum of dual costs in forward time intervals
+        self.total_production_cost = 0.0              # [$, non-negative] Sum of production costs in forward intervals
+        self.transition_costs = Measurement(self, MeasurementType.TransitionCost, MeasurementUnit.Monetary)
 
     def cost(self, power=0):
         # Calculate production (consumption) cost at the given power level.
@@ -193,57 +193,25 @@ class LocalAsset(Entity):
         # - Updates self.engagementSchedule - an array that states whether the
         #   asset is engaged (committed) (true) or not (false) in the time interval
 
-        # Gather the active time intervals ti
-        time_intervals = market.timeIntervals
-
-        # 200929DJH: This is a problem in Version 3 because it removes some perfectly valid scheduled powers in other
-        #            active market objects. Commenting these lines out. Below, scheduled powers will be trimmed if they
-        #            are in expired markets.
-        # time_interval_values = [t.start_time for t in time_intervals]
-        # self.scheduledPowers = [x for x in self.scheduledPowers if x.timeInterval.start_time in time_interval_values]
-
-        # Sort by function lambda, assumed to be a helper function pointing to start times
+        # Gather and sort the active time intervals
+        time_intervals = market.time_intervals
         time_intervals.sort(key=lambda x: x.start_time)
 
-        # len_powers = len(self.default_powers)
-        default_value = self.default_power
-
         # Index through the active time intervals ti
-        for i in range(len(time_intervals)):
-            time_interval = time_intervals[i]
-            # Check whether a scheduled power already exists for the indexed time interval
-            iv = find_obj_by_ti(self.scheduledPowers, time_interval)
-
-            # Reassign default value if there is power value for this time interval
-            # No, no, and no. Do not assign default values apart from specific times. The real world does not always
-            # begin at the same time. This method slides with the market periods, which is not correct!
+        for time_interval in time_intervals:
             # TODO: Eliminate or fix parameter default_powers, which has been defined independent of market period.
-            # if len_powers > i:
-            #   default_value = self.default_powers[i] if self.default_powers[i] is not None else self.defaultPower
-
-            if iv is None:  # A scheduled power does not exist for the indexed time interval
-                # Create an interval value and assign the default value
-                iv = IntervalValue(self, time_interval, market, MeasurementType.ScheduledPower, default_value)
-
-                # Append the new scheduled power to the list of scheduled
-                # powers for the active time intervals
-                self.scheduledPowers.append(iv)
-
-            else:
-                # The scheduled power already exists for the indexed time
-                # interval. Simply reassign its value
-                iv.value = default_value  # [avg.kW]
-
-        # 200929DJH: This next line prevents the list of scheduled powers from growing indefinitely.
-        self.scheduledPowers = [x for x in self.scheduledPowers if x.market.marketState != MarketState.Expired]
+            #  Reassign default value if there is power value for this time interval
+            #  No, no, and no. Do not assign default values apart from specific times. The real world does not always
+            #  begin at the same time. This method slides with the market periods, which is not correct!
+            #  if len(self.default_powers) > i:
+            #    default_value = self.default_powers[i] if self.default_powers[i] is not None else self.default_power
+            #  default_value would then be used instead of self.default_power on next line.
+            self.scheduled_powers.update(time_interval, self.default_power)
 
         # 210803DJH: Auctions use this flag, so it should probably be set after every successful scheduling of power.
         self.schedule_calculated = True
 
-        sp = [(x.timeInterval.name, x.value) for x in self.scheduledPowers]
-        _log.debug(f"{self.name} asset model scheduledPowers are: {sp}")
-
-        self.schedule_calculated = True  # TODO: Added this so that vertices will be updated in schedule(). Correct?
+        _log.debug(f"{self.name} asset scheduled_powers: {self.scheduled_powers.log_report}")
 
     def schedule_engagement(self, market):
         # To assign engagement, or commitment, which is relevant to some local assets (supports future capabilities).
@@ -254,42 +222,11 @@ class LocalAsset(Entity):
         # NOTE: Because this is a future capability, Implementers might choose to simply return from the call until
         # LocalAsset behaviors are found to need commitment or engagement.
 
-        # Gather the active time intervals ti
-        time_intervals = market.timeIntervals  # active TimeIntervals
-
-        # 200929DJH: This approach is too crude for Version 3 because engagement schedules are not unique to starting
-        #            times. Instead, the values in expired markets will be trimmed near the bottom of this method.
-        #            Commenting out offending lines.
-        # time_interval_values = [t.start_time for t in time_intervals]
-        # self.engagementSchedule = [x for x in self.engagementSchedule
-        #                            if x.timeInterval.start_time in time_interval_values]
-
         # Index through the active time intervals.
-        for i in range(len(time_intervals)):
-
-            # Check whether an engagement schedule exists in the indexed time interval.
-            interval_value = find_obj_by_ti(self.engagementSchedule, time_intervals[i])
-
+        for time_interval in market.time_intervals:
             # NOTE: this template currently assigns engagement value as true (i.e., engaged).
             engagement_flag = True  # Asset is committed or engaged
-
-            if interval_value is None:
-                # No engagement schedule was found in the indexed time interval. Create an interval value and assign its
-                # value as the engagement_flag.
-                interval_value = IntervalValue(self, time_intervals[i], market,
-                                               MeasurementType.EngagementValue, engagement_flag)
-
-                # Append the interval value to the list of active interval values.
-                self.engagementSchedule.append(interval_value)
-
-            else:
-                # An engagement schedule was found in the indexed time interval. Simply reassign its value.
-                interval_value.value = engagement_flag  # [$]
-
-        # Remove any extra engagement schedule values
-        # 200929DJH: Improved to work in Version 3.
-        # self.engagementSchedule = [x for x in self.engagementSchedule if x.timeInterval in ti]
-        self.engagementSchedule = [x for x in self.engagementSchedule if x.market.marketState != MarketState.Expired]
+            self.engagement_schedule.update(time_interval, engagement_flag)
 
     def calculate_reserve_margin(self, market):
         # Estimate available (spinning) reserve margin for this asset.
@@ -312,68 +249,32 @@ class LocalAsset(Entity):
         # OUTPUTS:
         # Modifies self.reserveMargins - an array of estimated (spinning) reserve margins in active time intervals
 
-        # Gather the active time intervals ti
-        time_intervals = market.timeIntervals  # active TimeIntervals
-
-        # 200929DJH: This approach is too crude for Version 3 and is being commented out. Instead, the reserve margins
-        #            in expired markets will be removed near the bottom of this method.
-        # time_interval_values = [t.start_time for t in time_intervals]
-        # self.reserveMargins = [x for x in self.reserveMargins if x.timeInterval.start_time in time_interval_values]
-
         # Index through active time intervals ti
-        for i in range(len(time_intervals)):
+        for time_interval in market.time_intervals:
             # Calculate the reserve margin for the indexed interval. This is the non-negative difference between the
             # maximum asset power and the scheduled power. In principle, generation may be increased or demand decreased
             # by this quantity to act as spinning reserve.
 
             # Find the scheduled power in the indexed time interval
-            interval_value = find_obj_by_ti(self.scheduledPowers, time_intervals[i])
+            scheduled_power = self.scheduled_powers.get_by_interval(time_interval)
 
             # Calculate the reserve margin in the indexed time interval. The reserve margin is the difference between
-            # the maximum operational power value in the interval and the scheduled power. The operational maximum
-            # should be less than the object's hard physical power constraint, so a check is in order. Start with the
-            # hard physical constraint.
-            hard_constraint = self.maximum_power  # [avg.kW]
-
+            #  the maximum operational power value in the interval and the scheduled power. The operational maximum
+            #  should be less than the object's hard physical power constraint, so a check is in order. Start with the
+            #  hard physical constraint (self.maximum_power).
             # Calculate the operational maximum constraint, which is the highest point on the supply/demand curve (i.e.,
-            # the vertex) that represents the residual flexibility of the asset in the time interval.
-            operational_constraint = find_objs_by_ti(self.activeVertices, time_intervals[i])
+            #  the vertex) that represents the residual flexibility of the asset in the time interval. If there are no
+            #  active vertices, use the hard physical constraint (maximum power).
+            operational_constraint = max(find_objs_by_ti(self.activeVertices, time_interval),
+                                         key=lambda av: av.value.power, default=self.maximum_power)  # [avg.kW]
 
-            if len(operational_constraint) == 0:
-
-                operational_constraint = hard_constraint
-
-            else:
-
-                operational_constraint = [x.value for x in operational_constraint]  # active vertices
-                operational_constraint = max([x.power for x in operational_constraint])  # [avg.kW]
-
-            # Check that the upper operational power constraint is less than or equal to the object's hard physical
-            # constraint.
-            soft_maximum = min(hard_constraint, operational_constraint)  # [avg.kW]
+            # The upper operational power constraint must be less than or equal to the object's hard physical constraint.
+            soft_maximum = min(self.maximum_power, operational_constraint)  # [avg.kW]
 
             # And finally calculate the reserve margin.
-            reserve_margin = max(0, soft_maximum - interval_value.value)  # [avg. kW]
+            reserve_margin = max(0, soft_maximum - scheduled_power.value)  # [avg. kW]
 
-            # Check whether a reserve margin already exists for the indexed time interval
-            interval_value = find_obj_by_ti(self.reserveMargins, time_intervals[i])  # an IntervalValue
-
-            if interval_value is None:
-
-                # A reserve margin does not exist for the indexed time interval. Create it. (See IntervalValue class.)
-                interval_value = IntervalValue(self, time_intervals[i], market,
-                                               MeasurementType.ReserveMargin, reserve_margin)
-
-                # Append the new reserve margin interval value to the list of reserve margins for the active time
-                # intervals.
-                self.reserveMargins.append(interval_value)
-
-            else:
-                # The reserve margin already exists for the indexed time interval. Simply reassign its value.
-                interval_value.value = reserve_margin  # [avg.kW]
-
-        # 200929DJH: Remove any reserve margins that lie in expired markets.
-        self.reserveMargins = [x for x in self.reserveMargins if x.market.marketState != MarketState.Expired]
+            self.reserve_margins.update(time_interval, reserve_margin)
 
     def engagement_cost(self, dif):
         # Assigns engagement cost based on difference in engagement status in the current minus prior time intervals.
@@ -402,7 +303,7 @@ class LocalAsset(Entity):
         # 1 - transition from false to true - engagement cost
         # 2 - no change in engagement - no cost
         # 3 - transition from true to false - disengagement cost
-        cost = self.engagement_cost[1 + dif]
+        cost = self.engagement_costs[1 + dif]
 
         return cost
 
@@ -425,195 +326,89 @@ class LocalAsset(Entity):
         # OUTPUTS:
         # Assigns values to self.transition_costs
 
-        # Gather active time intervals
-        time_intervals = market.timeIntervals
-
-        # 200929DJH: This method for trimming the transition costs is too crude for Version 3. Commenting out. Instead,
-        #            the transaction costs that lie in expired markets will be trimmed further down.
-        # time_interval_values = [t.start_time for t in time_intervals]
-        # self.transitionCosts = [x for x in self.transitionCosts if x.timeInterval.start_time in time_interval_values]
-
-        # Ensure that ti is ordered by time interval start times
+        # Gather active time intervals and sort by time interval start times.
+        time_intervals = market.time_intervals
         time_intervals.sort(key=lambda x: x.start_time)
 
         # Index through all but the first time interval.
-        for i in range(len(time_intervals)):
-
-            # Find the current engagement schedule ces in the current indexed time interval ti(i)
-            # 200929DJH: In Version 3, the engagement state must be matched to a time interval object, not its start
-            #            time, which is not necessarily unique.
-            # current_engagement_state = [x for x in self.engagementSchedule
-            #                             if x.timeInterval.start_time == time_intervals[i].start_time]
-            current_engagement_state = [x.value for x in self.engagementSchedule if x.timeInterval == time_intervals[i]]
-
-            # TODO: The calculation of transition cost is not right for the first time interval (being compared to last)
-            # TODO: This calculation can probably be vectorized when time permits to speed it up.
-            # Find the engagement state from in the prior indexed time interval (i-1).
-            # 200929DJH: As above, make selection based on time interval object, not its start time, which may not be
-            #            unique.
-            # prior_engagement_state = [x for x in self.engagementSchedule
-            #                           if x.timeInterval.start_time == time_intervals[i - 1].start_time]
-            prior_engagement_state = [x.value for x in self.engagementSchedule
-                                      if x.timeInterval == time_intervals[i - 1]]
+        for time_interval in time_intervals:
+            # Find the current and prior engagement states based on the current indexed time interval
+            current_engagement_state = self.engagement_schedule.get_by_interval(time_interval)
+            prior_engagement_state = self.engagement_schedule.get_prior_by_interval(time_interval)
 
             # Calculate the state transition
             # - -1:Disengaging
             # -  0:Unchanged
             # -  1:Engaging
-            dif = current_engagement_state - prior_engagement_state
+            # TODO: Is the calculation of transition cost is right for the first time interval?
+            #  Should it be unchanged or engaging?
+            dif = current_engagement_state - prior_engagement_state if prior_engagement_state is not None else 0
 
             # Assign the corresponding transition cost
             transition_cost = self.engagement_cost(dif)
-
-            # Check whether a transition cost exists in the indexed time interval
-            interval_value = find_obj_by_ti(self.transitionCosts, time_intervals[i])
-
-            if interval_value is None:
-
-                # No transition cost was found in the indexed time interval. Create an interval value and assign its
-                # value.
-                interval_value = IntervalValue(self, time_intervals[i], market,
-                                               MeasurementType.TransitionCost, transition_cost)
-
-                # Append the interval value to the list of active interval values
-                self.transitionCosts.append(interval_value)
-
-            else:
-
-                # A transition cost was found in the indexed time interval. Simply reassign its value.
-                interval_value.value = transition_cost  # [$]
-
-        # 200929DJH: Trim any transition costs that lie in expired markets.
-        self.transitionCosts = [x for x in self.transitionCosts if x.market.marketState != MarketState.Expired]
-
-        # Remove any extraneous transition cost values
-        # self.transitionCosts = [x for x in self.transitionCosts if x.timeInterval in time_intervals]
+            self.transition_costs.update(time_interval, transition_cost)
 
     def update_dual_costs(self, market):
         # Update the dual cost for all active time intervals
         # (NOTE: Choosing not to separate this def from the base class because cost might need to be handled differently
         # and redefined in subclasses.)
 
-        # Gather the active time intervals.
-        time_intervals = market.timeIntervals
-
         # Index through the time intervals.
         # NOTE 1911DJH: The range in this for-loop has been corrected and now passes unit testing. I believe the code
         # had been modified to avoid revising the schedule for the first hour in Version 2. This is corrected by the
         # market state transition model in Version 3, which should be configured to NOT allow negotiation of prices and
         # quantities after the respective market has cleared or entered its delivery period.
-        for i in range(len(time_intervals)):
+        for time_interval in market.time_intervals:
 
-            # Find the marginal price mp for the indexed time interval ti(i) in the given market.
-            marginal_price = find_obj_by_ti(market.marginalPrices, time_intervals[i])
-            marginal_price = marginal_price.value  # a marginal price [$/kWh]
-
-            # Find the scheduled power sp for the asset in the indexed time interval i.
-            scheduled_power = find_obj_by_ti(self.scheduledPowers, time_intervals[i])
-            scheduled_power = scheduled_power.value  # [avg.kW]
-
-            # Find the production cost in the indexed time interval.
-            production_cost = find_obj_by_ti(self.productionCosts, time_intervals[i])
-            production_cost = production_cost.value  # [$]
+            # Find the marginal price, scheduled power, and production cost for the indexed time interval.
+            marginal_price = market.marginal_prices.get_by_interval(time_interval)  # a marginal price [$/kWh]
+            scheduled_power = self.scheduled_powers.get_by_interval(time_interval) # [avg.kW]
+            production_cost = self.production_costs.get_by_interval(time_interval) # [$]
 
             # Dual cost in the time interval is calculated as production cost, minus the product of marginal price,
             # scheduled power, and the duration of the time interval.
-            duration = time_intervals[i].duration.seconds // 3600
+            # TODO: Why is this using seconds (gives 0 for 1 day) instead of total_seconds() (gives 86400 for 1 day)
+            # TODO: Why is this using floor division? If the interval duration is 15 minutes, this line will yield 0.
+            duration = time_interval.duration.seconds // 3600
             dual_cost = production_cost - (marginal_price * scheduled_power * duration)  # [$]
 
-            # Check whether a dual cost exists in the indexed time interval
-            interval_value = find_obj_by_ti(self.dualCosts, time_intervals[i])
-
-            if interval_value is None:
-
-                # No dual cost was found in the indexed time interval. Create an interval value and assign it the
-                # calculated value.
-                interval_value = IntervalValue(self, time_intervals[i], market, MeasurementType.DualCost, dual_cost)
-
-                # Append the new interval value to the list of active interval values.
-                self.dualCosts.append(interval_value)
-
-            else:
-
-                # The dual cost value was found to already exist in the indexed time interval. Simply reassign it the
-                # new calculated value.
-                interval_value.value = dual_cost  # [$]
-
-        # Ensure that only active time intervals are in the list of dual costs
-        # self.dualCosts = [x for x in self.dualCosts if x.timeInterval in ti]
-        # 200929DJH: Trim dual costs that lie in expired markets.
-        self.dualCosts = [x for x in self.dualCosts if x.market.marketState != MarketState.Expired]
+            self.dual_costs.update(time_interval, dual_cost)
 
         # Sum the total dual cost and save the value.
         # 200929DJH: This is corrected to sum only the dual costs in the current market
-        self.totalDualCost = sum([x.value for x in self.dualCosts if x.market == market])
+        # TODO: If there are two markets operating simultaneously, won't the second assignment clobber the first?
+        self.total_dual_cost = self.dual_costs.total(market)
 
-        dual_cost = [(x.timeInterval.name, x.value) for x in self.dualCosts]
-        _log.debug(f"{self.name} asset model dual costs are: {dual_cost}")
+        _log.debug(f"{self.name} asset model dual costs are: {self.dual_costs.log_report}")
 
     def update_production_costs(self, market):
         # Calculate the costs of generated energies.
-        # (NOTE: Choosing not to separate this def from the base class because cost might need to be handled differently
-        # and redefined in subclasses.)
-
-        # Gather active time intervals.
-        time_intervals = market.timeIntervals
+        # (NOTE: Cost might need to be handled differently and redefined in subclasses.)
 
         # Index through the active time intervals.
-        for i in range(len(time_intervals)):
-
+        for time_interval in market.time_intervals:
             # Get the scheduled power in the indexed time interval.
-            scheduled_power = find_obj_by_ti(self.scheduledPowers, time_intervals[i])
-            scheduled_power = scheduled_power.value  # schedule power [avg.kW]
+            scheduled_power = self.scheduled_powers.get_by_interval(time_interval)  # [avg.kW]
 
             # Call on def that calculates production cost pc based on the vertices of the supply or demand curve
-            # NOTE that this def is now stand-alone because it might be generally useful for a number of models.
-            production_cost = prod_cost_from_vertices(self, time_intervals[i], scheduled_power)  # [$]
+            production_cost = prod_cost_from_vertices(self, time_interval, scheduled_power.value)  # [$]
 
             # Check for a transition cost in the indexed time interval.
-            # (NOTE: this differs from neighbor models, which do not posses the concept of commitment and engagement.
-            # This is a good reason to keep this method within its base class to allow for subtle differences.)
-            transition_cost = find_obj_by_ti(self.transitionCosts, time_intervals[i])
-
-            if transition_cost is None:
-                transition_cost = 0.0  # [$]
-            else:
-                transition_cost = transition_cost.value  # [$]
+            # (NOTE: this differs from neighbor models, which do not possess the concept of commitment and engagement.)
+            transition_cost = self.transition_costs.get_by_interval(time_interval)
+            transition_cost = 0.0 if transition_cost is None else transition_cost.value  # [$]
 
             # Add the transition cost to the production cost
             production_cost = production_cost + transition_cost
 
-            # Check to see if the production cost value has been defined for the indexed time interval
-            interval_value = find_obj_by_ti(self.productionCosts, time_intervals[i])
-
-            if interval_value is None:
-
-                # The production cost value has not been defined in the indexed time interval. Create it and assign its
-                # value.
-                interval_value = IntervalValue(self, time_intervals[i], market,
-                                               MeasurementType.ProductionCost, production_cost)
-
-                # Append the production cost to the list of active production cost values
-                self.productionCosts.append(interval_value)  #
-
-            else:
-
-                # The production cost value already exists in the indexed time interval. Simply reassign its value.
-                interval_value.value = production_cost  # [$]
-
-        # Ensure that only active time intervals are in the list of active production costs.
-        # 200929DJH: This must be corrected in Version 3 because there are perfectly valid production costs in other
-        #            markets. Instead, trim the production costs that lie in expired markets.
-        # self.productionCosts = [x for x in self.productionCosts if x.timeInterval in time_intervals]
-        self.productionCosts = [x for x in self.productionCosts if x.market.marketState != MarketState.Expired]
+            self.production_costs.update(time_interval, production_cost)
 
         # Sum the total production cost.
         # 200929DJH: In Version 3, this sum must be made only within the current market object.
-        # self.totalProductionCost = sum([x.value for x in self.productionCosts])  # total production cost [$]
-        self.totalProductionCost = sum([x.value for x in self.productionCosts if x.market == market])  # [$]
+        # TODO: If there are two markets operating simultaneously, won't the second assignment clobber the first?
+        self.total_production_cost = self.production_costs.total(market)  # [$]
 
-        production_cost = [(x.timeInterval.name, x.value) for x in self.productionCosts]
-        _log.debug(f"{self.name} asset model production costs are: {production_cost}")
+        _log.debug(f"{self.name} asset model production costs are: {self.production_costs.log_report}")
 
     def update_vertices(self, market):
         # Create vertices to represent the asset's flexibility
@@ -621,46 +416,40 @@ class LocalAsset(Entity):
         # For the base local asset model, a single, inelastic power is needed. There is no flexibility. The constant
         # power may be represented by a single (price, power) point (See struct Vertex).
 
-        # Gather active time intervals.
-        time_intervals = market.timeIntervals  # active TimeIntervals
-
         # Index through active time intervals.
-        for i in range(len(time_intervals)):
+        for time_interval in market.time_intervals:
 
             # Find the scheduled power for the indexed time interval. Extract the scheduled power value.
             # TODO: Make this next line tolerant upon finding scheduled_power = None.
-            scheduled_power = find_obj_by_ti(self.scheduledPowers, time_intervals[i])
-            scheduled_power = scheduled_power.value  # avg. kW
+            scheduled_power = self.scheduled_powers.get_by_interval(time_interval)  # avg. kW
 
             # Create the vertex that can represent this (lack of) flexibility
-            value = Vertex(float("inf"), 0.0, scheduled_power, True)
+            value = Vertex(float("inf"), 0.0, scheduled_power.value, True)
 
+            # TODO: Update this block once SDCurve is integrated.
+            ##### BEGIN BLOCK
             # Check to see if the active vertex already exists for this indexed time interval.
-            interval_value = find_obj_by_ti(self.activeVertices, time_intervals[i])
-
+            interval_value = find_objs_by_ti(self.activeVertices, time_interval)[0]
             # If the active vertex does not exist, a new interval value must be created and stored.
             if interval_value is None:
-
                 # Create the interval value and place the active vertex in it
-                interval_value = IntervalValue(self, time_intervals[i], market, MeasurementType.ActiveVertex, value)
-
+                interval_value = IntervalValue(self, time_interval, market, MeasurementType.ActiveVertex, value)
                 # Append the interval value to the list of active vertices.
                 self.activeVertices.append(interval_value)
-
             else:
-
                 # Otherwise, simply reassign the active vertex value to the existing listed interval value.
                 # NOTE that this base local asset model unnecessarily reassigns constant values, but the reassignment
                 # is allowed because it teaches how a more dynamic assignment may be maintained.
                 interval_value.value = value
 
         # 200929DJH: Trim the list of active vertices so that it will not grow indefinitely.
-        self.activeVertices = [x for x in self.activeVertices if x.market.marketState != MarketState.Expired]
+        self.activeVertices = [x for x in self.activeVertices if x.market.market_state != MarketState.Expired]
 
-        av = [(x.timeInterval.name, x.value.marginalPrice, x.value.power) for x in self.activeVertices]
+        av = [(x.time_interval.name, x.value.marginal_price, x.value.power) for x in self.activeVertices]
         _log.debug(f"{self.name} asset model active vertices are: {av}")
+        ##### END BLOCK
 
-    def get_extended_prices(self, market):  # 200120DJH This does not, after all, require a TransactiveNode parameter.
+    def get_extended_prices(self, market):
         """
         This method is available to facilitate estimation of opportunity cost for local assets that have a scheduling
         horizon that extends farther into the future than supplied by the market in forward time intervals. For example,
@@ -678,133 +467,73 @@ class LocalAsset(Entity):
         NOTE: This method is similar to Market.check_marginal_prices(), but that method's purpose is to specifically
               estimate marginal prices for active time intervals, not throughout the scheduling horizon.
         :param market: Market object that these prices are relevant to
-        :param this_transactive_node: TransactiveNode object that represents the local transactive agent
+
         :return: price_horizon, which may be placed into property self.schedulingHorizon by caller
         """
 
         # The scheduling horizon is a distance into the future. The price horizon is initialized, then prices are found
         # from now until the end of the scheduling horizon.
-        # TODO: Check that this usage of Timer() is consistent with campus simulation process
-        price_horizon = []
         end_of_calculated_horizon = Timer.get_cur_time()
         end_of_scheduling_horizon = end_of_calculated_horizon + self.scheduling_horizon
+        price_horizon = Measurement(self, MeasurementType.MarginalPrice, MeasurementUnit.Monetary)
 
         # Case 1: Actual marginal prices offered by the market object that has requested the asset to schedule.
+        if market.marginal_prices:
+            price_horizon = market.marginal_prices.copy()
+            end_of_calculated_horizon = market.marginal_prices.last.start_time + market.interval_duration
 
-        # Get the existing marginal prices from the current market object:
-        market_prices = market.marginalPrices
-
-        if not isinstance(market_prices, type(None)) and market_prices is not None:
-            if isinstance(market_prices, list) and len(market_prices) != 0:
-                price_horizon.extend(market_prices)
-                # 240207DJH: This minor change should ensure that the order of price intervals does not matter:
-                start_time_of_last_interval = max([x.timeInterval.start_time for x in price_horizon])
-                # end_of_calculated_horizon = price_horizon[0].timeInterval.start_time + market.intervalDuration
-                end_of_calculated_horizon = start_time_of_last_interval + market.intervalDuration
-                for x in range(1, len(market_prices)):
-                    end_time = price_horizon[x].timeInterval.start_time + market.intervalDuration
-                    if end_time > end_of_calculated_horizon:
-                        end_of_calculated_horizon = end_time
-
-                if end_of_calculated_horizon >= end_of_scheduling_horizon:
-                    return price_horizon
+            if end_of_calculated_horizon >= end_of_scheduling_horizon:
+                return price_horizon
 
         # Case 2: Actual marginal prices in prior sequential markets that are similar to the market object.
-        # 191212DJH: This logic is greatly simplified by introducing the pointer priorMarketInSeries.
-        if not isinstance(market.priorMarketInSeries, type(None)) and market.priorMarketInSeries is not None:
-
-            prior_market_in_series = market.priorMarketInSeries
-
+        if market.prior_market_in_series and market.prior_market_in_series() and market.prior_market_in_series().marginal_prices:
             # Get the marginal prices from the latest similar market.
-            market_prices = prior_market_in_series.marginalPrices
 
-            if not isinstance(market_prices, type(None)) and market_prices is not None:
-                if isinstance(market_prices, list) and len(market_prices) != 0:
+            # Find any market prices from the corrected market to add to the price horizon
+            for time_interval, marginal_price in market.prior_market_in_series().marginal_prices:
+                if time_interval.end_time > end_of_calculated_horizon:
+                    price_horizon.update(time_interval, marginal_price)
+                    end_of_calculated_horizon = time_interval.end_time
 
-                    # Find any market prices from the corrected market to add to the price horizon
-                    for x in range(len(market_prices)):
-                        interval_end_time = market_prices[x].timeInterval.start_time \
-                                            + market_prices[x].market.intervalDuration
-                        if interval_end_time > end_of_calculated_horizon:
-                            price_horizon.append(market_prices[x])
-
-                    # Find the end of the calculated price horizon
-                    for x in range(len(price_horizon)):
-                        end_time = price_horizon[x].timeInterval.start_time \
-                                   + price_horizon[x].market.intervalDuration
-                        if end_time > end_of_calculated_horizon:
-                            end_of_calculated_horizon = end_time
-
-                    if end_of_calculated_horizon >= end_of_scheduling_horizon:
-                        return price_horizon
+            if end_of_calculated_horizon >= end_of_scheduling_horizon:
+                return price_horizon
 
         # Case 3. Actual marginal prices in prior markets that are being corrected by the market object.
         # Start by gathering similar prior markets that are in the market series being corrected
-        # 191212DJH: This logic is simplified by introduction of pointer priorRefinedMarket
-        if not isinstance(market.priorRefinedMarket, type(None)) and market.priorRefinedMarket is not None:
+        if market.priorRefinedMarket and market.priorRefinedMarket() and market.priorRefinedMarket().marginal_prices:
+            # Find any market prices from the latest similar market to add to the price horizon
+            # TODO: If the refined market has different starts/durations than ours, are these TimeIntervals correct?
+            for time_interval, marginal_price in market.priorRefinedMarket.marginal_prices.all:
+                if time_interval.end_time > end_of_calculated_horizon:
+                    price_horizon.update(time_interval, marginal_price)
+                    end_of_calculated_horizon = time_interval.end_time
 
-            prior_refined_market = market.priorRefinedMarket
-
-            # Get the marginal prices from the latest similar market.
-            market_prices = prior_refined_market.marginalPrices
-
-            if not isinstance(market_prices, type(None)) and market_prices is not None:
-
-                if isinstance(market_prices, list) and len(market_prices) != 0:
-
-                    # Find any market prices from the corrected market to add to the price horizon
-                    # TODO: This following logic might be sensitive to order of prices found
-                    for x in range(len(market_prices)):
-                        interval_end_time = market_prices[x].timeInterval.start_time \
-                                            + market_prices[x].market.intervalDuration
-                        if interval_end_time > end_of_calculated_horizon:
-                            price_horizon.append(market_prices[x])
-
-                    # Find the end of the calculated price horizon
-                    for x in range(len(price_horizon)):
-                        end_time = price_horizon[x].timeInterval.start_time \
-                                   + price_horizon[x].market.intervalDuration
-                        if end_time > end_of_calculated_horizon:
-                            end_of_calculated_horizon = end_time
-
-                    if end_of_calculated_horizon >= end_of_scheduling_horizon:
-                        return price_horizon
+            if end_of_calculated_horizon >= end_of_scheduling_horizon:
+                return price_horizon
 
         # Case 4. Modeled prices using the market's price model
-        market_prices = []
-        if market.priceModel is not None:
+        if market.price_model:
             while end_of_scheduling_horizon > end_of_calculated_horizon:
                 # 240206DJH: This next line fails unit testing. I see that market.priceModel should now be equivalent to
                 #            an object of class HourlyAveragePriceModel, but it is being made equivalent to the model
                 #            itself instead.
-                price = market.priceModel.get(end_of_calculated_horizon)
+                price = market.price_model.get(end_of_calculated_horizon)
                 start_time = end_of_calculated_horizon.replace(minute=0, second=0)
-                end_time = start_time + timedelta(hours=1)
+                end_time = start_time + timedelta(hours=1)  # TODO: Why are we doing specifically hours now?
                 duration = end_time - start_time
-                ti = TimeInterval(market, duration, start_time)
-                iv = IntervalValue(self, ti, market, None, value=price[0])
-                market_prices.append(iv)
+                price_horizon.update(TimeInterval(market, duration, start_time), price[0])
                 end_of_calculated_horizon = end_time
-
-            if type(market_prices) is list and len(market_prices) > 0:
-                price_horizon.extend(market_prices)
-
             return price_horizon
 
         # Case 5. The market's default price value.
-        # 191231DJH: This case presumes hour-long intervals.
-        market_prices = []
-        price = market.defaultPrice
+        price = market.default_price
         while end_of_scheduling_horizon > end_of_calculated_horizon:
             start_time = end_of_calculated_horizon
-            end_time = start_time + timedelta(hours=1)
+            end_time = start_time + timedelta(hours=1)  # TODO: Why are we doing hours here?
             end_time.replace(minute=0, second=0, microsecond=0)
             duration = end_time - start_time
-            ti = TimeInterval(market, duration, start_time)
-            iv = IntervalValue(self, ti, market, MeasurementType.MarginalPrice, price)
-            price_horizon.append(iv)
+            price_horizon.update(TimeInterval(market, duration, start_time), price)
             end_of_calculated_horizon = end_time
-
         return price_horizon
 
     def update_costs(self, market):
@@ -817,16 +546,20 @@ class LocalAsset(Entity):
         """
 
         # Initialize sums of production and dual costs.
-        self.totalProductionCost = 0.0
-        self.totalDualCost = 0.0
+        self.total_production_cost = 0.0
+        self.total_dual_cost = 0.0
 
         # Have object update and store its production and dual costs in each active time interval.
         self.update_production_costs(market)
         self.update_dual_costs(market)
 
         # Sum total production and dual costs through all time intervals.
-        self.totalProductionCost = sum([x.value for x in self.productionCosts])
-        self.totalDualCost = sum([x.value for x in self.dualCosts])
+        # TODO: Why is this different from the versions in update_production_costs and update_dual_costs?
+        #  This does not take markets into account, where those do (for example, from update_production_costs):
+        #     self.total_production_cost = sum([v.value for k, v in self.production_costs.all if k.market == market])  # [$]
+        #  Further, this seems to just save over the sums which were calculated in those two functions....
+        self.total_production_cost = sum([v.value for k, v in self.production_costs.all])  # [$]
+        self.total_dual_cost = sum([v.value for k, v in self.dual_costs.all])
 
     def actuate(self, mkt):
         """
@@ -836,8 +569,8 @@ class LocalAsset(Entity):
         pass
 
     def get_dict(self):
-        scheduled_powers = [(format_timestamp(x.timeInterval.start_time), x.value) for x in self.scheduledPowers]
-        vertices = [(format_timestamp(x.timeInterval.start_time), x.value.marginalPrice, x.value.power) for x in
+        scheduled_powers = [(format_timestamp(k.start_time), v.value) for k, v in self.scheduled_powers.all]
+        vertices = [(format_timestamp(x.time_interval.start_time), x.value.marginal_price, x.value.power) for x in
                     self.activeVertices]
         local_asset_dict = {
             "name": self.name,
@@ -854,9 +587,9 @@ class LocalAsset(Entity):
         record = super(LocalAsset, self).get_record()
         record.update({
             'default_power': self.default_power,
-            'engagement_cost_0': self.engagement_cost[0],
-            'engagement_cost_1': self.engagement_cost[1],
-            'engagement_cost_2': self.engagement_cost[2],
+            'engagement_cost_0': self.engagement_costs[0],
+            'engagement_cost_1': self.engagement_costs[1],
+            'engagement_cost_2': self.engagement_costs[2],
             # 'holding_cost': self.holding_cost, TODO: Did this come from old schema?
             # 'disengagement_cost': self.disengagement_cost, TODO: Did this come from old schema?
             'scheduling_horizon': self.scheduling_horizon,

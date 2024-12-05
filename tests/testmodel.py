@@ -74,7 +74,7 @@ def test_schedule():
     ti = TimeInterval(mkt, dur, st)
 
     #   Save the time interval
-    test_mkt.timeIntervals = [ti]
+    test_mkt.time_intervals = [ti]
 
     #   Assign a marginal price in the time interval
     test_mkt.check_marginal_prices(test_mtn)
@@ -84,7 +84,7 @@ def test_schedule():
 
     #   Create a corresponding Neighbor.
     test_mdl = Neighbor()
-    test_mdl.maximumPower = 100
+    test_mdl.maximum_power = 100
 
     # 210803DJH: The assignment of active vertices depends on whether a neighbor is transactive or not. Let's presume it
     #            is not to test the more basic case.
@@ -103,9 +103,9 @@ def test_schedule():
     except RuntimeWarning:
         print('  - ERRORS ENCOUNTERED')
 
-    assert len(test_mdl.scheduledPowers) == 1, '  - the method did not store a scheduled power'
-    assert len(test_mdl.reserveMargins) == 1, '  - the method did not store a reserve margin'
-    assert len(test_mdl.activeVertices) == 1, '  - the method did not store an active vertex'
+    assert len(test_mdl.scheduled_powers) == 1, '  - the method did not store a scheduled power'
+    assert len(test_mdl.reserve_margins) == 1, '  - the method did not store a reserve margin'
+    assert len(test_mdl.active_vertices) == 1, '  - the method did not store an active vertex'
 
     # Run a test again with a LocalAsset.
     # test_obj = LocalAsset()
@@ -123,7 +123,7 @@ def test_schedule():
     except RuntimeWarning:
         print('  - ERRORS ENCOUNTERED')
 
-    assert len(test_mdl.scheduledPowers) == 1, '  - the method did not store a scheduled power'
+    assert len(test_mdl.scheduled_powers) == 1, '  - the method did not store a scheduled power'
 #    assert len(test_mdl.reserveMargins) == 1, '  - the method did not store a reserve margin'
     assert len(test_mdl.activeVertices) == 1, '  - the method did not store an active vertex'
 
@@ -150,7 +150,7 @@ def test_update_costs():
     ti = TimeInterval(mkt, dur, st)
 
     #   Save the time interval
-    test_mkt.timeIntervals = [ti]
+    test_mkt.time_intervals = [ti]
 
     #   Assign a marginal price in the time interval
     test_mkt.check_marginal_prices(test_mtn)
@@ -166,9 +166,9 @@ def test_update_costs():
     # test_obj.model = test_mdl
     # test_mdl.object = test_obj
 
-    test_mdl.scheduledPowers = [IntervalValue(test_mdl, ti, test_mkt, MeasurementType.ScheduledPower, 100)]
-    test_mdl.activeVertices = [IntervalValue(test_mdl, ti, test_mkt,
-                                             MeasurementType.ActiveVertex, Vertex(0.05, 0, 100))]
+    test_mdl.scheduled_powers = [IntervalValue(test_mdl, ti, test_mkt, MeasurementType.ScheduledPower, 100)]
+    test_mdl.active_vertices = [IntervalValue(test_mdl, ti, test_mkt,
+                                              MeasurementType.ActiveVertex, Vertex(0.05, 0, 100))]
 
     #   Run a test with a Neighbor object
     print('- running test with a Neighbor:')
@@ -178,11 +178,11 @@ def test_update_costs():
     except RuntimeWarning:
         print('  - ERRORS ENCOUNTERED')
 
-    assert len(test_mdl.productionCosts) == 1, '  - the method did not store a production cost'
-    assert len(test_mdl.dualCosts) == 1, '  - the method did not store a dual cost'
-    assert test_mdl.totalProductionCost == sum([x.value for x in test_mdl.productionCosts]), \
+    assert len(test_mdl.production_costs) == 1, '  - the method did not store a production cost'
+    assert len(test_mdl.dual_costs) == 1, '  - the method did not store a dual cost'
+    assert test_mdl.total_production_cost == sum([x.value for x in test_mdl.production_costs]), \
             '  - the method did not store a total production cost'
-    assert test_mdl.totalDualCost == sum([x.value for x in test_mdl.dualCosts]), \
+    assert test_mdl.total_dual_cost == sum([x.value for x in test_mdl.dual_costs]), \
             '  - the method did not store a total dual cost'
 
     # Run a test again with a LocalAsset.
@@ -192,7 +192,7 @@ def test_update_costs():
     # test_mdl.object = test_obj
     test_mdl.maximum_power = 100
 
-    test_mdl.scheduledPowers = [IntervalValue(test_mdl, ti, test_mkt, MeasurementType.ScheduledPower, 100)]
+    test_mdl.scheduled_powers = [IntervalValue(test_mdl, ti, test_mkt, MeasurementType.ScheduledPower, 100)]
     test_mdl.activeVertices = [IntervalValue(test_mdl, ti, test_mkt,
                                              MeasurementType.ActiveVertex, Vertex(0.05, 0, 100))]
 
@@ -204,11 +204,11 @@ def test_update_costs():
     except RuntimeWarning:
         print('  - ERRORS ENCOUNTERED')
 
-    assert len(test_mdl.productionCosts) == 1, '  - the method did not store a production cost'
-    assert len(test_mdl.dualCosts) == 1, '  - the method did not store a dual cost'
-    assert test_mdl.totalProductionCost == sum([x.value for x in test_mdl.productionCosts]), \
+    assert len(test_mdl.production_costs) == 1, '  - the method did not store a production cost'
+    assert len(test_mdl.dual_costs) == 1, '  - the method did not store a dual cost'
+    assert test_mdl.total_production_cost == sum([x.value for x in test_mdl.production_costs]), \
             '  - the method did not store a total production cost'
-    assert test_mdl.totalDualCost == sum([x.value for x in test_mdl.dualCosts]), \
+    assert test_mdl.total_dual_cost == sum([x.value for x in test_mdl.dual_costs]), \
             '  - the method did not store a total dual cost'
 
     # Success

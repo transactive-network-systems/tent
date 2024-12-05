@@ -73,7 +73,7 @@ class BuildingZoneModel(LocalAsset):
 
         end_temperature = self.currentTemperature
 
-        intervals = market.timeIntervals
+        intervals = market.time_intervals
 
         for interval in intervals:
             starting_temperature = end_temperature

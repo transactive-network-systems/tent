@@ -54,7 +54,7 @@ class MarketState(Enum):
     modify the actions taken during transitions between these states and while in the various states.
 
     240207DJH: Making Initial same as Inactive. Proper handling of initial market state is via attribute
-               market.initialMarketState.
+               market.initial_market_state.
     """
     Initial = 2         # First run of a market in a new market series
     Active = 1          #

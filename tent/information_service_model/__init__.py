@@ -40,128 +40,66 @@ PACIFIC NORTHWEST NATIONAL LABORATORY
 operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
-
-import weakref
+import abc
 
 from datetime import datetime, timedelta
-from dateutil import parser
 from typing import Union
 
 from tent import Component
-from tent.containers import IntervalValue
-from tent.enumerations import MarketState, MeasurementType, MeasurementUnit
+from tent.containers import Measurement
+from tent.enumerations import MeasurementType, MeasurementUnit
+from tent.utils.timer import Timer
 
 
 class InformationServiceModel(Component):
-    # InformationServiceModel Base Class
-    # An InformationServiceModel manages an InformationService and predicts or interpolates the information it provides.
+    """InformationServiceModel
+        Manages an InformationService and predicts or interpolates the information it provides."""
 
     def __init__(self,
-                 address='',
                  description='',
                  information_type: Union[int, str, MeasurementType] = MeasurementType.Unknown,
                  information_units: Union[int, str, MeasurementUnit] = MeasurementUnit.Unknown,
-                 license_key='',
-                 next_query_time=None,
-                 service_expiration_date=None,
                  update_period: Union[float, timedelta] = timedelta(hours=1),
-                 file='',
                  name='',
-                 next_scheduled_update=None,
                  update_interval: Union[float, timedelta] = timedelta(hours=1),
                  transactive_node=None
                  ):
         super(InformationServiceModel, self).__init__(description, name, transactive_node)
-        self.tn = weakref.ref(transactive_node) if transactive_node else None
-        # InformationService properties:
-        self.address = str(address)  # perhaps a web address storage
-        self.description = str(description)
-        self.file = str(file)  # filename having entries for time intervals
-        self.informationType = information_type if isinstance(information_type, MeasurementType)\
+        self.information_type: MeasurementType = information_type if isinstance(information_type, MeasurementType)\
             else MeasurementType[information_type]
-        self.informationUnits = information_units if isinstance(information_units, MeasurementUnit)\
+        self.information_units: MeasurementUnit = information_units if isinstance(information_units, MeasurementUnit)\
             else MeasurementUnit[information_units]
-        self.license = str(license_key)
-        self.name = str(name)
-        if not next_query_time:
-            next_query_time = datetime.now()
-        self.nextQueryTime = next_query_time if isinstance(next_query_time, datetime)\
-            else parser.parse(next_query_time)  # datetime.empty
-        if not service_expiration_date:
-            service_expiration_date = datetime.now() + timedelta(days=10000)
-        self.serviceExpirationDate = service_expiration_date if isinstance(service_expiration_date, datetime)\
-            else parser.parse(service_expiration_date)  # datetime.empty
-        self.updateInterval = update_interval if isinstance(update_interval, timedelta) \
+        self.update_interval: timedelta = update_interval if isinstance(update_interval, timedelta) \
             else timedelta(seconds=update_interval)  # [h]
-        self.updatePeriod = update_period if isinstance(update_period, timedelta)\
+        self.update_period: timedelta = update_period if isinstance(update_period, timedelta)\
             else timedelta(seconds=update_period) # [h]
 
-        if not next_scheduled_update:
-            next_scheduled_update = datetime.now() + self.updatePeriod
-        self.nextScheduledUpdate = next_scheduled_update if isinstance(next_scheduled_update, datetime) \
-            else parser.parse(next_scheduled_update)  # datetime.empty
-
         # These are dynamic properties that are assigned in code and should not be manually configured:
-        self.last_modified = None
-        self.predictedValues = []  # IntervalValue.empty
+        self.last_modified: datetime | None = None
+        self.predicted_values: Measurement = Measurement(self, self.information_type, self.information_units)
 
-    # This template is available to conduct the forecasting of useful information.
-    # 200928DJH: Changing back to a conventional object method. I think Hung must have made this a class method to defer
-    # fixing it.
-    # @classmethod
+    @abc.abstractmethod
     def update_information(self, market):
+        """Assign values to predicted_values for all intervals.
+
+        # An implementation update predicted_values for all intervals (as possible) and update the last_modified:
         for time_interval in market.timeIntervals:
-
-            start_time = time_interval.start_time
-
-            #       Extract the starting time hour
-            hr = start_time.hour
-
-            # Look up the value in a table. NOTE: tables may be used during development until active information
-            # services are developed.
-            # TODO: 200928DJH: I don't know how/if this ever was made to work. Fix the reading of a csv table.
-            #                  The intention was to use a csv type of file to read scripted temperatures, in this case
-            #                  by hour. Could be extended to day type, hour, minute, etc.
-            # T = readtable(self.file)
-            #             # value = T(hr + 1, 1)
-            value = 56  # A Temporary workaround until a table can be read.
-
-            #       Check whether the information exists in the indexed time interval
-            # Question: what is ism? InformationServiceModel doesn't have 'values' as well as 'iv' properties.
-            #   Suggestion: use long name as much as possible
-            #   Need an example on what this one does. Really need a unit test here?
-            # 200928DJH: In Version 3, the following match should be made to actual time interval object, not its start
-            #            time.
-            iv = [x for x in self.predictedValues if x.timeInterval == time_interval]
-            iv = iv[0] if len(iv) > 0 else None
-
-            if iv is None:
-                # The value does not exist in the indexed time interval. Create it and store it.
-                iv = IntervalValue(calling_object=self,
-                                   time_interval=time_interval,
-                                   market=market,
-                                   measurement_type=MeasurementType.Temperature,
-                                   value=value)
-                self.predictedValues.append(iv)
-
-            else:
-                # The value exists in the indexed time interval. Simply reassign it
-                iv.value = value
-
-        # 200929DJH: Trim the list of predicted values. Remove any values in expired markets.
-        self.predictedValues = [x for x in self.predictedValues if x.market.marketState != MarketState.Expired]
+            # Update will create or update the predicted value for this time interval.
+            self.predicted_values.update(time_interval, func_that_give_a_value())
+            self.last_modified = Timer.now()
+        """
 
     @property
-    def table_name(self):
+    def table_name(self) -> str:
         return 'information_service'
 
     def get_record(self) -> dict:
         record = super(InformationServiceModel, self).get_record()
         record.update({
-            'information_type': self.informationType,
-            'information_units': self.informationUnits,
-            'update_period': self.updatePeriod,
-            'update_interval': self.updateInterval
+            'information_type': self.information_type,
+            'information_units': self.information_units,
+            'update_period': self.update_period,
+            'update_interval': self.update_interval
         })
         return record
 
@@ -190,6 +128,3 @@ class InformationServiceModel(Component):
         ])
         return definitions
 
-
-if __name__ == '__main__':
-    pass

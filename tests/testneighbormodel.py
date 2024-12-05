@@ -92,15 +92,15 @@ def test_calculate_reserve_margin():
 
     ti = TimeInterval(mkt, dur, st)
 
-    test_mkt.timeIntervals = [ti]
+    test_mkt.time_intervals = [ti]
 
     # Establish a test object that is a LocalAsset with assigned maximum power
     # test_object = Neighbor()
 
     # Establish test object that is a Neighbor
     test_model = Neighbor()
-    test_model.scheduledPowers = [IntervalValue(test_model, ti, test_mkt, MeasurementType.ScheduledPower, 0.0)]
-    test_model.maximumPower = 100
+    test_model.scheduled_powers = [IntervalValue(test_model, ti, test_mkt, MeasurementType.ScheduledPower, 0.0)]
+    test_model.maximum_power = 100
 
     # Allow object and model to cross-reference one another.
     # test_object.model = test_model
@@ -114,48 +114,48 @@ def test_calculate_reserve_margin():
     except RuntimeWarning:
         print('    ERRORS ENCOUNTERED')
 
-    assert len(test_model.reserveMargins) == 1, '- an unexpected number of results were stored'
+    assert len(test_model.reserve_margins) == 1, '- an unexpected number of results were stored'
 
-    assert test_model.reserveMargins[0].value == 100, '- the method did not use the available maximum power'
+    assert test_model.reserve_margins[0].value == 100, '- the method did not use the available maximum power'
 
     # create some vertices and store them
     interval_value1 = IntervalValue(test_model, ti, test_mkt, MeasurementType.Vertex, Vertex(0, 0, -10))
     interval_value2 = IntervalValue(test_model, ti, test_mkt, MeasurementType.Vertex, Vertex(0, 0, 10))
-    test_model.activeVertices = [interval_value1, interval_value2]
+    test_model.active_vertices = [interval_value1, interval_value2]
 
     # run test with maximum power greater than maximum vertex
     print('    TEST: Maximum power greater than maximum vertex')
-    test_model.maximumPower = 100
+    test_model.maximum_power = 100
     try:
         test_model.calculate_reserve_margin(test_mkt)
         print("    The method ran without errors")
     except RuntimeWarning:
         print('    ERRORS ENCOUNTERED')
 
-    assert test_model.reserveMargins[0].value == 10, '- the method should have used vertex for comparison'
+    assert test_model.reserve_margins[0].value == 10, '- the method should have used vertex for comparison'
 
     # run test with maximum power less than maximum vertex
     print('    TEST: Maximum power less than maximum vertex')
-    test_model.maximumPower = 5
+    test_model.maximum_power = 5
     try:
         test_model.calculate_reserve_margin(test_mkt)
         print('    Method ran without errors')
     except RuntimeWarning:
         print('    ERRORS ENCOUNTERED')
 
-    assert test_model.reserveMargins[0].value == 5, '- method should have used maximum power for comparison'
+    assert test_model.reserve_margins[0].value == 5, '- method should have used maximum power for comparison'
 
     # run test with scheduled power greater than maximum vertex
     print('    TEST: scheduled power greater than maximum vertex')
-    test_model.scheduledPowers[0].value = 20
-    test_model.maximumPower = 500
+    test_model.scheduled_powers[0].value = 20
+    test_model.maximum_power = 500
     try:
         test_model.calculate_reserve_margin(test_mkt)
         print('    The method ran witout errors')
     except RuntimeWarning:
         print('    ERRORS ENCOUNTERED')
 
-    assert test_model.reserveMargins[0].value == 0, '- method should have assigned zero for a neg. result'
+    assert test_model.reserve_margins[0].value == 0, '- method should have assigned zero for a neg. result'
 
     # Success.
     print('  test_calculate_reserve_margin() ran to completion.\n')
@@ -168,7 +168,7 @@ def test_check_for_convergence():
 
     # Create a test Neighbor object.
     test_model = Neighbor()
-    test_model.convergenceThreshold = 0.01
+    test_model.convergence_threshold = 0.01
     test_model.converged = True
 
     # Create a test Market object.
@@ -177,7 +177,7 @@ def test_check_for_convergence():
     # Create and store an active TimeInterval object.
     dt = datetime.now()
     time_intervals = TimeInterval(test_market, one_hour, dt)
-    test_market.timeIntervals = [time_intervals]
+    test_market.time_intervals = [time_intervals]
 
     # TEST 1: No TransactiveRecord messages have been sent.
     print('    Test 1: Property sentSignal is empty')
@@ -187,8 +187,8 @@ def test_check_for_convergence():
     except RuntimeWarning:
         print('    ERRORS ENCOUNTERED')
 
-    assert len(test_model.convergenceFlags) == 1, '  - an unexpected number of convergence flags occurred'
-    assert test_model.convergenceFlags[0].value is False, '  - the interval convergence flag should have been false'
+    assert len(test_model.convergence_flags) == 1, '  - an unexpected number of convergence flags occurred'
+    assert test_model.convergence_flags[0].value is False, '  - the interval convergence flag should have been false'
     assert test_model.converged is False, '  - the overall convergence should have been false'
 
     # TEST 2: Compare sent and received signals with identical records
@@ -202,12 +202,12 @@ def test_check_for_convergence():
     tr = [
         TransactiveRecord(time_interval=time_intervals, record=0, marginal_price=0.05, power=100),
         TransactiveRecord(time_interval=time_intervals, record=0, marginal_price=0.05, power=-100)]
-    tr[0].timeStamp = datetime.now() + one_hour
+    tr[0].timestamp = datetime.now() + one_hour
 
     # NOTE: The latter-defined record must be placed in receivedSignal to satisfy a precondition.
-    test_model.sentSignal = [tr[0]]
-    test_model.receivedSignal = [tr[1]]
-    test_model.mySignal = test_model.sentSignal  # This is needed to prevent are_different2() from asserting differences
+    test_model.sent_signal = [tr[0]]
+    test_model.received_signal = [tr[1]]
+    test_model.my_signal = test_model.sent_signal  # This is needed to prevent are_different2() from asserting differences
 
     try:
         test_model.check_for_convergence(test_market)
@@ -215,13 +215,13 @@ def test_check_for_convergence():
     except RuntimeWarning:
         print('    ERRORS ENCOUNTERED')
 
-    assert len(test_model.convergenceFlags) == 1, '  - an unexpected number of interval convergence flags occurred'
-    assert test_model.convergenceFlags[0].value is True, '  - the interval convergence flag should have been true'
+    assert len(test_model.convergence_flags) == 1, '  - an unexpected number of interval convergence flags occurred'
+    assert test_model.convergence_flags[0].value is True, '  - the interval convergence flag should have been true'
     assert test_model.converged is True, '  - the overall convergence should have been true'
 
     # TEST 3: Revise records' scheduled powers to show lack of convergence
     print('    Test 3: Revise powers to destroy convergence between sent and received messages')
-    test_model.receivedSignal[0].power = 1.02 * test_model.receivedSignal[0].power
+    test_model.received_signal[0].power = 1.02 * test_model.received_signal[0].power
 
     try:
         test_model.check_for_convergence(test_market)
@@ -229,15 +229,15 @@ def test_check_for_convergence():
     except RuntimeWarning:
         print('    ERRORS ENCOUNTERED')
 
-    assert len(test_model.convergenceFlags) == 1, '  - an unexpected number of interval convergence flags occurred'
-    assert test_model.convergenceFlags[0].value is False, '  - the interval convergence flag should have been false'
+    assert len(test_model.convergence_flags) == 1, '  - an unexpected number of interval convergence flags occurred'
+    assert test_model.convergence_flags[0].value is False, '  - the interval convergence flag should have been false'
     assert test_model.converged is False, '  - the overall convergence should have been false'
 
     # TEST 4: Sent and received signals differ, no signal received since last send
     print('    Test 4: No received signal since last send')
     dt = datetime.now()
-    test_model.sentSignal[0].timeStamp = format_ts(dt)  # Must be >5 minutes ago
-    test_model.receivedSignal[0].timeStamp = format_ts(dt)
+    test_model.sent_signal[0].timestamp = format_ts(dt)  # Must be >5 minutes ago
+    test_model.received_signal[0].timestamp = format_ts(dt)
 
     try:
         test_model.check_for_convergence(test_market)
@@ -245,8 +245,8 @@ def test_check_for_convergence():
     except RuntimeWarning:
         print('    ERRORS ENCOUNTERED')
 
-    assert len(test_model.convergenceFlags) == 1, '  - an unexpected number of interval convergence flags occurred'
-    assert test_model.convergenceFlags[0].value is True, '  - the interval convergence flag should have been true'
+    assert len(test_model.convergence_flags) == 1, '  - an unexpected number of interval convergence flags occurred'
+    assert test_model.convergence_flags[0].value is True, '  - the interval convergence flag should have been true'
     assert test_model.converged is True, '  - the overall convergence should have been true'
 
     # TEST 5: Compare identical mySignal and sentSignal records
@@ -254,16 +254,16 @@ def test_check_for_convergence():
 
     #   Create prepared mySignal message that is exactly the same as the sent
     #   message.
-    test_model.mySignal = [tr[0]]
-    test_model.sentSignal = [tr[0]]
+    test_model.my_signal = [tr[0]]
+    test_model.sent_signal = [tr[0]]
 
     #   Ensure that the sent signal was sent much more than 5 minutes ago
-    test_model.sentSignal[0].timeStamp = format_ts(dt - one_hour)
+    test_model.sent_signal[0].timestamp = format_ts(dt - one_hour)
 
     #   Ensure that a signal has NOT been received since the last one was sent.
     #   This intentionally violates a precondition so that the method under
     #   test will not compare the sent and received messages.
-    test_model.receivedSignal[0].timeStamp = format_ts(dt - 2 * one_hour)
+    test_model.received_signal[0].timestamp = format_ts(dt - 2 * one_hour)
 
     try:
         test_model.check_for_convergence(test_market)
@@ -271,8 +271,8 @@ def test_check_for_convergence():
     except RuntimeWarning:
         print('    ERRORS ENCOUNTERED')
 
-    assert len(test_model.convergenceFlags) == 1, '  - an unexpected number of interval convergence flags occurred'
-    assert test_model.convergenceFlags[0].value is True, '  - the interval convergence flag should have been true'
+    assert len(test_model.convergence_flags) == 1, '  - an unexpected number of interval convergence flags occurred'
+    assert test_model.convergence_flags[0].value is True, '  - the interval convergence flag should have been true'
     assert test_model.converged is True, '  - the overall convergence should have been true'
 
     # TEST 6: Compare multiple matched mySignal and testSignal records
@@ -280,15 +280,15 @@ def test_check_for_convergence():
 
     # Create a couple new TransactiveRecord objects.
     tr.append(TransactiveRecord(time_interval=time_intervals, record=1, marginal_price=0.049, power=90))
-    tr[2].timeStamp = test_model.sentSignal[0].timeStamp
+    tr[2].timestamp = test_model.sent_signal[0].timestamp
 
     tr.append(TransactiveRecord(time_interval=time_intervals, record=2, marginal_price=0.051, power=110))
-    tr[3].timeStamp = test_model.sentSignal[0].timeStamp
+    tr[3].timestamp = test_model.sent_signal[0].timestamp
 
     # Append the mySignal and sentSignal records. The sets should still remain
     # identical, meaning that the system has not changed and remains converged.
-    test_model.mySignal = [tr[0], tr[2], tr[3]]
-    test_model.sentSignal = [tr[0], tr[2], tr[3]]
+    test_model.my_signal = [tr[0], tr[2], tr[3]]
+    test_model.sent_signal = [tr[0], tr[2], tr[3]]
 
     try:
         test_model.check_for_convergence(test_market)
@@ -296,8 +296,8 @@ def test_check_for_convergence():
     except RuntimeWarning:
         print('    ERRORS ENCOUNTERED')
 
-    assert len(test_model.convergenceFlags) == 1, '  - an unexpected number of interval convergence flags occurred'
-    assert test_model.convergenceFlags[0].value is True, '  - the interval convergence flag should have been true'
+    assert len(test_model.convergence_flags) == 1, '  - an unexpected number of interval convergence flags occurred'
+    assert test_model.convergence_flags[0].value is True, '  - the interval convergence flag should have been true'
     assert test_model.converged is True, '  - the overall convergence should have been true'
 
     # TEST 7: A Vertex differs significantly between mySignal and sentSignal
@@ -307,7 +307,7 @@ def test_check_for_convergence():
     #   test_model.mySignal[0].
 
     tr.append(TransactiveRecord(time_interval=time_intervals, record=1, marginal_price=0.049, power=85))
-    test_model.mySignal = [tr[0], tr[4], tr[3]]
+    test_model.my_signal = [tr[0], tr[4], tr[3]]
 
     try:
         test_model.check_for_convergence(test_market)
@@ -315,8 +315,8 @@ def test_check_for_convergence():
     except RuntimeWarning:
         print('    ERRORS ENCOUNTERED')
 
-    assert len(test_model.convergenceFlags) == 1, '  - an unexpected number of interval convergence flags occurred'
-    assert test_model.convergenceFlags[0].value is False, '  - the interval convergence flag should have been false'
+    assert len(test_model.convergence_flags) == 1, '  - an unexpected number of interval convergence flags occurred'
+    assert test_model.convergence_flags[0].value is False, '  - the interval convergence flag should have been false'
     assert test_model.converged is False, '  - the overall convergence should have been false'
 
     #   Success.
@@ -352,7 +352,7 @@ def test_marginal_price_from_vertices():
         print('  - ERRORS ENCOUNTERED')
         marginal_price = []
 
-    assert marginal_price == test_vertices[1].marginalPrice, '  - the method returned an unexpected marginal price'
+    assert marginal_price == test_vertices[1].marginal_price, '  - the method returned an unexpected marginal price'
 
     # Test 2: Power greater than the rightmost Vertex.
     print('- Test 2: power greater than the rightmost Vertex')
@@ -364,7 +364,7 @@ def test_marginal_price_from_vertices():
     except RuntimeWarning:
         print('  - ERRORS ENCOUNTERED')
 
-    assert marginal_price == test_vertices[0].marginalPrice, '  - the method returned an unexpected marginal price'
+    assert marginal_price == test_vertices[0].marginal_price, '  - the method returned an unexpected marginal price'
 
     # Test 3: Power between vertices.
     print('- Test 3: power is between vertices')
@@ -401,7 +401,7 @@ def test_prep_transactive_signal():
     # Create a test TransactiveNode object and its references to its objects and models.
     test_myTransactiveNode = TransactiveNode()
     test_myTransactiveNode.neighbors = [test_model]
-    test_myTransactiveNode.localAssets = [test_asset_model]
+    test_myTransactiveNode.local_assets = [test_asset_model]
     test_myTransactiveNode.markets = [test_market]
 
     # Create and store a TimeInterval object
@@ -412,7 +412,7 @@ def test_prep_transactive_signal():
     mct = dt
     st = dt
     time_interval = TimeInterval(mkt, dur, st)
-    test_market.timeIntervals = [time_interval]
+    test_market.time_intervals = [time_interval]
 
     # Create some active vertices and their IntervalValue objects ready to
     # choose from for the various tests.
@@ -444,13 +444,13 @@ def test_prep_transactive_signal():
 
     # Configure the test.
     test_model.transactive = True
-    test_model.scheduledPowers = [
+    test_model.scheduled_powers = [
         IntervalValue(test_model, time_interval, test_market, MeasurementType.ScheduledPower, 200)]
-    test_model.maximumPower = 200
-    test_model.minimumPower = -200
+    test_model.maximum_power = 200
+    test_model.minimum_power = -200
     # 200804DJH: Taking losses out of the test due to recent changes that will automatically include them as signals are
     # being prepped.
-    test_model.lossFactor = 0
+    test_model.loss_factor = 0
 
     test_asset_model.activeVertices = [interval_values[1]]
 
@@ -461,9 +461,9 @@ def test_prep_transactive_signal():
     except RuntimeWarning:
         print('  - ERRORS ENCOUNTERED')
 
-    assert len(test_model.mySignal) == 1, '  - the wrong number of transactive records were stored'
-    assert test_model.mySignal[0].power == test_asset_model.activeVertices[0].value.power \
-           and test_model.mySignal[0].marginalPrice == float("inf"), \
+    assert len(test_model.my_signal) == 1, '  - the wrong number of transactive records were stored'
+    assert test_model.my_signal[0].power == test_asset_model.activeVertices[0].value.power \
+           and test_model.my_signal[0].marginal_price == float("inf"), \
         '  - the transactive record values were not as expected'
 
     # TEST 3
@@ -471,10 +471,10 @@ def test_prep_transactive_signal():
 
     # Configure the test.
     test_model.transactive = True
-    test_model.scheduledPowers = [
+    test_model.scheduled_powers = [
         IntervalValue(test_model, time_interval, test_market, MeasurementType.ScheduledPower, -50)]
-    test_model.maximumPower = -10
-    test_model.minimumPower = -75
+    test_model.maximum_power = -10
+    test_model.minimum_power = -75
 
     test_asset_model.activeVertices = [interval_values[2], interval_values[4], IntervalValue(test_asset_model,
                                                                                             time_interval, test_market,
@@ -487,14 +487,14 @@ def test_prep_transactive_signal():
     except RuntimeWarning:
         print('  - ERRORS ENCOUNTERED')
 
-    assert len(test_model.mySignal) == 3, '  - the wrong number of transactive records were stored'
+    assert len(test_model.my_signal) == 3, '  - the wrong number of transactive records were stored'
 
-    non_members = [x for x in test_model.mySignal if x.power not in [10, 50, 75]]
+    non_members = [x for x in test_model.my_signal if x.power not in [10, 50, 75]]
     assert len(non_members) == 0, '  - the record power values were not as expected'
 
-    cond1 = [abs(x.marginalPrice - 0.3200) < 0.0001 for x in test_model.mySignal]
-    cond2 = [abs(x.marginalPrice - 0.4000) < 0.0001 for x in test_model.mySignal]
-    cond3 = [abs(x.marginalPrice - 0.4500) < 0.0001 for x in test_model.mySignal]
+    cond1 = [abs(x.marginal_price - 0.3200) < 0.0001 for x in test_model.my_signal]
+    cond2 = [abs(x.marginal_price - 0.4000) < 0.0001 for x in test_model.my_signal]
+    cond3 = [abs(x.marginal_price - 0.4500) < 0.0001 for x in test_model.my_signal]
     assert any(cond1) and any(cond2) and any(cond3), '  - the marginal price values were not as expected'
 
     # TEST 4
@@ -502,10 +502,10 @@ def test_prep_transactive_signal():
 
     # Configure the test.
     test_model.transactive = True
-    test_model.scheduledPowers = [
+    test_model.scheduled_powers = [
         IntervalValue(test_model, time_interval, test_market, MeasurementType.ScheduledPower, 50)]
-    test_model.maximumPower = 75
-    test_model.minimumPower = 10
+    test_model.maximum_power = 75
+    test_model.minimum_power = 10
 
     test_asset_model.activeVertices = [interval_values[0], interval_values[2], IntervalValue(test_asset_model,
                                                                                              time_interval, test_market,
@@ -518,15 +518,15 @@ def test_prep_transactive_signal():
     except RuntimeWarning:
         print('  - ERRORS ENCOUNTERED')
 
-    assert len(test_model.mySignal) == 3, '  - the wrong number of transactive records were stored'
+    assert len(test_model.my_signal) == 3, '  - the wrong number of transactive records were stored'
 
-    non_members = [x for x in test_model.mySignal
+    non_members = [x for x in test_model.my_signal
                    if round(x.power, 2) not in [round(-10, 2), round(-50, 2), round(-75, 2)]]
     assert len(non_members) == 0, '  - the record power values were not as expected'
 
-    cond1 = [abs(x.marginalPrice - 0.1500) < 0.0001 for x in test_model.mySignal]
-    cond2 = [abs(x.marginalPrice - 0.2000) < 0.0001 for x in test_model.mySignal]
-    cond3 = [abs(x.marginalPrice - 0.280) < 0.0001 for x in test_model.mySignal]
+    cond1 = [abs(x.marginal_price - 0.1500) < 0.0001 for x in test_model.my_signal]
+    cond2 = [abs(x.marginal_price - 0.2000) < 0.0001 for x in test_model.my_signal]
+    cond3 = [abs(x.marginal_price - 0.280) < 0.0001 for x in test_model.my_signal]
     assert any(cond1) and any(cond2) and any(cond3), '  - the marginal price values were not as expected'
 
     # TEST 5
@@ -534,10 +534,10 @@ def test_prep_transactive_signal():
 
     # Configure the test.
     test_model.transactive = True
-    test_model.scheduledPowers = [
+    test_model.scheduled_powers = [
         IntervalValue(test_model, time_interval, test_market, MeasurementType.ScheduledPower, 50)]
-    test_model.maximumPower = 75
-    test_model.minimumPower = 25
+    test_model.maximum_power = 75
+    test_model.minimum_power = 25
     test_asset_model.activeVertices = [interval_values[0],
                                        interval_values[1],  # an extra vertex in active flex range
                                        interval_values[2], IntervalValue(test_asset_model, time_interval, test_market,
@@ -549,15 +549,15 @@ def test_prep_transactive_signal():
     except RuntimeWarning:
         print('  - ERRORS ENCOUNTERED')
 
-    assert len(test_model.mySignal) == 4, '  - the wrong number of transactive records were stored'
+    assert len(test_model.my_signal) == 4, '  - the wrong number of transactive records were stored'
 
-    non_members = [x for x in test_model.mySignal if x.power not in [-25, -50, -75, -37.5]]
+    non_members = [x for x in test_model.my_signal if x.power not in [-25, -50, -75, -37.5]]
     assert len(non_members) == 0, '  - the record power values were not as expected'
 
-    cond1 = [abs(x.marginalPrice - 0.2750) < 0.0001 for x in test_model.mySignal]
-    cond2 = [abs(x.marginalPrice - 0.1400) < 0.0001 for x in test_model.mySignal]
-    cond3 = [abs(x.marginalPrice - 0.25) < 0.0001 for x in test_model.mySignal]
-    cond4 = [abs(x.marginalPrice - 0.2000) < 0.0001 for x in test_model.mySignal]
+    cond1 = [abs(x.marginal_price - 0.2750) < 0.0001 for x in test_model.my_signal]
+    cond2 = [abs(x.marginal_price - 0.1400) < 0.0001 for x in test_model.my_signal]
+    cond3 = [abs(x.marginal_price - 0.25) < 0.0001 for x in test_model.my_signal]
+    cond4 = [abs(x.marginal_price - 0.2000) < 0.0001 for x in test_model.my_signal]
     assert any(cond1) and any(cond2) and any(cond3) and any(cond4), '  - the marginal price values were not as expected'
 
     # Success.
@@ -619,13 +619,13 @@ def test_receive_transactive_signal():
     test_record1 = TransactiveRecord(time_interval=time_interval, record=0, marginal_price=0.1, power=0)
     test_record2 = TransactiveRecord(time_interval=time_interval, record=1, marginal_price=0.2, power=100)
 
-    test_model.mySignal = [test_record1, test_record2]
+    test_model.my_signal = [test_record1, test_record2]
 
     test_model.send_transactive_signal(this_transactive_node=test_myTransactiveNode)
     print('  - this test depends on method send_transactive_signal() to create a file')
 
     # Clear the mySignal property that will be used to receive the records.
-    test_model.receivedSignal = []
+    test_model.received_signal = []
 
     # A trick is needed because the filenames rely on source and target node names, which are swapped in the reading
     # and sending methods. Exchange the names of the test object and test the TransactiveNode.
@@ -639,27 +639,10 @@ def test_receive_transactive_signal():
     except RuntimeWarning:
         print('  - ERRORS ENCOUNTERED')
 
-    assert len(test_model.receivedSignal) == 2, '  - an unexpected, or no, record count was stored'
+    assert len(test_model.received_signal) == 2, '  - an unexpected, or no, record count was stored'
 
     # Success.
     print('test_receive_transactive_signal() ran to completion.\n')
-
-
-def test_schedule_engagement():
-    print('Running Neighbor.test_schedule_engagement()')
-
-    test_obj = Neighbor()
-
-    try:
-        test_obj.schedule_engagement()
-        print('- method ran to completion')
-    except RuntimeWarning:
-        print('- ERRORS ENCOUNTERED')
-
-    assert test_obj == test_obj, '- the Neighbor was unexpected altered'
-
-    # Success.
-    print('test_schedule_engagement() ran to completion.\n')
 
 
 def test_schedule_power():
@@ -676,17 +659,17 @@ def test_schedule_power():
     # Create and store an active TimeInterval object.
     dt = datetime.now()  # datetime that may be used for all datetime arguments
     time_interval = TimeInterval(test_market, timedelta(hours=1), dt)
-    test_market.timeIntervals = [time_interval]
+    test_market.time_intervals = [time_interval]
 
     # Create and store a marginal price IntervalValue object.
-    test_market.marginalPrices = [
+    test_market.marginal_prices = [
         IntervalValue(test_market, time_interval, test_market, MeasurementType.MarginalPrice, 0.1)]
 
     # Create a store a simple active Vertex for the test model.
     test_vertex = Vertex(0.1, 0, 100)
     test_interval_value = IntervalValue(test_model, time_interval, test_market,
                                         MeasurementType.ActiveVertex, test_vertex)
-    test_model.activeVertices = [test_interval_value]
+    test_model.active_vertices = [test_interval_value]
 
     # TEST 1
     print('- Test 1: scheduled power does not exist yet')
@@ -697,9 +680,9 @@ def test_schedule_power():
     except RuntimeWarning:
         print('  - ERRORS ENCOUNTERED')
 
-    assert len(test_model.scheduledPowers) == 1, '  - an unexpected number of scheduled powers is created'
+    assert len(test_model.scheduled_powers) == 1, '  - an unexpected number of scheduled powers is created'
 
-    scheduled_power = test_model.scheduledPowers[0].value
+    scheduled_power = test_model.scheduled_powers[0].value
     assert scheduled_power == 100, '  - the scheduled power value was not that expected'
 
     # TEST 2
@@ -707,7 +690,7 @@ def test_schedule_power():
 
     # Configure for test by using a different active vertex.
     test_vertex.power = 50
-    test_model.activeVertices[0].value = test_vertex
+    test_model.active_vertices[0].value = test_vertex
 
     try:
         test_model.schedule_power(test_market)
@@ -715,9 +698,9 @@ def test_schedule_power():
     except RuntimeWarning:
         print('  - ERRORS ENCOUNTERED')
 
-    assert len(test_model.scheduledPowers) == 1, '  - an unexpected number of scheduled powers is found'
+    assert len(test_model.scheduled_powers) == 1, '  - an unexpected number of scheduled powers is found'
 
-    scheduled_power = test_model.scheduledPowers[0].value
+    scheduled_power = test_model.scheduled_powers[0].value
     assert scheduled_power == 50, '  - the scheduled power value was not that expected'
 
     # Success.
@@ -769,7 +752,7 @@ def test_send_transactive_signal():
     test_record1 = TransactiveRecord(time_interval=time_interval, record=0, marginal_price=0.1, power=0)
     test_record2 = TransactiveRecord(time_interval=time_interval, record=1, marginal_price=0.2, power=100)
 
-    test_model.mySignal = [test_record1, test_record2]
+    test_model.my_signal = [test_record1, test_record2]
 
     test_model.send_transactive_signal(test_myTransactiveNode)
     print('  - the method ran to completion without errors')
@@ -793,7 +776,7 @@ def test_send_transactive_signal():
     # TEST 3: Check that the saved sent signal is the same as that calculated.
     print('- Test 3: Was the sent signal saved properly?')
 
-    if test_model.mySignal != test_model.sentSignal:
+    if test_model.my_signal != test_model.sent_signal:
         pf = 'fail'
         print('  - the sent signal does not match the calculated one')
     else:
@@ -817,8 +800,8 @@ def test_update_dc_threshold():
     # Basic configuration for tests:
     # Create a test object and initialize demand-related properties
     test_obj = BulkSupplierDC()
-    test_obj.demandMonth = dt.month
-    test_obj.demandThreshold = 1000
+    test_obj.demand_month = dt.month
+    test_obj.demand_threshold = 1000
 
     # Create a test market
     test_mkt = Market()
@@ -836,20 +819,20 @@ def test_update_dc_threshold():
     ti2 = TimeInterval(mkt, dur, st)
 
     ti = [ti1, ti2]
-    test_mkt.timeIntervals = ti
+    test_mkt.time_intervals = ti
 
     # Test case when there is no MeterPoint object
-    test_obj.demandThreshold = 1000
-    test_obj.demandMonth = dt.month
-    test_obj.meterPoints = []  # MeterPoint.empty
+    test_obj.demand_threshold = 1000
+    test_obj.demand_month = dt.month
+    test_obj.meter_points = []  # MeterPoint.empty
 
     prior_market = Market()
-    test_mkt.priorMarketInSeries = prior_market
+    test_mkt.prior_market_in_series = prior_market
 
     # Create and store a couple scheduled powers
     iv1 = IntervalValue(test_obj, ti[0], prior_market, MeasurementType.ScheduledPower, 900)
     iv2 = IntervalValue(test_obj, ti[1], prior_market, MeasurementType.ScheduledPower, 900)
-    test_obj.scheduledPowers = [iv1, iv2]
+    test_obj.scheduled_powers = [iv1, iv2]
 
     try:
         test_obj.update_dc_threshold(test_mkt)
@@ -857,11 +840,11 @@ def test_update_dc_threshold():
     except RuntimeWarning:
         print('- ERRORS ENCOUNTERED')
 
-    assert test_obj.demandThreshold == 1000, '- the method inferred the wrong demand threshold value'
+    assert test_obj.demand_threshold == 1000, '- the method inferred the wrong demand threshold value'
 
     iv1 = IntervalValue(test_obj, ti[0], prior_market, MeasurementType.ScheduledPower, 1100)
     iv2 = IntervalValue(test_obj, ti[1], prior_market, MeasurementType.ScheduledPower, 900)
-    test_obj.scheduledPowers = [iv1, iv2]
+    test_obj.scheduled_powers = [iv1, iv2]
 
     try:
         test_obj.update_dc_threshold(test_mkt)
@@ -869,22 +852,22 @@ def test_update_dc_threshold():
     except RuntimeWarning:
         print('- ERRORS ENCOUNTERED')
 
-    assert test_obj.demandThreshold == 1100, '- the method did not update the inferred demand threshold value'
+    assert test_obj.demand_threshold == 1100, '- the method did not update the inferred demand threshold value'
 
     # Test with an appropriate MeterPoint meter
     # Create and store a MeterPoint test object
     test_mtr = MeterPoint()
-    test_mtr.measurementType = MeasurementType.AverageDemandkW  # 'average_demand_kW'
+    test_mtr.measurement_type = MeasurementType.AverageDemandkW  # 'average_demand_kW'
     test_mtr.set_meter_value(900)
-    test_obj.meterPoints = [weakref.ref(test_mtr)]
+    test_obj.meter_points = [weakref.ref(test_mtr)]
 
     # Reconfigure the test object for this test:
     iv1 = IntervalValue(test_obj, ti[0], prior_market, MeasurementType.ScheduledPower, 900)
     iv2 = IntervalValue(test_obj, ti[1], prior_market, MeasurementType.ScheduledPower, 900)
-    test_obj.scheduledPowers = [iv1, iv2]
+    test_obj.scheduled_powers = [iv1, iv2]
 
-    test_obj.demandThreshold = 1000
-    test_obj.demandMonth = dt.month
+    test_obj.demand_threshold = 1000
+    test_obj.demand_month = dt.month
 
     # Run the test. Confirm it runs.
     try:
@@ -894,14 +877,14 @@ def test_update_dc_threshold():
         print('- ERRORS ENCOUNTERED')
 
     # Check that the old threshold is correctly retained.
-    assert test_obj.demandThreshold == 1000, \
+    assert test_obj.demand_threshold == 1000, \
         '- the method failed to keep the correct demand threshold value when there is a meter'
 
     # Reconfigure the test object with a lower current threshold
     iv1 = IntervalValue(test_obj, ti[0], prior_market, MeasurementType.ScheduledPower, 900)
     iv2 = IntervalValue(test_obj, ti[1], prior_market, MeasurementType.ScheduledPower, 900)
-    test_obj.scheduledPowers = [iv1, iv2]
-    test_obj.demandThreshold = 800
+    test_obj.scheduled_powers = [iv1, iv2]
+    test_obj.demand_threshold = 800
 
     # Run the test.
     try:
@@ -911,20 +894,20 @@ def test_update_dc_threshold():
         print('- ERRORS ENCOUNTERED')
 
     # Check that a new, higher demand threshold was set.
-    assert test_obj.demandThreshold == 900, \
+    assert test_obj.demand_threshold == 900, \
         '- the method failed to update the demand threshold value when there is a meter'
 
     # Test rollover to new month
     # Configure the test object
     # test_obj.demandMonth = month(datetime - days(31))  # prior month
     last_month = dt.month - 1
-    test_obj.demandMonth = last_month  # (dt - timedelta(days=31)).month  # prior month
-    test_obj.demandThreshold = 1000
-    test_obj.scheduledPowers[0].value = 900
-    test_obj.scheduledPowers[1].value = 900
+    test_obj.demand_month = last_month  # (dt - timedelta(days=31)).month  # prior month
+    test_obj.demand_threshold = 1000
+    test_obj.scheduled_powers[0].value = 900
+    test_obj.scheduled_powers[1].value = 900
     # test_obj.meterPoints = MeterPoint.empty
-    test_obj.meterPoints = []  # MeterPoint.empty
-    test_obj.demandThresholdCoef = 0.8
+    test_obj.meter_points = []  # MeterPoint.empty
+    test_obj.demand_threshold_coef = 0.8
 
     # Run the test
     try:
@@ -934,7 +917,7 @@ def test_update_dc_threshold():
         print('- ERRORS ENCOUNTERED')
 
     # See if the demand threshold was reset at the new month.
-    assert test_obj.demandThreshold == test_obj.demandThresholdCoef * 1000, \
+    assert test_obj.demand_threshold == test_obj.demand_threshold_coef * 1000, \
         '- the method did not reduce the threshold properly in a new month'
 
     # Success
@@ -950,21 +933,21 @@ def test_update_dual_costs():
     # Create and store a TimeInterval object.
     dt = datetime.now()  # datetime that may be used for most datetime arguments
     time_interval = TimeInterval(test_market, timedelta(hours=1), dt)
-    test_market.timeIntervals = [time_interval]
+    test_market.time_intervals = [time_interval]
 
     # Create and store a marginal price IntervalValue object.
-    test_market.marginalPrices = [
+    test_market.marginal_prices = [
         IntervalValue(test_market, time_interval, test_market, MeasurementType.MarginalPrice, 0.1)]
 
     # Create a test Neighbor object.
     test_model = Neighbor()
 
     # Create and store a scheduled power IntervalValue in the active time interval.
-    test_model.scheduledPowers = [
+    test_model.scheduled_powers = [
         IntervalValue(test_model, time_interval, test_market, MeasurementType.ScheduledPower, 100)]
 
     # Create and store a production cost IntervalValue object in the active time interval.
-    test_model.productionCosts = [
+    test_model.production_costs = [
         IntervalValue(test_model, time_interval, test_market, MeasurementType.ProductionCost, 1000)]
 
     # TEST 1
@@ -976,16 +959,16 @@ def test_update_dual_costs():
     except RuntimeWarning:
         print('  - ERRORS ENCOUNTERED')
 
-    assert len(test_model.dualCosts) == 1, '  - the wrong number of dual cost values was created'
+    assert len(test_model.dual_costs) == 1, '  - the wrong number of dual cost values was created'
 
-    dual_cost = test_model.dualCosts[0].value
+    dual_cost = test_model.dual_costs[0].value
     assert dual_cost == (1000 - 100 * 0.1), '  - an unexpected dual cost value was found'
 
     # TEST 2
     print('- Test 2: Reassignment of an existing dual cost')
 
     # Configure the test by modifying the marginal price value.
-    test_market.marginalPrices[0].value = 0.2
+    test_market.marginal_prices[0].value = 0.2
 
     try:
         test_model.update_dual_costs(test_market)
@@ -993,9 +976,9 @@ def test_update_dual_costs():
     except RuntimeWarning:
         print('  - ERRORS ENCOUNTERED')
 
-    assert len(test_model.dualCosts) == 1, '  - the wrong number of dual cost values was created'
+    assert len(test_model.dual_costs) == 1, '  - the wrong number of dual cost values was created'
 
-    dual_cost = test_model.dualCosts[0].value
+    dual_cost = test_model.dual_costs[0].value
     assert dual_cost == (1000 - 100 * 0.2), '  - an unexpected dual cost value was found'
 
     # Success.
@@ -1011,21 +994,21 @@ def test_update_production_costs():
     # Create and store a TimeInterval object.
     dt = datetime.now()  # datetime that may be used for most datetime arguments
     time_interval = TimeInterval(test_market, timedelta(hours=1), dt)
-    test_market.timeIntervals = [time_interval]
+    test_market.time_intervals = [time_interval]
 
     # Create a test Neighbor object.
     test_model = Neighbor()
 
     # Create and store a scheduled power IntervalValue in the active time
     # interval.
-    test_model.scheduledPowers = [
+    test_model.scheduled_powers = [
         IntervalValue(test_model, time_interval, test_market, MeasurementType.ScheduledPower, 50)]
 
     # Create and store some active vertices IntervalValue objects in the
     # active time interval.
     vertex1 = Vertex(0.1, 1000, 0)
     vertex2 = Vertex(0.2, 1015, 100)
-    test_model.activeVertices = [
+    test_model.active_vertices = [
         IntervalValue(test_model, time_interval, test_market, MeasurementType.ActiveVertex, vertex1),
         IntervalValue(test_model, time_interval, test_market, MeasurementType.ActiveVertex, vertex2)
     ]
@@ -1039,16 +1022,16 @@ def test_update_production_costs():
     except RuntimeWarning:
         print('  - ERRORS ENCOUNTERED')
 
-    assert len(test_model.productionCosts) == 1, '  - the wrong number of production costs was created'
+    assert len(test_model.production_costs) == 1, '  - the wrong number of production costs was created'
 
-    production_cost = test_model.productionCosts[0].value
+    production_cost = test_model.production_costs[0].value
     assert production_cost == 1007.5, '  - an unexpected production cost value was found'
 
     # TEST 2
     print('- Test 2: Reassignment of an existing production cost')
 
     # Configure the test by modifying the scheduled power value.
-    test_model.scheduledPowers[0].value = 150
+    test_model.scheduled_powers[0].value = 150
 
     try:
         test_model.update_production_costs(test_market)
@@ -1056,9 +1039,9 @@ def test_update_production_costs():
     except RuntimeWarning:
         print('  - ERRORS ENCOUNTERED')
 
-    assert len(test_model.productionCosts) == 1, '  - the wrong number of productions was created'
+    assert len(test_model.production_costs) == 1, '  - the wrong number of productions was created'
 
-    production_cost = test_model.productionCosts[0].value
+    production_cost = test_model.production_costs[0].value
     assert production_cost == 1015, '  - an unexpected dual cost value was found'
 
     # Success.
@@ -1074,25 +1057,25 @@ def test_update_vertices():
     # Create and store a TimeInterval object.
     dt = datetime.now()  # datetime that may be used for most datetime arguments
     time_interval = TimeInterval(test_market, timedelta(hours=1), dt)
-    test_market.timeIntervals = [time_interval]
+    test_market.time_intervals = [time_interval]
 
     # Create a test Neighbor object.
     test_model = Neighbor()
 
     # Create and store a scheduled power IntervalValue in the active time interval.
-    test_model.scheduledPowers = [
+    test_model.scheduled_powers = [
         IntervalValue(test_model, time_interval, test_market, MeasurementType.ScheduledPower, 50)]
 
     # Create a Neighbor object and its maximum and minimum powers.
     # test_object = Neighbor()
-    test_model.maximumPower = 200
-    test_model.minimumPower = 0
-    test_model.lossFactor = 0  # eliminate losses from the calcs for now.
+    test_model.maximum_power = 200
+    test_model.minimum_power = 0
+    test_model.loss_factor = 0  # eliminate losses from the calcs for now.
 
     # TEST 1
     print('- Test 1: No default vertex has been defined for the Neighbor')
 
-    test_model.defaultVertices = []
+    test_model.default_vertices = []
 
     try:
         test_model.update_vertices(test_market)
@@ -1104,7 +1087,7 @@ def test_update_vertices():
     print('- Test 2: The Neighbor is not transactive')
 
     # Create the default Vertex object.
-    test_model.defaultVertices = [Vertex(.1, 0, 100)]
+    test_model.default_vertices = [Vertex(.1, 0, 100)]
     test_model.transactive = False
 
     try:
@@ -1113,18 +1096,18 @@ def test_update_vertices():
     except RuntimeWarning:
         print('  - ERRORS ENCOUNTERED')
 
-    assert len(test_model.activeVertices) == 1, '  - there is an unexpected number of active vertices ' \
+    assert len(test_model.active_vertices) == 1, '  - there is an unexpected number of active vertices ' \
                                                 '+ str(len(test_model.activeVertices))'
 
-    vertex = test_model.activeVertices[0].value
+    vertex = test_model.active_vertices[0].value
     # 200801DJH: In Version 3, the marginal price is made inf when there is just one default vertex.
-    assert vertex.power == 100 and vertex.marginalPrice == float('inf'), '  - the vertex values are not as expected'
+    assert vertex.power == 100 and vertex.marginal_price == float('inf'), '  - the vertex values are not as expected'
 
     # TEST 3
     print('- Test 3: The Neighbor is transactive, but transactive records are not available')
     test_model.transactive = True
-    test_model.defaultVertices = [Vertex(.2, 0, 200)]  # Changed
-    test_model.activeVertices = []
+    test_model.default_vertices = [Vertex(.2, 0, 200)]  # Changed
+    test_model.active_vertices = []
 
     try:
         test_model.update_vertices(test_market)
@@ -1132,24 +1115,24 @@ def test_update_vertices():
     except RuntimeWarning:
         print('  - ERRORS ENCOUNTERED')
 
-    assert len(test_model.activeVertices) == 1, '  - there is an unexpected number of active vertices'
+    assert len(test_model.active_vertices) == 1, '  - there is an unexpected number of active vertices'
 
-    vertex = test_model.activeVertices[0].value
+    vertex = test_model.active_vertices[0].value
     # 200803DJH: In Version 3, a single active vertex must lie at inf.
-    assert vertex.power == 200 and vertex.marginalPrice == float('inf'), '  - the vertex values are not as expected'
+    assert vertex.power == 200 and vertex.marginal_price == float('inf'), '  - the vertex values are not as expected'
 
     # TEST 4
     print('- Test 4: The Neighbor is transactive, and transactive records are available to use')
     test_model.transactive = True
-    test_model.activeVertices = []
+    test_model.active_vertices = []
 
     # Create and store some received transactive records
     transactive_record1 = TransactiveRecord(time_interval=time_interval, record=1, marginal_price=0.15, power=0)
     transactive_record2 = TransactiveRecord(time_interval=time_interval, record=2, marginal_price=0.25, power=100)
     transactive_record3 = TransactiveRecord(time_interval=time_interval, record=0, marginal_price=0.2, power=50)
-    test_model.receivedSignal = [transactive_record1, transactive_record2, transactive_record3]
+    test_model.received_signal = [transactive_record1, transactive_record2, transactive_record3]
 
-    test_model.demandThreshold = 500
+    test_model.demand_threshold = 500
 
     try:
         test_model.update_vertices(test_market)
@@ -1158,10 +1141,10 @@ def test_update_vertices():
         print('  - ERRORS ENCOUNTERED')
 
     # 200803DJH: In Version 3, all received records, including Record 0, are turned into active vertices.
-    assert len(test_model.activeVertices) == 3, '  - there is an unexpected number of active vertices'
+    assert len(test_model.active_vertices) == 3, '  - there is an unexpected number of active vertices'
 
-    vertex_power = [x.value.power for x in test_model.activeVertices]
-    vertex_marginal_price = [x.value.marginalPrice for x in test_model.activeVertices]
+    vertex_power = [x.value.power for x in test_model.active_vertices]
+    vertex_marginal_price = [x.value.marginal_price for x in test_model.active_vertices]
     # 200803DJH: In Version 3, all received records, including Record 0, are turned into active vertices.
     non_members1 = [x for x in vertex_power if x not in [0, 50, 100]]
     non_members2 = [x for x in vertex_marginal_price if x not in [0.1500, 0.2000, 0.2500]]
@@ -1203,14 +1186,14 @@ def test_include_demand_charges():
         corrected_vertices = []
 
     assert test_vertices != corrected_vertices, 'Test and corrected vertices should not refer to the same object.'
-    assert [x.marginalPrice for x in corrected_vertices] == [x.marginalPrice for x in test_vertices], \
+    assert [x.marginal_price for x in corrected_vertices] == [x.marginal_price for x in test_vertices], \
         'Marginal prices should not have changed.'
     assert [x.power for x in corrected_vertices] == [x.power for x in test_vertices], \
         'Powers should not have changed.'
 
     print('Case 2: One vertex exists at an active demand threshold.')
     threshold = test_vertices[4].power  # i.e., 90
-    test_neighbor.demandRate = 10
+    test_neighbor.demand_rate = 10
 
     try:
         corrected_vertices = test_neighbor.include_demand_charges(vertices=test_vertices, threshold=threshold)
@@ -1222,11 +1205,11 @@ def test_include_demand_charges():
     assert len(test_vertices) == 6, 'The number of test vertices should not change.'
     assert len(corrected_vertices) == 7, 'A new vertex should have been added.'
     assert test_vertices != corrected_vertices, 'Test and corrected vertices should not refer to the same object.'
-    assert [x.marginalPrice for x in corrected_vertices][0:5] == [x.marginalPrice for x in test_vertices][0:5], \
+    assert [x.marginal_price for x in corrected_vertices][0:5] == [x.marginal_price for x in test_vertices][0:5], \
         'Marginal prices should not have changed.'
-    assert [x.marginalPrice for x in corrected_vertices][5:7] == \
-           [test_vertices[4].marginalPrice + test_neighbor.demandRate,
-            test_vertices[5].marginalPrice + test_neighbor.demandRate], \
+    assert [x.marginal_price for x in corrected_vertices][5:7] == \
+           [test_vertices[4].marginal_price + test_neighbor.demand_rate,
+            test_vertices[5].marginal_price + test_neighbor.demand_rate], \
             'Marginal prices 5 and 6 should have demand charges applied.'
     assert [x.power for x in corrected_vertices][0:5] == [x.power for x in test_vertices][0:5], \
         'Powers should not have changed in the first five vertices.'
@@ -1246,12 +1229,12 @@ def test_include_demand_charges():
     assert len(test_vertices) == 6, 'The number of test vertices should not change.'
     assert len(corrected_vertices) == 6, 'No new vertices should have been added.'
     assert test_vertices != corrected_vertices, 'Test and corrected vertices should not refer to the same object.'
-    assert [x.marginalPrice for x in corrected_vertices][0:3] == [x.marginalPrice for x in test_vertices][0:3], \
+    assert [x.marginal_price for x in corrected_vertices][0:3] == [x.marginal_price for x in test_vertices][0:3], \
         'Marginal prices should not have changed.'
-    assert [x.marginalPrice for x in corrected_vertices][3:6] == \
-           [test_vertices[3].marginalPrice + test_neighbor.demandRate,
-            test_vertices[4].marginalPrice + test_neighbor.demandRate,
-            test_vertices[5].marginalPrice + test_neighbor.demandRate], \
+    assert [x.marginal_price for x in corrected_vertices][3:6] == \
+           [test_vertices[3].marginal_price + test_neighbor.demand_rate,
+            test_vertices[4].marginal_price + test_neighbor.demand_rate,
+            test_vertices[5].marginal_price + test_neighbor.demand_rate], \
             'Marginal prices should have demand charges applied.'
     assert [x.power for x in corrected_vertices] == [x.power for x in test_vertices], \
         'Powers should not have changed in the first three vertices.'
@@ -1269,9 +1252,9 @@ def test_include_demand_charges():
     assert len(test_vertices) == 6, 'The number of test vertices should not change.'
     assert len(corrected_vertices) == 8, 'Two new vertices should have been added.'
     assert test_vertices != corrected_vertices, 'Test and corrected vertices should not refer to the same object.'
-    assert [x.marginalPrice for x in corrected_vertices][0:5] == [x.marginalPrice for x in test_vertices][0:5], \
+    assert [x.marginal_price for x in corrected_vertices][0:5] == [x.marginal_price for x in test_vertices][0:5], \
         'Marginal prices should not have changed in the first five vertices.'
-    assert [x.marginalPrice for x in corrected_vertices][6:8] == [10.35, 10.4], \
+    assert [x.marginal_price for x in corrected_vertices][6:8] == [10.35, 10.4], \
             'Marginal prices should have demand charges applied.'
     assert [x.power for x in corrected_vertices][5:8] == [95, 95, 100], \
         'Two new vertices should have been inserted at the threshold 95.'
@@ -1291,14 +1274,14 @@ def test_include_demand_charges():
     assert len(test_vertices) == 6, 'The number of test vertices should not change.'
     assert len(corrected_vertices) == 7, 'Two new vertices should have been added.'
     assert test_vertices != corrected_vertices, 'Test and corrected vertices should not refer to the same object.'
-    assert [x.marginalPrice for x in corrected_vertices] == [test_vertices[0].marginalPrice,
-                                                             test_vertices[1].marginalPrice,
-                                                             test_vertices[1].marginalPrice + test_neighbor.demandRate,
-                                                             test_vertices[2].marginalPrice + test_neighbor.demandRate,
-                                                             test_vertices[3].marginalPrice + test_neighbor.demandRate,
-                                                             test_vertices[4].marginalPrice + test_neighbor.demandRate,
-                                                             test_vertices[5].marginalPrice + test_neighbor.demandRate
-                                                             ], 'Marginal prices are not as expected.'
+    assert [x.marginal_price for x in corrected_vertices] == [test_vertices[0].marginal_price,
+                                                              test_vertices[1].marginal_price,
+                                                              test_vertices[1].marginal_price + test_neighbor.demand_rate,
+                                                              test_vertices[2].marginal_price + test_neighbor.demand_rate,
+                                                              test_vertices[3].marginal_price + test_neighbor.demand_rate,
+                                                              test_vertices[4].marginal_price + test_neighbor.demand_rate,
+                                                              test_vertices[5].marginal_price + test_neighbor.demand_rate
+                                                              ], 'Marginal prices are not as expected.'
     assert sum([x.power==0 for x in corrected_vertices]) == 2, \
                                                     'Two new vertices should have been inserted at the threshold 95.'
 
@@ -1315,7 +1298,7 @@ def test_include_demand_charges():
     assert len(test_vertices) == 6, 'The number of test vertices should not change.'
     assert len(corrected_vertices) == 1, 'Two new vertices should have been added.'
     assert test_vertices != corrected_vertices, 'Test and corrected vertices should not refer to the same object.'
-    assert corrected_vertices[0].marginalPrice == test_vertices[5].marginalPrice + test_neighbor.demandRate, \
+    assert corrected_vertices[0].marginal_price == test_vertices[5].marginal_price + test_neighbor.demand_rate, \
                                                                         'The vertex marginal price was not as expected.'
     assert corrected_vertices[0].power == test_vertices[5].power, \
                                                     'The vertex power was not as expected.'
@@ -1328,14 +1311,14 @@ def test_include_marginal_losses():
 
     print('- Test 1: Testing a range of load and supply vertices with positive and negative prices.')
     test_neighbor = Neighbor()
-    test_neighbor.lossFactor = 0.01
-    test_neighbor.maximumPower = 20
+    test_neighbor.loss_factor = 0.01
+    test_neighbor.maximum_power = 20
     test_vertices = [Vertex(-.1, 0, -10), Vertex(-0.1, 0, 0), Vertex(-.1, 0, 10),
                      Vertex(0, 0, -10), Vertex(0, 0, 0), Vertex(0, 0, 10),
                      Vertex(0.1, 0, -10), Vertex(0.1, 0, 0), Vertex(0.1, 0, 10)]
 
     assert len(test_vertices) == 9, 'This test should start and end with nine vertices.'
-    assert test_neighbor.lossFactor == 0.01, 'In this case the full-load loss is 1%'
+    assert test_neighbor.loss_factor == 0.01, 'In this case the full-load loss is 1%'
 
     try:
         new_vertices = test_neighbor.include_marginal_losses(test_vertices)
@@ -1346,27 +1329,27 @@ def test_include_marginal_losses():
 
     assert len(new_vertices) == 9, ' Expected 9 vertices returned. Got ' + str(len(new_vertices)) + '.'
     expected_vertices = test_vertices
-    expected_power = 10 * (1 - (10/test_neighbor.maximumPower) * test_neighbor.lossFactor)
+    expected_power = 10 * (1 - (10 / test_neighbor.maximum_power) * test_neighbor.loss_factor)
     expected_vertices[2].power = expected_power
     expected_vertices[5].power = expected_power
     expected_vertices[8].power = expected_power
     # 210907DJH: The method's formula was altered as follows. This does not change the outcome, but the calculation is
     #            more meaningful.
     # expected_price = 0.1 / (1 - 2 * (10/test_neighbor.maximumPower) * test_neighbor.lossFactor)
-    expected_price = 0.1 / (1 - 4 * expected_power * test_neighbor.lossFactor / test_neighbor.maximumPower) ** 0.5
-    expected_vertices[2].marginalPrice = -expected_price
-    expected_vertices[5].marginalPrice = 0
-    expected_vertices[8].marginalPrice = expected_price
+    expected_price = 0.1 / (1 - 4 * expected_power * test_neighbor.loss_factor / test_neighbor.maximum_power) ** 0.5
+    expected_vertices[2].marginal_price = -expected_price
+    expected_vertices[5].marginal_price = 0
+    expected_vertices[8].marginal_price = expected_price
     for x in range(len(new_vertices)):
         assert new_vertices[x].power == expected_vertices[x].power, ['Power was not as expected for vertex ' + str(x)]
-        assert new_vertices[x].marginalPrice == expected_vertices[x].marginalPrice, \
+        assert new_vertices[x].marginal_price == expected_vertices[x].marginal_price, \
                                                                 ['Price was not as expected for vertex ', str(x)]
 
     # TEST 2
     print('- Test 2: First parameter is not a Vertex.')
     test_neighbor = Neighbor()
-    test_neighbor.lossFactor = 0.01
-    test_neighbor.maximumPower = 10
+    test_neighbor.loss_factor = 0.01
+    test_neighbor.maximum_power = 10
     test_vertices = ["not Vertex", Vertex(0, 0, 0)]
 
     new_vertices = []
@@ -1385,13 +1368,13 @@ def test_include_marginal_losses():
             assert new_vertices[x] == test_vertices[x], ['List item mismatch for item ' + str(x)]
         else:
             assert new_vertices[x].power == test_vertices[x].power, ['Power was not as expected for vertex ' + str(x)]
-            assert new_vertices[x].marginalPrice == test_vertices[x].marginalPrice, \
+            assert new_vertices[x].marginal_price == test_vertices[x].marginal_price, \
                                                                     ['Price was not as expected for vertex ', str(x)]
 
     # TEST 3
     print('- Test 3: Unacceptable maximum power value.')
     test_neighbor = Neighbor()
-    test_neighbor.maximumPower = None
+    test_neighbor.maximum_power = None
     error = ''
 
     try:
@@ -1403,8 +1386,8 @@ def test_include_marginal_losses():
     # TEST 4
     print('- Test 4: Bad loss factor.')
     test_neighbor = Neighbor()
-    test_neighbor.maximumPower = 1000
-    test_neighbor.lossFactor = 'bad'
+    test_neighbor.maximum_power = 1000
+    test_neighbor.loss_factor = 'bad'
     test_vertices = [Vertex(0, 0, 0)]
     error = ''
 
@@ -1416,7 +1399,7 @@ def test_include_marginal_losses():
 
     assert len(new_vertices) == 1, 'An unexpected number of objects was returned.'
     assert new_vertices[0].power == test_vertices[0].power, 'Power was not as expected'
-    assert new_vertices[0].marginalPrice == test_vertices[0].marginalPrice, 'Price was not as expected'
+    assert new_vertices[0].marginal_price == test_vertices[0].marginal_price, 'Price was not as expected'
 
     print('test_include_marginal_losses() ran to completion.\n')
 
@@ -1455,14 +1438,14 @@ def test_remove_demand_charges():
         corrected_vertices = []
 
     assert test_vertices != corrected_vertices, 'Test and corrected vertices should not refer to the same object.'
-    assert [x.marginalPrice for x in corrected_vertices] == [x.marginalPrice for x in test_vertices], \
+    assert [x.marginal_price for x in corrected_vertices] == [x.marginal_price for x in test_vertices], \
         'Marginal prices should not have changed.'
     assert [x.power for x in corrected_vertices] == [x.power for x in test_vertices], \
         'Powers should not have changed.'
 
     print('Case 2: One vertex exists at an active demand threshold.')
     threshold = test_vertices[4].power  # i.e., 0
-    test_neighbor.demandRate = 10
+    test_neighbor.demand_rate = 10
 
     try:
         corrected_vertices = test_neighbor.remove_demand_charges(vertices=test_vertices, threshold=threshold)
@@ -1475,8 +1458,8 @@ def test_remove_demand_charges():
     assert len(corrected_vertices) == 7, 'A new vertex should have been added.'
     assert test_vertices != corrected_vertices, 'Test and corrected vertices should not refer to the same object.'
     items = [0, 1, 2, 3, 4, 4, 5]
-    assert [x.marginalPrice for x in corrected_vertices] == [test_vertices[x].marginalPrice - test_neighbor.demandRate
-                                                             for x in items[0:5]] + [test_vertices[x].marginalPrice
+    assert [x.marginal_price for x in corrected_vertices] == [test_vertices[x].marginal_price - test_neighbor.demand_rate
+                                                              for x in items[0:5]] + [test_vertices[x].marginal_price
                                                              for x in items[5:7]], \
                                                              'Marginal prices are not as expected.'
     assert [x.power for x in corrected_vertices] == [test_vertices[x].power for x in items], \
@@ -1495,9 +1478,9 @@ def test_remove_demand_charges():
     assert len(test_vertices) == 6, 'The number of test vertices should not change.'
     assert len(corrected_vertices) == 6, 'No new vertices should have been added.'
     assert test_vertices != corrected_vertices, 'Test and corrected vertices should not refer to the same object.'
-    assert [x.marginalPrice for x in corrected_vertices] == [test_vertices[x].marginalPrice - test_neighbor.demandRate
-                                                             for x in [0, 1, 2]] \
-                                                             + [test_vertices[x].marginalPrice for x in [3, 4, 5]], \
+    assert [x.marginal_price for x in corrected_vertices] == [test_vertices[x].marginal_price - test_neighbor.demand_rate
+                                                              for x in [0, 1, 2]] \
+           + [test_vertices[x].marginal_price for x in [3, 4, 5]], \
                                                                             'Marginal prices are not as expected.'
     assert [x.power for x in corrected_vertices] == [x.power for x in test_vertices], \
                                                     'Powers are not as expected.'
@@ -1515,7 +1498,7 @@ def test_remove_demand_charges():
     assert len(test_vertices) == 6, 'The number of test vertices should not change.'
     assert len(corrected_vertices) == 8, 'Two new vertices should have been added.'
     assert test_vertices != corrected_vertices, 'Test and corrected vertices should not refer to the same object.'
-    assert [round(x.marginalPrice, 5) for x in corrected_vertices] == [-10.2, -10.05, -0.05, 0.1, 0.2, 0.3, 0.3, 0.4], \
+    assert [round(x.marginal_price, 5) for x in corrected_vertices] == [-10.2, -10.05, -0.05, 0.1, 0.2, 0.3, 0.3, 0.4], \
         'Marginal prices should not have changed in the first five vertices.'
     assert [x.power for x in corrected_vertices] == [test_vertices[0].power, -140, -140] \
                                                      + [test_vertices[x].power for x in range(1, 6)], \
@@ -1537,8 +1520,8 @@ def test_remove_demand_charges():
     assert len(corrected_vertices) == 7, 'Two new vertices should have been added.'
     assert test_vertices != corrected_vertices, 'Test and corrected vertices should not refer to the same object.'
     items = [0, 1, 2, 3, 4, 4, 5]
-    assert [x.marginalPrice for x in corrected_vertices] == [test_vertices[x].marginalPrice - test_neighbor.demandRate
-                                                             for x in items[0:5]] + [test_vertices[x].marginalPrice
+    assert [x.marginal_price for x in corrected_vertices] == [test_vertices[x].marginal_price - test_neighbor.demand_rate
+                                                              for x in items[0:5]] + [test_vertices[x].marginal_price
                                                              for x in items[5:7]], \
                                                              'Marginal prices are not as expected.'
     assert sum([x.power==0 for x in corrected_vertices]) == 2, \
@@ -1557,7 +1540,7 @@ def test_remove_demand_charges():
     assert len(test_vertices) == 6, 'The number of test vertices should not change.'
     assert len(corrected_vertices) == 1, 'Two new vertices should have been added.'
     assert test_vertices != corrected_vertices, 'Test and corrected vertices should not refer to the same object.'
-    assert corrected_vertices[0].marginalPrice == test_vertices[0].marginalPrice - test_neighbor.demandRate, \
+    assert corrected_vertices[0].marginal_price == test_vertices[0].marginal_price - test_neighbor.demand_rate, \
                                                                         'The vertex marginal price was not as expected.'
     assert corrected_vertices[0].power == test_vertices[0].power, \
                                                     'The vertex power was not as expected.'
@@ -1570,14 +1553,14 @@ def test_remove_marginal_losses():
 
     print('- Test 1: Testing a range of load and supply vertices with positive and negative prices.')
     test_neighbor = Neighbor()
-    test_neighbor.lossFactor = 0.01
-    test_neighbor.maximumPower = 20
+    test_neighbor.loss_factor = 0.01
+    test_neighbor.maximum_power = 20
     test_vertices = [Vertex(-.1, 0, -10), Vertex(-0.1, 0, 0), Vertex(-.1, 0, 10),
                      Vertex(0, 0, -10), Vertex(0, 0, 0), Vertex(0, 0, 10),
                      Vertex(0.1, 0, -10), Vertex(0.1, 0, 0), Vertex(0.1, 0, 10)]
 
     assert len(test_vertices) == 9, 'This test should start and end with nine vertices.'
-    assert test_neighbor.lossFactor == 0.01, 'In this case the full-load loss is 1%'
+    assert test_neighbor.loss_factor == 0.01, 'In this case the full-load loss is 1%'
 
     try:
         new_vertices = test_neighbor.remove_marginal_losses(test_vertices)
@@ -1588,21 +1571,21 @@ def test_remove_marginal_losses():
 
     assert len(new_vertices) == 9, ' Expected 9 vertices returned. Got ' + str(len(new_vertices)) + '.'
     expected_vertices = test_vertices
-    expected_power = -(0.5 * test_neighbor.maximumPower / test_neighbor.lossFactor) * \
-                     (1 - (1 - 4 * (10/test_neighbor.maximumPower) * test_neighbor.lossFactor) ** 0.5)
+    expected_power = -(0.5 * test_neighbor.maximum_power / test_neighbor.loss_factor) * \
+                     (1 - (1 - 4 * (10 / test_neighbor.maximum_power) * test_neighbor.loss_factor) ** 0.5)
     # 210907DJH: The recovery of neighbor's marginal price has been changed in code due to slight inaccuracy. This
     #            change makes the test consistent with the code.
     # expected_price = 0.1 * (1 - 2 * (-expected_power / test_neighbor.maximumPower) * test_neighbor.lossFactor)
-    expected_price = 0.1 * (1 - 4 * 10 * test_neighbor.lossFactor / test_neighbor.maximumPower) ** 0.5
+    expected_price = 0.1 * (1 - 4 * 10 * test_neighbor.loss_factor / test_neighbor.maximum_power) ** 0.5
     expected_vertices[0].power = expected_power
     expected_vertices[3].power = expected_power
     expected_vertices[6].power = expected_power
-    expected_vertices[0].marginalPrice = -expected_price
-    expected_vertices[3].marginalPrice = 0
-    expected_vertices[6].marginalPrice = expected_price
+    expected_vertices[0].marginal_price = -expected_price
+    expected_vertices[3].marginal_price = 0
+    expected_vertices[6].marginal_price = expected_price
     for x in range(len(new_vertices)):
         assert new_vertices[x].power == expected_vertices[x].power, 'Power was not as expected for vertex ' + str(x)
-        assert new_vertices[x].marginalPrice == expected_vertices[x].marginalPrice, \
+        assert new_vertices[x].marginal_price == expected_vertices[x].marginal_price, \
                                                                 ['Price was not as expected for vertex ', str(x)]
 
     print('test_include_marginal_losses() ran to completion.\n')

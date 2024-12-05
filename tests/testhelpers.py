@@ -231,13 +231,13 @@ def test_prod_cost_from_formula():
     st = st + dur
     ti.append(TimeInterval(mkt, dur, st))
 
-    test_market.timeIntervals = ti
+    test_market.time_intervals = ti
 
     # Create and store three corresponding scheduled powers
     iv = [IntervalValue(test_object, ti[0], test_market, MeasurementType.ScheduledPower, 100),
           IntervalValue(test_object, ti[1], test_market, MeasurementType.ScheduledPower, 200),
           IntervalValue(test_object, ti[2], test_market, MeasurementType.ScheduledPower, 300)]
-    test_object.scheduledPowers = iv
+    test_object.scheduled_powers = iv
 
     #   Run the test
     pc = [0] * 3

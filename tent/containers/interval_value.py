@@ -41,7 +41,7 @@ operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
 from tent import Archivable
-from tent.containers import Vertex
+#from tent.containers import Vertex
 
 
 class IntervalValue(Archivable):
@@ -63,27 +63,27 @@ class IntervalValue(Archivable):
             self.associatedObject = calling_object.name
         except RuntimeWarning:
             self.associatedObject = 'unknown'
-        self.timeInterval = time_interval
+        self.time_interval = time_interval
         self.market = market
-        self.measurementType = measurement_type
+        self.measurement_type = measurement_type
         self.value = value
 
     # Subdivide an IntervalValue into multiple identical IntervalValues.
     def subdivide(self):
         pass
 
-    def get_dict(self):
-        value = self.value.get_dict() if isinstance(self.value, Vertex) else self.value
-        interval_value_dict = {
-            "scheduled": self.scheduled,
-            "associatedClass": self.associatedClass,
-            "associatedObject": self.associatedObject,
-            "timeIntervalId": self.id,
-            "timeInterval": self.timeInterval.get_dict(),
-            "measurementType": self.measurementType.name,
-            "value": value
-        }
-        return interval_value_dict
+    # def get_dict(self):
+    #     value = self.value.get_dict() if isinstance(self.value, Vertex) else self.value
+    #     interval_value_dict = {
+    #         "scheduled": self.scheduled,
+    #         "associatedClass": self.associatedClass,
+    #         "associatedObject": self.associatedObject,
+    #         "timeIntervalId": self.id,
+    #         "timeInterval": self.timeInterval.get_dict(),
+    #         "measurementType": self.measurementType.name,
+    #         "value": value
+    #     }
+    #     return interval_value_dict
 
     @property
     def data_manager(self):

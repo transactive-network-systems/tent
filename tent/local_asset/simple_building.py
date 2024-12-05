@@ -69,29 +69,16 @@ class SimpleBuilding(LocalAsset):
     def schedule(self, market):
         self.schedule_power(market)
         self.update_vertices(market)
-        self.scheduleCalculated = True
+        self.schedule_calculated = True
 
     def schedule_power(self, market):
-        time_intervals = market.timeIntervals
-        for x in range(len(time_intervals)):
-            time_interval = time_intervals[x]
-            iv = IntervalValue(calling_object=self,
-                               time_interval=time_interval,
-                               market=market,
-                               measurement_type=MeasurementType.ScheduledPower,
-                               value=self.defaultVertices[0]
-                               )
-            self.scheduledPowers.append(iv)
-
-        self.scheduledPowers = [x for x in self.scheduledPowers if x.market.marketState != MarketState.Expired]
+        for time_interval in market.time_intervals:
+            # TODO: This is putting a vertex in scheduled_powers. Shouldn't it just be the power of the vertex?
+            self.scheduled_powers.update(time_interval, self.defaultVertices[0])
 
     def update_vertices(self, market):
-        time_intervals = market.timeIntervals
-        for x in range(len(time_intervals)):
-            time_interval = time_intervals[x]
-            start_time = time_interval.start_time
-            start_hour = start_time.hour
-            if start_hour in [0, 1, 2, 3, 4, 17, 18, 19, 20, 21, 22, 23]:
+        for time_interval in market.time_intervals:
+            if time_interval.start_time.hour in [0, 1, 2, 3, 4, 17, 18, 19, 20, 21, 22, 23]:
                 iv = IntervalValue(calling_object=self,
                                    time_interval=time_interval,
                                    market=market,
@@ -99,7 +86,7 @@ class SimpleBuilding(LocalAsset):
                                    value=self.defaultVertices[0]
                                    )
                 self.activeVertices.append(iv)
-            elif start_hour in [5, 6, 7, 8, 9, 10, 11, 12, 13, 14]:
+            elif time_interval.start_time.hour in [5, 6, 7, 8, 9, 10, 11, 12, 13, 14]:
                 iv = IntervalValue(calling_object=self,
                                    time_interval=time_interval,
                                    market=market,
@@ -117,4 +104,4 @@ class SimpleBuilding(LocalAsset):
             else:
                 raise RuntimeError('Undefined hour of day.')
 
-        self.activeVertices = [x for x in self.activeVertices if x.market.marketState != MarketState.Expired]
+        self.activeVertices = [x for x in self.activeVertices if x.market.market_state != MarketState.Expired]

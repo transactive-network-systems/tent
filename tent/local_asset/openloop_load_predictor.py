@@ -47,11 +47,9 @@ from datetime import timedelta
 from typing import List
 
 
-from tent.containers import IntervalValue
-from tent.enumerations import MarketState, MeasurementType
+from tent.enumerations import MeasurementType
 from tent.information_service_model.temperature_forecast_model import TemperatureForecastModel
 from tent.local_asset import LocalAsset
-from tent.utils.helpers import find_obj_by_ti
 from tent.utils.log import setup_logging
 
 setup_logging()
@@ -89,15 +87,17 @@ class OpenLoopLoadPredictor(LocalAsset):
                  dow_intercept: List[float],
                  season: List[int],
                  values: List[List[int]],
+                 default_temperature: float = 56.6,
                  scale_factor: float = 1,
                  *args, **kwargs):
         super(OpenLoopLoadPredictor, self).__init__(*args, **kwargs)
+        self.default_temperature = default_temperature
         self.dow_intercept = dow_intercept
         self.season = season
         self.values = values
         # TODO: This should probably allow configuration of a named ism instead.
-        self.temperature_forecaster = next((s for s in self.informationServices
-                                            if s.informationType == MeasurementType.Temperature), None)
+        self.temperature_forecaster = next((s for s in self.information_services
+                                            if s.information_type == MeasurementType.Temperature), None)
         self.scale_factor = scale_factor
 
     def schedule_power(self, mkt):
@@ -109,33 +109,21 @@ class OpenLoopLoadPredictor(LocalAsset):
         """
 
         # Get the active time intervals.
-        time_intervals = mkt.timeIntervals  # TimeInterval objects
+        time_intervals = mkt.time_intervals  # TimeInterval objects
 
         # Index through the active time intervals.
-        # 200928DJH: Go back to basic indexing.
-        # for time_interval in time_intervals:
         for time_interval in time_intervals:
             # Extract the start time from the indexed time interval.
             interval_start_time = time_interval.start_time
 
             if self.temperature_forecaster is None:
                 # No appropriate information service was found, must use a default temperature value.
-                temp = 56.6  # [deg.F]
+                temp = self.default_temperature  # [deg.F]
             else:
-                # An appropriate information service was found. Get the temperature that corresponds to the indexed time
-                # interval.
-                interval_value = find_obj_by_ti(self.temperature_forecaster.predictedValues, time_interval)
-
-                if interval_value is None:
-                    # No stored temperature was found. Assign a default value.
-                    temp = 56.6  # [def.F]
-                else:
-                    # A stored temperature value was found. Use it.
-                    temp = interval_value.value  # [def.F]
-
-                if temp is None:
-                    # The temperature value is not a number. Use a default value.
-                    temp = 56.6  # [def.F]
+                # An appropriate information service was found.
+                # Get the temperature that corresponds to the indexed time interval.
+                interval_value = self.temperature_forecaster.predictedValues.get_by_interval(time_interval)
+                temp = interval_value.value  if interval_value and interval_value.value else self.default_temperature
 
             # Determine the dow_intercept.
             # The dow_Intercept is a function of categorical day-of-week number
@@ -187,27 +175,13 @@ class OpenLoopLoadPredictor(LocalAsset):
             # model defines load as a negative value.
             load = -load  # [avg.kW]
 
-            # Look for the scheduled power in the indexed time interval.
-            interval_value = find_obj_by_ti(self.scheduledPowers, time_interval)
+            # Create or store a scheduled power with this load.
+            self.scheduled_powers.update(time_interval, load)
 
-            if interval_value is None:
-                # No scheduled power was found in the indexed time interval. Create one and store it.
-                interval_value = IntervalValue(calling_object=self,
-                                               time_interval=time_interval,
-                                               market=mkt,
-                                               measurement_type=MeasurementType.ScheduledPower,
-                                               value=load
-                                               )
-                self.scheduledPowers.append(interval_value)
+        self.schedule_calculated = True
 
-            else:
-                # The interval value already exist. Simply reassign its value.
-                interval_value.value = load
-        self.scheduleCalculated = True
 
-        # 200929DJH: Trim the list of scheduled powers for any that lie in expired markets.
-        self.scheduledPowers = [x for x in self.scheduledPowers if x.market.marketState != MarketState.Expired]
-
+    # TODO: Update tests and move out of this file.
     @classmethod
     def test_all(cls):
         # TEST_ALL() - test all the class methods
@@ -236,7 +210,7 @@ class OpenLoopLoadPredictor(LocalAsset):
         st = st + dur  # 1p on the same day
         test_intervals.append(TimeInterval(mkt, dur, st))
 
-        test_mkt.timeIntervals = test_intervals
+        test_mkt.time_intervals = test_intervals
 
         # Create a test TemperatureForecastModel object and give it some
         # temperature values in the test TimeIntervals.
@@ -253,13 +227,9 @@ class OpenLoopLoadPredictor(LocalAsset):
         # Create a OpenLoopRichlandLoadPredictor test object.
         test_forecast = TemperatureForecastModel()
         test_forecast.informationType = 'temperature'
-        test_forecast.predictedValues = [
-            IntervalValue(test_forecast, test_intervals[0], test_mkt, MeasurementType.Temperature, 20),
-            # Heating regime
-            IntervalValue(test_forecast, test_intervals[1], test_mkt, MeasurementType.Temperature, 100)
-            # Cooling regime
-        ]
-        test_obj = OpenLoopLoadPredictor(test_forecast)
+        test_forecast.predicted_values.update(test_intervals[0], 20)  # Heating regime
+        test_forecast.predicted_values.update(test_intervals[1], 100) # Cooling regime
+        test_obj = OpenLoopLoadPredictor(test_forecast)  # TODO: Wrong signature. Test will need updated to run.
 
         # Manually evaluate from the lookup table and the above categorical inputs
         # DOW = Wed. ==>
@@ -283,7 +253,7 @@ class OpenLoopLoadPredictor(LocalAsset):
             # _log.warning('- the method had errors when called')
 
         # if any(abs([test_obj.scheduledPowers(1: 2).value] - [LOAD])) > 5
-        if any([abs(test_obj.scheduledPowers[i].value - LOAD[i]) > 5 for i in range(len(test_obj.scheduledPowers))]):
+        if any([abs(test_obj.scheduled_powers[i].value - LOAD[i]) > 5 for i in range(len(test_obj.scheduled_powers))]):
             pf = 'fail'
             # _log.warning('- the calculated powers were not as expected')
         else:
@@ -301,18 +271,18 @@ class OpenLoopLoadPredictor(LocalAsset):
         # TODO: This path will not exist.
         forecaster = TemperatureForecastModel(
             '/home/hngo/PycharmProjects/volttron-applications/pnnl/TNSAgent/campus_config'
-        )
+        )  # TODO: Wrong signature. Test will need updated to run.
 
         # Create market with some time intervals
         mkt = Market()
         analysis_time = parser.parse("2017-01-01 00:00:00")
-        mkt.marketClearingTime = analysis_time
-        mkt.nextMarketClearingTime = mkt.marketClearingTime + mkt.marketClearingInterval
+        mkt.market_clearing_time = analysis_time
+        mkt.next_market_clearing_time = mkt.market_clearing_time + mkt.market_clearing_interval
 
         # Control steps using horizon
-        mkt.futureHorizon = timedelta(days=365)
+        mkt.future_horizon = timedelta(days=365)
 
-        mkt.check_intervals(analysis_time)
+        mkt.check_intervals(analysis_time)   # TODO: Wrong signature. Test will need updated to run.
 
         # set time intervals
         forecaster.update_information(mkt)
@@ -321,7 +291,7 @@ class OpenLoopLoadPredictor(LocalAsset):
         predictor = OpenLoopLoadPredictor(forecaster)
         predictor.schedule_power(mkt)
 
-        powers = [(x.timeInterval.start_time, x.value) for x in predictor.scheduledPowers]
+        powers = [(x.time_interval.start_time, x.value) for x in predictor.scheduled_powers]
         total_power = sum([s[1] for s in powers])
 
         print(powers)
@@ -335,6 +305,7 @@ class OpenLoopLoadPredictor(LocalAsset):
         record = super(OpenLoopLoadPredictor, self).get_record()
         record.update({
             'asset_id': self.id,
+            'default_temperature': self.default_temperature,
             'dow_intercept': self.dow_intercept,
             'season': self.season,
             'values': self.values,
@@ -351,6 +322,7 @@ class OpenLoopLoadPredictor(LocalAsset):
                 "inherits": "local_asset",
                 "columns": [
                     {"name": "asset_id", "foreign_key": "local_asset.id", "kwargs": {"primary_key": True}},
+                    {"name": "default_temperature", "type": "Float"},
                     {"name": "dow_intercept", "type": "JSON"},
                     {"name": "season", "type": "JSON"},
                     {"name": "values", "type": "JSON"},

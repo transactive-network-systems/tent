@@ -58,7 +58,7 @@ class Vertex(Archivable):
         self.cost = float(prod_cost)  # [$] Real & >=0.0
 
         # The signal. The unit price upon which resource decisions should be based.
-        self.marginalPrice = float(marginal_price)  # [$/kWh] Real & >=0.0
+        self.marginal_price = float(marginal_price)  # [$/kWh] Real & >=0.0
 
         # The averaged interval power
         # POWER > 0: generation or importation of real power
@@ -67,7 +67,7 @@ class Vertex(Archivable):
 
         # Relative uncertainty of the included power value. This is not a required property, but it will be useful in
         # future versions for the treatment of reliability and resiliency. [dimensionless, 0.01 = 1#]
-        self.powerUncertainty = float(power_uncertainty)  # Real & >=0.0
+        self.power_uncertainty = float(power_uncertainty)  # Real & >=0.0
 
         # Logical continuity flag. This flag should be true if a continuum of power generation, importation,
         # consumption, or importation exists on both sides of the vertex, or if there is only one vertex. Set false if
@@ -91,7 +91,7 @@ class Vertex(Archivable):
 
     def get_dict(self):
         vertex_dict = {
-            "marginalPrice": self.marginalPrice,
+            "marginalPrice": self.marginal_price,
             "power": self.power,
             "record": self.record
         }

@@ -110,7 +110,7 @@ class DayAheadAuction(Auction):
         else:
             market = \
                 [x for x in this_transactive_node.markets if x.marketClearingTime == self.nextMarketClearingTime
-                 and x.marketSeriesName == self.marketSeriesName][0]
+                 and x.market_series_name == self.market_series_name][0]
         # # Something is seriously wrong if the recently instantiated market cannot be found. Raise an error and stop.
         if not market:
             raise ('No predecessor of ' + self.name + ' could be found.')
@@ -123,13 +123,13 @@ class DayAheadAuction(Auction):
         for i in range(len(market_interval_start_times)):
 
             interval_start = market_interval_start_times[i]
-            interval_end = interval_start + market.intervalDuration
+            interval_end = interval_start + market.interval_duration
 
             while interval_start < interval_end:
                 # Find the prior market in this series. It should be the one that shares the same market series name and
                 # is, until now, the newest market in the series.
                 prior_market = [x for x in this_transactive_node.markets
-                                if x.marketSeriesName == "Real-Time Auction"
+                                if x.market_series_name == "Real-Time Auction"
                                 and x.isNewestMarket is True]
 
                 if prior_market is None or len(prior_market) == 0:
@@ -176,13 +176,13 @@ class DayAheadAuction(Auction):
                 new_market.intervalToBeRefined = [x for x in market.timeIntervals
                                                   if x.start_time == market_interval_start_times[i]]
 
-                new_market.marketState = new_market.initialMarketState
+                new_market.marketState = new_market.initial_market_state
 
                 # Append the new market object to the list of active market objects that is maintained by the agent.
                 this_transactive_node.markets.append(new_market)
 
                 # Calculate the next interval's start time.
-                interval_start = interval_start + new_market.intervalDuration
+                interval_start = interval_start + new_market.interval_duration
 
                 # 210127DJH: Add the newly created market to a list.
                 new_market_list.append(new_market)

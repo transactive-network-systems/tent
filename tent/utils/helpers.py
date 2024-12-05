@@ -166,32 +166,23 @@ def get_duration_in_hour(dur):
         dur = dur.seconds // 3600
     return dur
 
-
+# TODO: Remove deprecated/commented block once references to these functions have been replaced.
+######## BEGIN DEPRECATED
 def find_objs_by_ti(items, ti):
     # 200922DJH: This is lacking in Version 3 because multiple markets can share the same start time. Changing to match
     #            the actual TimeInterval object, which is unique to a market.
     # found_items = [x for x in items if x.timeInterval.startTime == ti.startTime]
-    found_items = [x for x in items if x.timeInterval == ti]
+    found_items = [x for x in items if x.time_interval == ti]
     return found_items
 
 
-def find_obj_by_ti(items, ti):
-    # 200922DJH: This is lacking in Version 3 because multiple markets can share the same start time. Changing to match
-    #            the actual TimeInterval object, which is unique to a market.
-    # found_items = [x for x in items if x.timeInterval.startTime == ti.startTime]
-    found_items = [x for x in items if x.timeInterval == ti]
-    return found_items[0] if len(found_items) > 0 else None
-
-
-def find_objs_by_st(items, value):
-    found_items = [x for x in items if x.startTime == value]
-    return found_items
-
-
-def find_obj_by_st(items, value):
-    found_items = [x for x in items if x.startTime == value]
-    return found_items[0] if len(found_items) > 0 else None
-
+# def find_obj_by_ti(items, ti):
+#     # 200922DJH: This is lacking in Version 3 because multiple markets can share the same start time. Changing to match
+#     #            the actual TimeInterval object, which is unique to a market.
+#     # found_items = [x for x in items if x.timeInterval.startTime == ti.startTime]
+#     found_items = [x for x in items if x.timeInterval == ti]
+#     return found_items[0] if len(found_items) > 0 else None
+######## END DEPRECATED
 
 def is_heavyloadhour(datetime_value):
     """True if time is within a HLH hour
@@ -230,7 +221,7 @@ def is_heavyloadhour(datetime_value):
 def order_vertices(uv):
     # TODO: This helper function architecturally belongs among Vertex methods, not here. Move.
     # 211307DJH: Improving method to also assign sequential record numbers to the ordered vertices.
-    sv = sorted(uv, key=lambda x: (x.marginalPrice, x.power))
+    sv = sorted(uv, key=lambda x: (x.marginal_price, x.power))
     for n in range(len(sv)):
         sv[n].record = n
     return sv
@@ -279,7 +270,7 @@ def prod_cost_from_vertices(obj, ti, pwr):
         return cost
 
     # Find the active vertices for the object in the given time interval
-    v = [x for x in obj.activeVertices if x.timeInterval.start_time == ti.start_time]
+    v = [x for x in obj.active_vertices if x.time_interval.start_time == ti.start_time]
 
     # number of active vertices len in the indexed time interval
     v_len = len(v)
@@ -335,7 +326,7 @@ def prod_cost_from_vertices(obj, ti, pwr):
                     # marginal price of the lower vertex and the power
                     # exceeding that of the lower vertex
                     dur = get_duration_in_hour(ti.duration)
-                    a1 = v[k].marginalPrice  # [$/kWh]
+                    a1 = v[k].marginal_price  # [$/kWh]
                     a1 = a1 * (pwr - v[k].power)  # [$/h]
                     a1 = a1 * dur  # [$]
 
@@ -348,7 +339,7 @@ def prod_cost_from_vertices(obj, ti, pwr):
                         a2 = 0.0  # [$]
 
                     else:
-                        a2 = v[k + 1].marginalPrice - v[k].marginalPrice  # [$/kWh]
+                        a2 = v[k + 1].marginal_price - v[k].marginal_price  # [$/kWh]
                         a2 = a2 / (v[k + 1].power - v[k].power)  # [$/kWh/kW]
                         a2 = a2 * (pwr - v[k].power) ** 2  # [$/h]
                         a2 = a2 * dur  # [$]
@@ -381,7 +372,7 @@ def prod_cost_from_formula(obj, ti):
     a = obj.cost_parameters
 
     # Find the scheduled power sp in time interval ti
-    sp = find_obj_by_ti(obj.scheduledPowers, ti)
+    sp = obj.scheduled_powers.get_by_interval(ti)
 
     # Extract the scheduled-power value
     sp = sp.value  # [avg.kW]
@@ -418,7 +409,7 @@ def production(obj, price, ti, market=None):
     # the given price (positive for generation) [avg.kW].
 
     # Find the active production vertices for this time interval (see class IntervalValue).
-    pv = find_objs_by_ti(obj.activeVertices, ti)
+    pv = find_objs_by_ti(obj.active_vertices, ti)
 
     # Extract the vertices (see struct Vertex) from the interval values (see IntervalValue class).
     pvv = [x.value for x in pv]  # vertices
@@ -449,13 +440,13 @@ def power_from_vertices(vertices, price):
         return p1
 
     else:  # Multiple active vertices were found
-        if price < pvv[0].marginalPrice:
+        if price < pvv[0].marginal_price:
             # Special case where marginal price is before first vertex.
             # The power is at its minimum.
             p1 = pvv[0].power  # [kW]
             return p1
 
-        elif price >= pvv[-1].marginalPrice:
+        elif price >= pvv[-1].marginal_price:
             # Special case where marginal price is after the last
             # vertex. The power is at its maximum.
             p1 = pvv[-1].power  # [kW]
@@ -465,24 +456,24 @@ def power_from_vertices(vertices, price):
             # Index through the active vertices pvv in the given time
             # interval ti
             for i in range(len(pvv) - 1):
-                if pvv[i].marginalPrice <= price < pvv[i + 1].marginalPrice:
+                if pvv[i].marginal_price <= price < pvv[i + 1].marginal_price:
                     # The marginal price falls between two vertices that
                     # are sloping upward to the right. Interpolate
                     # between the vertices to find the power production.
                     p1 = pvv[i].power \
-                         + (price - pvv[i].marginalPrice) \
+                         + (price - pvv[i].marginal_price) \
                          * (pvv[i + 1].power - pvv[i].power) \
-                         / (pvv[i + 1].marginalPrice - pvv[i].marginalPrice)  # [avg.kW]
+                         / (pvv[i + 1].marginal_price - pvv[i].marginal_price)  # [avg.kW]
                     return p1
 
-                elif price == pvv[i].marginalPrice == pvv[i + 1].marginalPrice:
+                elif price == pvv[i].marginal_price == pvv[i + 1].marginal_price:
                     # The marginal price is the same as for two vertices
                     # that lie vertically at the same marginal price.
                     # Assign the power of the vertex having greater power.
                     p1 = pvv[i + 1].power  # [kW]
                     return p1
 
-                elif price == pvv[i].marginalPrice:
+                elif price == pvv[i].marginal_price:
                     # The marginal price is the same as the indexed
                     # active vertex. Use its power value.
                     p1 = pvv[i].power  # [kW]
@@ -513,10 +504,10 @@ def are_different1(s, r, threshold, calling_neighbor=''):
     r0 = r0[0]  # a TransactiveRecord
 
     # Calculate the difference dmp in scheduled marginal prices.
-    dmp = abs(s0.marginalPrice - r0.marginalPrice)  # [$/kWh]
+    dmp = abs(s0.marginal_price - r0.marginal_price)  # [$/kWh]
 
     # Calculate the average mp_avg of the two scheduled marginal prices.
-    mp_avg = 0.5 * abs(s0.marginalPrice + r0.marginalPrice)  # [$/kWh]
+    mp_avg = 0.5 * abs(s0.marginal_price + r0.marginal_price)  # [$/kWh]
 
     # Calculate the difference dq between the scheduled powers.
     dq = abs(-s0.power - r0.power)  # [avg. kW]
@@ -537,9 +528,9 @@ def are_different1(s, r, threshold, calling_neighbor=''):
     _log.debug("TCC neighbor {} has q_avg {}, r0.power {}, s0.power {}, dq {}, dmp {}".format(
          calling_neighbor, q_avg, r0.power, s0.power, dq, dmp))
     _log.debug("TCC neighbor {} s is: {}".format(
-         calling_neighbor, [(x.timeInterval, x.record, x.power, x.marginalPrice) for x in s]))
+         calling_neighbor, [(x.time_interval, x.record, x.power, x.marginal_price) for x in s]))
     _log.debug("TCC neighbor {} r is: {}".format(
-         calling_neighbor, [(x.timeInterval, x.record, x.power, x.marginalPrice) for x in r]))
+         calling_neighbor, [(x.time_interval, x.record, x.power, x.marginal_price) for x in r]))
 
     if q_avg != 0:
         if len(s) == 1 or len(r) == 1:
@@ -601,9 +592,9 @@ def are_different2(m, s, threshold, calling_neighbor=''):
         _log.debug("TCC neighbor {} has q_avg {}, m0.power {}, s0.power {}, dq {}".format(
             calling_neighbor, avg_q, m0.power, s0.power, dq))
         _log.debug("TCC neighbor {} s is: {}".format(
-            calling_neighbor, [(x.timeInterval, x.record, x.power, x.marginalPrice) for x in s]))
+            calling_neighbor, [(x.time_interval, x.record, x.power, x.marginal_price) for x in s]))
         _log.debug("TCC neighbor {} m is: {}".format(
-            calling_neighbor, [(x.timeInterval, x.record, x.power, x.marginalPrice) for x in m]))
+            calling_neighbor, [(x.time_interval, x.record, x.power, x.marginal_price) for x in m]))
 
         # Calculate relative distance d between the two scheduled powers.
         # Avoid the unlikely condition that the average power is zero.
@@ -631,9 +622,9 @@ def are_different2(m, s, threshold, calling_neighbor=''):
         m0 = [x for x in m if x.record != 0]
 
         _log.debug("TCC neighbor {} s is: {}".format(
-            calling_neighbor, [(x.timeInterval, x.record, x.power, x.marginalPrice) for x in s]))
+            calling_neighbor, [(x.time_interval, x.record, x.power, x.marginal_price) for x in s]))
         _log.debug("TCC neighbor {} m is: {}".format(
-            calling_neighbor, [(x.timeInterval, x.record, x.power, x.marginalPrice) for x in m]))
+            calling_neighbor, [(x.time_interval, x.record, x.power, x.marginal_price) for x in m]))
 
         # Index through the sent and calculated flexibility records. See if
         # any record cannot be matched with a corresponding member of
@@ -643,10 +634,10 @@ def are_different2(m, s, threshold, calling_neighbor=''):
 
             for j in range(len(m0)):
                 # Calculate difference dmp between marginal prices .
-                dmp = abs(s0[i].marginalPrice - m0[j].marginalPrice)  # [$/kWh]
+                dmp = abs(s0[i].marginal_price - m0[j].marginal_price)  # [$/kWh]
 
                 # Calculate average avg_mp of marginal price pair.
-                avg_mp = 0.5 * (s0[i].marginalPrice + m0[j].marginalPrice)  # [$/kWh]
+                avg_mp = 0.5 * (s0[i].marginal_price + m0[j].marginal_price)  # [$/kWh]
 
                 # Calculate difference dq between power values in the two sets of records.
                 dq = abs(s0[i].power - m0[j].power)  # [avg.kW]

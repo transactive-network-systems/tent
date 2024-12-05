@@ -43,7 +43,7 @@ under Contract DE-AC05-76RL01830
 
 from tent.enumerations import MarketTypes, Method
 from tent.market import Market
-from tent.utils.helpers import find_obj_by_ti, order_vertices
+from tent.utils.helpers import order_vertices
 
 
 class ConsensusMarket(Market):
@@ -95,11 +95,11 @@ class ConsensusMarket(Market):
             # Calculate the duality gap, defined here as the relative difference between total production and dual
             # costs.
 
-            if self.totalProductionCost == 0:
+            if self.total_production_cost == 0:
                 duality_gap = float("inf")
             else:
-                duality_gap = self.totalProductionCost - self.totalDualCost  # [$]
-                duality_gap = duality_gap / self.totalProductionCost  # [dimensionless. 0.01 is 1#]
+                duality_gap = self.total_production_cost - self.total_dual_cost  # [$]
+                duality_gap = duality_gap / self.total_production_cost  # [dimensionless. 0.01 is 1#]
 
             # Display the iteration counter and duality gap. This may be commented out once we have confidence in the
             # convergence of the iterations.
@@ -109,7 +109,7 @@ class ConsensusMarket(Market):
             """
 
             # Check convergence condition
-            if abs(duality_gap) <= self.dualityGapThreshold:  # Converged
+            if abs(duality_gap) <= self.duality_gap_threshold:  # Converged
                 # 1.3.1 System has converged to an acceptable balance.
                 self.converged = True
 
@@ -117,7 +117,7 @@ class ConsensusMarket(Market):
             # intervals to drive the system toward balance and convergence.
 
             # Gather active time intervals
-            time_intervals = self.timeIntervals  # TimeIntervals
+            time_intervals = self.time_intervals  # TimeIntervals
 
             if self.method == Method.Interpolation:  # == 2
                 self.assign_system_vertices(my_transactive_node)
@@ -125,29 +125,25 @@ class ConsensusMarket(Market):
                 # _log.debug("{} market active vertices are: {}".format(self.name, av))
 
             # Index through active time intervals.
-            for i in range(len(time_intervals)):
-                # Find the marginal price interval value for the
-                # corresponding indexed time interval.
-                marginal_price = find_obj_by_ti(self.marginalPrices, time_intervals[i])
-
-                # Extract its  marginal price value.
-                cleared_marginal_price = marginal_price.value  # [$/kWh]
+            for time_interval in time_intervals:
+                # Find the marginal price interval value for the corresponding indexed time interval.
+                cleared_marginal_price = self.marginal_prices.get_by_interval(time_interval).value  # [$/kWh]
 
                 if self.method == Method.Subgradient:  # == 1
                     # Find the net power corresponding to the indexed time interval.
-                    net_power = find_obj_by_ti(self.netPowers, time_intervals[i])
-                    total_generation = find_obj_by_ti(self.totalGeneration, time_intervals[i])
-                    total_demand = find_obj_by_ti(self.totalDemand, time_intervals[i])
+                    net_power = self.net_powers.get_by_interval(time_interval)
+                    total_generation = self.total_generation.get_by_interval(time_interval)
+                    total_demand = self.total_demand.get_by_interval(time_interval)
 
-                    net_power = net_power.value / (total_generation.value - total_demand.value)
+                    net_power = net_power / (total_generation - total_demand)
 
                     # Update the cleared marginal price using sub-gradient search.
                     cleared_marginal_price = cleared_marginal_price - (net_power * 1e-1) / (10 + k)  # [$/kWh]
 
                 elif self.method == Method.Interpolation:  # === 2
                     # Get the indexed active system vertices
-                    active_vertices = [x.value for x in self.activeVertices
-                                       if x.timeInterval.start_time == time_intervals[i].start_time]
+                    active_vertices = [x.value for x in self.active_vertices
+                                       if x.time_interval.start_time == time_interval.start_time]
 
                     # Order the system vertices in the indexed time interval
                     active_vertices = order_vertices(active_vertices)
@@ -157,14 +153,14 @@ class ConsensusMarket(Market):
                         # Fix a case where all intersection points are on X-axis by using < instead of <=
                         lower_vertex = [x for x in active_vertices if x.power < 0]
                         if len(lower_vertex) == 0:
-                            err_msg = "At {}, there is no point having power < 0".format(time_intervals[i].name)
+                            err_msg = "At {}, there is no point having power < 0".format(time_interval.name)
                         else:
                             lower_vertex = lower_vertex[-1]
 
                         # Find the vertex that bookcases the balance point from the upper side.
                         upper_vertex = [x for x in active_vertices if x.power >= 0]
                         if len(upper_vertex) == 0:
-                            err_msg = "At {}, there is no point having power >= 0".format(time_intervals[i].name)
+                            err_msg = "At {}, there is no point having power >= 0".format(time_interval.name)
                         else:
                             upper_vertex = upper_vertex[0]
 
@@ -172,7 +168,7 @@ class ConsensusMarket(Market):
                         power_range = upper_vertex.power - lower_vertex.power
                         marginal_price_range = upper_vertex.marginalPrice - lower_vertex.marginalPrice
                         if power_range == 0:
-                            err_msg = "At {}, power range is 0".format(time_intervals[i].name)
+                            err_msg = "At {}, power range is 0".format(time_interval.name)
                         cleared_marginal_price = - marginal_price_range * lower_vertex.power / power_range \
                                                  + lower_vertex.marginalPrice
                     except RuntimeWarning as warning:
@@ -190,7 +186,7 @@ class ConsensusMarket(Market):
 
                 # Regardless of the method used, cleared_marginal_price should now hold the updated marginal price.
                 # Assign it to the marginal price value for the indexed active time interval.
-                marginal_price.value = cleared_marginal_price  # [$/kWh]
+                self.marginal_prices.update(time_interval, cleared_marginal_price)  # [$/kWh]
 
             # Increment the iteration counter.
             k = k + 1

@@ -132,7 +132,7 @@ class BACnetMeterPoint(PullMeterPoint):
         #  This should probably be refactored to only query the current value.
         #  Future forecasts should be the domain of information services.
         # Gather active time intervals
-        time_intervals = market.timeIntervals
+        time_intervals = market.time_intervals
         for interval in time_intervals:
             if points:
                 bacnet_data = self.bacnet_proxy.read_using_single_request(device_address, points)
@@ -147,6 +147,9 @@ class BACnetMeterPoint(PullMeterPoint):
             # If the timeInterval does not exist in the csv data, skip. 
             try:
                 value = bacnet_data
+                # TODO: This behavior no longer matches the functionality of the base class.
+                #  The MeterPoint class does not use TimeIntervals and IntervalValues for its data,
+                #  since metered data is more find-grained.
                 interval_value = IntervalValue(self, interval, market, MeasurementType.EnergyReal, value)
                 self.meter_intervals.append(interval_value)
             except KeyError:

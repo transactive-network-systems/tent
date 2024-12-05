@@ -92,7 +92,7 @@ class CSVMeterPoint(PullMeterPoint):
 
         meter_df = self._csv_to_df()
         # Gather active time intervals
-        time_intervals = market.timeIntervals
+        time_intervals = market.time_intervals
         for i in range(len(time_intervals)):
             start_time = time_intervals[i].start_time
             end_time = start_time + time_intervals[i].duration
@@ -102,6 +102,9 @@ class CSVMeterPoint(PullMeterPoint):
                 start_value = meter_df["Metered_Energy"][start_time]
                 end_value = meter_df["Metered_Energy"][end_time]
                 interval_value = end_value - start_value
+                # TODO: This behavior no longer matches the functionality of the base class.
+                #  The MeterPoint class does not use TimeIntervals and IntervalValues for its data,
+                #  since metered data is more find-grained.
                 interval = IntervalValue(self, time_intervals[i], market, MeasurementType.EnergyReal, interval_value)
                 self.meter_intervals.append(interval)
             except KeyError:

@@ -80,31 +80,28 @@ class MeterPoint(Component):
         # These are static properties that may be passed as parameters:
         self.data_period_seconds = float(data_period_seconds)
         self.max_buffer_seconds = float(max_buffer_seconds)
-        self.measurementInterval = measurement_interval if isinstance(measurement_interval, timedelta) \
+        self.measurement_interval = measurement_interval if isinstance(measurement_interval, timedelta) \
             else timedelta(seconds=measurement_interval)
 
         if isinstance(measurement_type, MeasurementType):
-            self.measurementType = measurement_type
+            self.measurement_type = measurement_type
         elif isinstance(measurement_type, int):
-            self.measurementType = MeasurementType(measurement_type)
+            self.measurement_type = MeasurementType(measurement_type)
         else:
-            self.measurementType = MeasurementType[measurement_type]
+            self.measurement_type = MeasurementType[measurement_type]
 
         if isinstance(measurement_unit, MeasurementUnit):
-            self.measurementUnit = measurement_unit
+            self.measurement_unit = measurement_unit
         elif isinstance(measurement_unit, int):
-            self.measurementUnit = MeasurementUnit(measurement_unit)
+            self.measurement_unit = MeasurementUnit(measurement_unit)
         else:
-            self.measurementUnit = MeasurementUnit[measurement_unit]
+            self.measurement_unit = MeasurementUnit[measurement_unit]
         self.scale_factor = float(scale_factor)  # Use -1 to reverse the sign of the meter.
-
-        # These following properties are dynamically assigned and should not be assigned during meter configuration:
-        self.meter_intervals = []
 
     @property
     def current_interval_measurements(self) -> list:
         """Last hour of measurements."""
-        return self.buffer.get(since=(self.buffer.dt_class.now() - self.measurementInterval))
+        return self.buffer.get(since=(self.buffer.dt_class.now() - self.measurement_interval))
 
     @property
     def mean_measurement(self):
@@ -135,9 +132,9 @@ class MeterPoint(Component):
         record = super(MeterPoint, self).get_record()
         record.update({
             'class': self.__class__.__name__,
-            'measurement_type': self.measurementType,
-            'measurement_unit': self.measurementUnit,
-            'measurement_interval': self.measurementInterval,
+            'measurement_type': self.measurement_type,
+            'measurement_unit': self.measurement_unit,
+            'measurement_interval': self.measurement_interval,
             'data_period_seconds': self.data_period_seconds,
             'max_buffer_seconds': self.max_buffer_seconds,
             'scale_factor': self.scale_factor
