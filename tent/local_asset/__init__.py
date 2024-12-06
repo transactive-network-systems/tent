@@ -367,9 +367,7 @@ class LocalAsset(Entity):
 
             # Dual cost in the time interval is calculated as production cost, minus the product of marginal price,
             # scheduled power, and the duration of the time interval.
-            # TODO: Why is this using seconds (gives 0 for 1 day) instead of total_seconds() (gives 86400 for 1 day)
-            # TODO: Why is this using floor division? If the interval duration is 15 minutes, this line will yield 0.
-            duration = time_interval.duration.seconds // 3600
+            duration = time_interval.duration.total_seconds() / 3600
             dual_cost = production_cost - (marginal_price * scheduled_power * duration)  # [$]
 
             self.dual_costs.update(time_interval, dual_cost)
