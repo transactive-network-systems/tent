@@ -2,7 +2,7 @@ import abc
 
 from datetime import datetime, timezone
 from uuid6 import uuid7, UUID
-from weakref import ref, WeakSet
+from weakref import WeakSet
 
 
 class Archivable:
@@ -54,11 +54,11 @@ class Component(Archivable):
         super(Component, self).__init__()
         self.description: str = str(description)              # [text]
         self.name: str = str(name)                            # [text]
-        self.tn = ref(transactive_node)
+        self.tn = transactive_node
 
     @property
     def data_manager(self):
-        return self.tn().data_manager
+        return self.tn.data_manager
 
     @abc.abstractmethod
     def get_record(self) -> dict:
@@ -66,7 +66,7 @@ class Component(Archivable):
         record.update({
             'name': self.name,
             'description': self.description,
-            'tn_id': self.tn().id
+            'tn_id': self.tn.id
         })
         return record
 
@@ -110,8 +110,8 @@ class Entity(Component):
         information_services = information_services if information_services is not None else []
         if all([isinstance(ism, Component) for ism in information_services]):
             self.information_services.update(information_services)
-        elif all([isinstance(ism, str) for ism in information_services]) and self.tn and self.tn():
-            self.information_services.update(self.tn().get_isms_by_attribute('name', information_services))
+        elif all([isinstance(ism, str) for ism in information_services]):
+            self.information_services.update(self.tn.get_isms_by_attribute('name', information_services))
         else:
             raise ValueError(f'All information services assigned to LocalAsset {self.name} must be an instance of class'
                              f' InformationServiceModel or the name of an InformationServiceModel held by the'
@@ -122,8 +122,8 @@ class Entity(Component):
         meter_points = meter_points if meter_points is not None else []
         if all([isinstance(mp, Component) for mp in meter_points]):
             self.meter_points.update(meter_points)
-        elif all([isinstance(mp, str) for mp in meter_points]) and self.tn and self.tn():
-            self.meter_points.update(self.tn().get_meters_by_attribute('name', meter_points))
+        elif all([isinstance(mp, str) for mp in meter_points]):
+            self.meter_points.update(self.tn.get_meters_by_attribute('name', meter_points))
         else:
             raise ValueError(f'All meter points assigned to LocalAsset {self.name} must be an instance of class'
                              f' MeterPoint or the name of a MeterPoint held by the TransactiveNode.')

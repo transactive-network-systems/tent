@@ -80,6 +80,7 @@ class LocalAsset(Entity):
     # Controllable - unconstrained scheduling based on a polynomial production or utility def
 
     def __init__(self,
+                 transactive_node,
                  cost_parameters=(0.0, 0.0, 0.0),
                  default_power=0.0,
                  default_vertices=None,
@@ -92,8 +93,7 @@ class LocalAsset(Entity):
                  meter_points=None,
                  name='',
                  scheduling_horizon: Union[timedelta, float, int] = timedelta(hours=24),
-                 subclass=None,
-                 transactive_node=None):
+                 subclass=None):
         super(LocalAsset, self).__init__(cost_parameters, default_vertices, description, information_services, location,
                                          maximum_power, meter_points, minimum_power, name, transactive_node)
 

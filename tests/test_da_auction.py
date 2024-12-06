@@ -64,9 +64,7 @@ def test_spawn_markets():
     try:
         # 240228DJH: For some reason, spawn_markets() in day_ahead_market.py expected this_transactive_market, while the
         #            original spawn_markets() in the base market class expected my_transactive_market.
-        prior_da_auction.spawn_markets(my_transactive_node=test_node,
-                                       new_market_clearing_time=time
-                                       )
+        prior_da_auction.spawn_markets(new_market_clearing_time=time)
         print('  - The method ran without errors.')
     except RuntimeError as message:
         print('  - ERRORS WERE ENCOUNTERED: ', message)

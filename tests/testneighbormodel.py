@@ -455,8 +455,7 @@ def test_prep_transactive_signal():
     test_asset_model.activeVertices = [interval_values[1]]
 
     try:
-        test_model.prep_transactive_signal(market=test_market,
-                                           this_transactive_node=test_myTransactiveNode)
+        test_model.prep_transactive_signal(market=test_market)
         print('  - the method ran to completion without errors')
     except RuntimeWarning:
         print('  - ERRORS ENCOUNTERED')
@@ -621,7 +620,7 @@ def test_receive_transactive_signal():
 
     test_model.my_signal = [test_record1, test_record2]
 
-    test_model.send_transactive_signal(this_transactive_node=test_myTransactiveNode)
+    test_model.send_transactive_signal(test_market)
     print('  - this test depends on method send_transactive_signal() to create a file')
 
     # Clear the mySignal property that will be used to receive the records.
@@ -634,7 +633,7 @@ def test_receive_transactive_signal():
     test_model.name = name_holder
 
     try:
-        test_model.receive_transactive_signal(this_transactive_node=test_myTransactiveNode, curves=[])
+        test_model.receive_transactive_signal(curves=[])
         print('  - the receive method ran without errors')
     except RuntimeWarning:
         print('  - ERRORS ENCOUNTERED')

@@ -559,7 +559,7 @@ def test_events():
     assert test_mkt.is_newest_market is True, "The existing market should be the newest for fair test"
 
     try:
-        test_mkt.events(test_mtn)
+        test_mkt.events()
         print('  - The case ran without errors')
     except RuntimeWarning as warning:
         print('  - ERRORS WERE ENCOUNTERED:', warning)
@@ -604,7 +604,7 @@ def test_events():
     assert test_mkt.is_newest_market is True, "Existing market must be newest to trigger instantiation of another market"
 
     try:
-        test_mkt.events(test_mtn)
+        test_mkt.events()
         print('  - The case ran without errors.')
     except RuntimeWarning as warning:
         print('  - ERRORS WERE ENCOUNTERED:', warning)
@@ -656,7 +656,7 @@ def test_events():
     assert test_mkt.is_newest_market is True, "The existing market must be the newest to trigger new ones"
 
     try:
-        test_mkt.events(test_mtn)
+        test_mkt.events()
         print('  - The case ran without errors.')
     except RuntimeWarning as warning:
         print('  - ERRORS WERE ENCOUTNERED:', warning)
@@ -711,7 +711,7 @@ def test_events():
         "The next market clearing time should not trigger creation of a new market"
 
     try:
-        test_mkt.events(test_mtn)
+        test_mkt.events()
         print('  - The case ran without errors.')
     except RuntimeWarning as warning:
         print('  - ERRORS WERE ENCOUNTERED:', warning)
@@ -761,7 +761,7 @@ def test_events():
         "The next market clearing time should not trigger creation of a new market"
 
     try:
-        test_mkt.events(test_mtn)
+        test_mkt.events()
         print('  - The case ran without errors.')
     except RuntimeWarning as warning:
         print('  - ERRORS WERE ENCOUNTERED:', warning)
@@ -808,7 +808,7 @@ def test_events():
         "The next market clearing time should not trigger creation of a new market"
 
     try:
-        test_mkt.events(test_mtn)
+        test_mkt.events()
         print('  - The case ran without errors.')
     except RuntimeWarning as warning:
         print('  - ERRORS WERE ENCOUNTERED:', warning)
@@ -855,7 +855,7 @@ def test_events():
         "The next market clearing time should not trigger creation of a new market"
 
     try:
-        test_mkt.events(test_mtn)
+        test_mkt.events()
         print('  - The case ran without errors.')
     except RuntimeWarning as warning:
         print('  - ERRORS WERE ENCOUNTERED:', warning)
@@ -902,7 +902,7 @@ def test_events():
         "The next market clearing time should not trigger creation of a new market"
 
     try:
-        test_mkt.events(test_mtn)
+        test_mkt.events()
         print('  - The case ran without errors.')
     except RuntimeWarning as warning:
         print('  - ERRORS WERE ENCOUNTERED:', warning)
@@ -949,7 +949,7 @@ def test_events():
         "The next market clearing time should not trigger creation of a new market"
 
     try:
-        test_mkt.events(test_mtn)
+        test_mkt.events()
         print('  - The case ran without errors.')
     except RuntimeWarning as warning:
         print('  - ERRORS WERE ENCOUNTERED:', warning)
@@ -998,7 +998,7 @@ def test_events():
         "The next market clearing time should not trigger creation of a new market"
 
     try:
-        test_mkt.events(test_mtn)
+        test_mkt.events()
         print('  - The case ran without errors.')
     except RuntimeWarning as warning:
         print('  - ERRORS WERE ENCOUNTERED:', warning)
@@ -1047,7 +1047,7 @@ def test_events():
         "The next market clearing time should not trigger creation of a new market"
 
     try:
-        test_mkt.events(test_mtn)
+        test_mkt.events()
         print('  - The case ran without errors.')
     except RuntimeWarning as warning:
         print('  - ERRORS WERE ENCOUNTERED:', warning)
@@ -1097,7 +1097,7 @@ def test_events():
         "The next market clearing time should not trigger creation of a new market"
 
     try:
-        test_mkt.events(test_mtn)
+        test_mkt.events()
         print('  - The case ran without errors.')
     except RuntimeWarning as warning:
         print('  - ERRORS WERE ENCOUNTERED:', warning)
@@ -1145,7 +1145,7 @@ def test_events():
         "The next market clearing time should not trigger creation of a new market"
 
     try:
-        test_mkt.events(test_mtn)
+        test_mkt.events()
         print('  - The case ran without errors.')
     except RuntimeWarning as warning:
         print('  - ERRORS WERE ENCOUNTERED:', warning)
@@ -1192,7 +1192,7 @@ def test_events():
         "The next market clearing time should not trigger creation of a new market"
 
     try:
-        test_mkt.events(test_mtn)
+        test_mkt.events()
         print('  - The case ran without errors.')
     except RuntimeWarning as warning:
         print('  - ERRORS WERE ENCOUNTERED:', warning)
@@ -1239,7 +1239,7 @@ def test_events():
         "The next market clearing time should not trigger creation of a new market"
 
     try:
-        test_mkt.events(test_mtn)
+        test_mkt.events()
         print('  - The case ran without errors.')
     except RuntimeWarning as warning:
         print('  - ERRORS WERE ENCOUNTERED:', warning)

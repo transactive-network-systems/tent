@@ -44,7 +44,6 @@ under Contract DE-AC05-76RL01830
 import logging
 import os
 import sys
-import weakref
 
 from copy import deepcopy
 from collections import defaultdict
@@ -72,6 +71,8 @@ class Market(Component):
     # created.
 
     def __init__(self,
+                 transactive_node,
+                 market_series=None,
                  activation_lead_time: Union[timedelta, float, int] = timedelta(hours=0),
                  commitment=False,
                  default_price=0.05,
@@ -93,9 +94,8 @@ class Market(Component):
                  method: Union[Method, str, int] = Method.Interpolation,
                  negotiation_lead_time: Union[timedelta, float, int] = timedelta(hours=0),
                  prior_market_in_series=None,
-                 real_time_duration: Union[timedelta, float, int] = timedelta(minutes=15),
-                 transactive_node=None,
-                 market_series=None):
+                 real_time_duration: Union[timedelta, float, int] = timedelta(minutes=15)
+                 ):
 
         self.market_series = weakref.ref(market_series) if market_series else None
 
@@ -195,11 +195,9 @@ class Market(Component):
 
         # Set up market
         self.check_intervals()
-        if self.tn and self.tn():
-            tn = self.tn()
-            self.check_marginal_prices(tn)
-            for neighbor in tn.neighbors:
-                neighbor.schedule(self)
+        self.check_marginal_prices()
+        for neighbor in self.tn.neighbors:
+            neighbor.schedule(self)
 
         # 210118DJH: Must introduce a flag to end activities after various market states. This flag should be made
         #            false in each transition and made true after all the tasks have been completed in the ensuing
@@ -251,12 +249,12 @@ class Market(Component):
             delivery_start = now + ((delivery_anchor_today - now - run_gap) % self.market_clearing_interval)
         return delivery_start - self.delivery_lead_time
 
-    def events(self, my_transactive_node=None):
+    def events(self):
         """
         This is the market state machine. Activities should be assigned to state transition events and to the states
         themselves using the supplied methods. This state machine should not itself be modified by implementers because
         doing so may affect alternative market methods' state models.
-        :param: my_transactive_node or None: transactive node--this agent--that keeps track of market objects
+
         :return: None
 
         ================================================================================================================
@@ -287,20 +285,10 @@ class Market(Component):
         """
         current_time = Timer.now()
 
-        # 240228DJH: These next lines of code pave the way for decreasing our dependence on passing parameter
-        #            my_transactive_node. Note the that the parameter has also been assigned default value None when
-        #            called.
-        if self.market_series and self.market_series():
-            my_transactive_node = self.market_series().tn()
-        elif self.tn:
-            my_transactive_node = self.tn()
-        else:
-            my_transactive_node = my_transactive_node
-
         # EVENT 0: % FIRST INSTANTIATION OF A MARKET SERIES ************************************************************
         # First time setup of a new market series.
         if self.market_state == MarketState.Initial:
-            self.transition_from_initial_to_inactive(my_transactive_node)
+            self.transition_from_initial_to_inactive()
             self.market_state = MarketState.Inactive
 
             # 210118DJH: New flag. Set false upon transition to new market state.
@@ -320,7 +308,7 @@ class Market(Component):
             future_clearing_time = current_time + self.activation_lead_time \
                                    + self.negotiation_lead_time + self.market_lead_time
             if self.next_market_clearing_time < future_clearing_time:
-                self.spawn_markets(my_transactive_node, self.next_market_clearing_time)
+                self.spawn_markets(self.next_market_clearing_time)
                 self.is_newest_market = False
                 # # 210118DJH: New flag. Set true when responsibilities in market state are completed.
                 # self._stateIsCompleted = True
@@ -338,7 +326,7 @@ class Market(Component):
                 _log.debug(f'MARKET: {self.name} STATE IS NOW: MarketState.Active')
 
                 # Call this replaceable method where appropriate actions can be taken.
-                self.transition_from_inactive_to_active(my_transactive_node)
+                self.transition_from_inactive_to_active()
 
                 # 210118DJH: New flag. Set false upon transition to new market state.
                 self._stateIsCompleted = False
@@ -351,7 +339,7 @@ class Market(Component):
             # classes of class Market.
             # 210118DJH: NOTE: Flag "_stateIsComplete" must be set true after the market's responsibilities have been
             #            completed in this next method or its replacements.
-            self.while_in_active(my_transactive_node)
+            self.while_in_active()
 
         # EVENT 2A: TRANSITION FROM ACTIVE TO NEGOTIATION STATE ********************************************************
         # This is the transition from "Active" to "Negotiation" market states. Market state "Negotiation" begins at a
@@ -370,7 +358,7 @@ class Market(Component):
 
                 # Place other transition actions in this following method. The method may be replaced.
                 # of class Market.
-                self.transition_from_active_to_negotiation(my_transactive_node)
+                self.transition_from_active_to_negotiation()
 
                 # 210118DJH: New flag. Set false upon entering a new market state.
                 self._stateIsCompleted = False
@@ -385,7 +373,7 @@ class Market(Component):
             # dependent upon a convergence flag.
             # 210118DJH: NOTE: Flag "_stateIsComplete" must be set true after the market's responsibilities have been
             #            completed in this next method or its replacements.
-            self.while_in_negotiation(my_transactive_node)
+            self.while_in_negotiation()
 
         # EVENT 3A: TRANSITION FROM NEGOTIATION TO MARKET LEAD STATE ***************************************************
         # This is the transition from "Negotiation" to "MarketLead" market states.
@@ -403,7 +391,7 @@ class Market(Component):
 
                 #  Place other transition actions in this following method. The method may be replaced.
                 #  of class Market.
-                self.transition_from_negotiation_to_market_lead(my_transactive_node)
+                self.transition_from_negotiation_to_market_lead()
 
                 # 210118DJH: New flag. Set false prior to transition to new market state.
                 self._stateIsCompleted = False
@@ -416,7 +404,7 @@ class Market(Component):
             #  overwritten by child classes of class Market.
             # 210118DJH: NOTE: Flag "_stateIsComplete" must be set true after the market's responsibilities have been
             #            completed in this next method or its replacements.
-            self.while_in_market_lead(my_transactive_node)
+            self.while_in_market_lead()
 
         # EVENT 4A: TRANSITION FROM MARKET LEAD TO DELIVERY LEAD STATE *************************************************
         # This is the transition from "MarketLead" to "DeliveryLead" market states.
@@ -432,7 +420,7 @@ class Market(Component):
                 _log.debug(f'MARKET: {self.name} STATE IS NOW: MarketState.DeliveryLead')
 
                 # Place other transition actions here. This following method may be replaced.
-                self.transition_from_market_lead_to_delivery_lead(my_transactive_node)
+                self.transition_from_market_lead_to_delivery_lead()
 
                 # 210118DJH: New flag. Set false prior to new market state.
                 self._stateIsCompleted = False
@@ -445,7 +433,7 @@ class Market(Component):
             # method may be overwritten by child classes of class Market.
             # 210118DJH: NOTE: Flag "_stateIsComplete" must be set true after the market's responsibilities have been
             #            completed in this next method or its replacements.
-            self.while_in_delivery_lead(my_transactive_node)
+            self.while_in_delivery_lead()
 
         # EVENT 5A: TRANSITION FROM DELIVERY LEAD TO DELIVERY **********************************************************
         # This is the transition from "DeliveryLead" to "Delivery" market states. The start of market state "Delivery"
@@ -462,7 +450,7 @@ class Market(Component):
                 _log.debug(f'MARKET: {self.name} STATE IS NOW: MarketState.Delivery')
 
                 # Other actions for this transition should be placed in the following method, which can be replaced.
-                self.transition_from_delivery_lead_to_delivery(my_transactive_node)
+                self.transition_from_delivery_lead_to_delivery()
 
                 # 210118DJH: New flag. Set false prior to each new market state.
                 self._stateIsCompleted = False
@@ -475,7 +463,7 @@ class Market(Component):
             # overwritten by child classes of class Market.
             # 210118DJH: NOTE: Flag "_stateIsComplete" must be set true after the market's responsibilities have been
             #            completed in this next method or its replacements.
-            self.while_in_delivery(my_transactive_node)
+            self.while_in_delivery()
 
         # EVENT 6A: TRANSITION FROM DELIVERY TO RECONCILE **************************************************************
         # This is the transition from "Delivery" to "Reconcile" market states. The Reconcile market state begins at a
@@ -494,7 +482,7 @@ class Market(Component):
                 _log.debug(f'MARKET: {self.name} STATE IS NOW: MarketState.Reconcile')
 
                 # Other transition actions may be placed in this method.
-                self.transition_from_delivery_to_reconcile(my_transactive_node)
+                self.transition_from_delivery_to_reconcile()
 
                 # 210118DJH: New flag. Set flat false prior to every new market state.
                 self._stateIsCompleted = False
@@ -508,7 +496,7 @@ class Market(Component):
             # may be overwritten by children of the Market class.
             # 210118DJH: NOTE: Flag "_stateIsComplete" must be set true after the market's responsibilities have been
             #            completed in this next method or its replacements.
-            self.while_in_reconcile(my_transactive_node)
+            self.while_in_reconcile()
 
         # EVENT 7A: TRANSITION FROM RECONCILE TO EXPIRED ***************************************************************
         # This is the transition from "Reconcile" to "Expired" market states.
@@ -523,7 +511,7 @@ class Market(Component):
                 _log.debug(f'MARKET: {self.name} STATE IS NOW: MarketState.Expired')
 
                 # Replace this method for other transitional actions.
-                self.transition_from_reconcile_to_expired(my_transactive_node)
+                self.transition_from_reconcile_to_expired()
 
                 # 210118DJH: New flag. Set false prior to any new state.
                 self._stateIsCompleted = False
@@ -538,16 +526,12 @@ class Market(Component):
             # Delete market intervals that are defined by this market object.
             self.time_intervals = []
 
-            # Remove the expired market object from the agent's list of markets.
-            # 200908DJH: Shwetha says this does not work because you can't remove an indexed item from inside a for
-            # loop as we index through the list MyTransactiveMode.markets. I've tested that this revised approach works,
-            # however, as long as there are no further references to self in the remainder of the loop.
-            # my_transactive_node.markets.remove(self)  # REPLACE OR USE ALTERNATIVE APPROACH
-            my_transactive_node.markets[:] = [x for x in my_transactive_node.markets if x != self]
+            # Remove the expired market.
+            self.tn.markets[:] = [x for x in self.tn.markets if x != self]
 
             # NOTE: We let garbage collection finally delete the object once it is entirely out of scope.
 
-    def spawn_markets(self, my_transactive_node, new_market_clearing_time):
+    def spawn_markets(self, new_market_clearing_time):
         """
         This method is called when a test determines that a new market object may be needed. The base method creates the
         new market object, as will be normal for systems having only one market. This method must be replaced or
@@ -557,7 +541,7 @@ class Market(Component):
         in another market series must be instantiated.
         (2) The markets in this series are instantiated by another market series. In this case, this method should be
         replaced by a pass (no action).
-        :param: my_transactive_node: my transactive node agent object
+
         :param: new_market_clearing_time: new market objects market clearing time
         :return: None
         """
@@ -583,8 +567,8 @@ class Market(Component):
             method=self.method,
             negotiation_lead_time=self.negotiation_lead_time,
             prior_market_in_series=self,
-            transactive_node=my_transactive_node,
-            market_series=self.market_series  # 240228DJH: new weak reference to the market's market series object.
+            market_series=self.market_series,  # 240228DJH: new weak reference to the market's market series object.
+            transactive_node=self.tn
         )
         new_market.market_type = self.market_type if isinstance(self.market_type, MarketTypes) else MarketTypes.unknown
 
@@ -596,7 +580,7 @@ class Market(Component):
             new_market.market_state = MarketState.Initial
 
         # Append the new market object to the list of market objects that is maintained by the agent.
-        my_transactive_node.markets.append(new_market)
+        self.tn.markets.append(new_market)
 
         # 240228DJH: If this market references its MarketSeries object, then also place the market into its list of
         #            active markets.
@@ -613,31 +597,28 @@ class Market(Component):
     def transition_from_initial_to_inactive(self, my_transactive_node):
         """
         Steps for initialization of the first market in a new market series which cannot be completed by __init__()
-        :param my_transactive_node: TransactiveNode object--this agent
+
         :return: None
         """
         _log.debug(f'MARKET: {self.name} STATE IS NOW TRANSITIONING: Initial to Inactive')
-        pass
         return None
 
-    def transition_from_inactive_to_active(self, my_transactive_node):
+    def transition_from_inactive_to_active(self):
         """
         These actions, if any are taken as a market transitions from its inactive to its active market state.
-        :param my_transactive_node: TransactiveNode object--this agent
+
         :return: None
         """
         _log.debug(f'MARKET: {self.name} STATE IS NOW TRANSITIONING: Inactive to Active')
-
-        pass
         return None
 
-    def while_in_active(self, my_transactive_node):
+    def while_in_active(self):
         """
         For activities that should happen while a market object is in its initial "Active" market state. This method
         may be overwritten by child classes of Market to create alternative market behaviors during this market state.
         It will be rare for a market object to have actions in its Active state. It usually will immediately enter its
         Negotiation state.
-        :param my_transactive_node: transactive node object--this agent
+
         :return: None
         """
         #_log.debug(f'{self.name} IS IN W_IN_ACTIVE')
@@ -648,23 +629,22 @@ class Market(Component):
         self._stateIsCompleted = True
         return None
 
-    def transition_from_active_to_negotiation(self, my_transactive_node):
+    def transition_from_active_to_negotiation(self):
         """
         For activities that should accompany a market object's transition from market state "Active" to "Negotiation."
         This method may be overwritten by child classes of Market to create alternative market behaviors during this
         transition.
-        :param my_transactive_node: my transactive node agent object
+
         :return: None
         """
         _log.debug(f'MARKET: {self.name} STATE IS NOW TRANSITIONING: Active to Negotiation')
-        pass
         return None
 
-    def while_in_negotiation(self, my_transactive_node):
+    def while_in_negotiation(self):
         """
         For activities that should happen while a market object is in its "Negotiation" market state. This method may
         be overwritten by child classes of Market to create alternative market behaviors during this market state.
-        :param my_transactive_node: my transactive node agent object
+
         :return: None
         """
         #_log.debug(f'{self.name} IS IN W_IN_NEGOTIATION')
@@ -672,7 +652,7 @@ class Market(Component):
         # A convergence flag is available to distinguish actions to be undertaken while actively negotiating and others
         # while convergence has been obtained.
         if not self.converged:
-            self.balance(my_transactive_node)  # A consensus method conducts negotiations while in negotiation state.
+            self.balance(self.tn)  # A consensus method conducts negotiations while in negotiation state.
 
         else:
             pass
@@ -682,64 +662,56 @@ class Market(Component):
 
         return None
 
-    def transition_from_negotiation_to_market_lead(self, my_transactive_node):
+    def transition_from_negotiation_to_market_lead(self):
         """
         For activities that should accompany a market object's transition from market state "Negotiation" to
         "MarketLead." This method may be overwritten by child classes of Market to create alternative market behaviors
         during this transition.
-        :param my_transactive_node: transactive node object--this agent
+
         :return: None
         """
         _log.debug(f'MARKET: {self.name} STATE IS NOW TRANSITIONING: Negotiation to Market Lead')
-        pass
         return None
 
-    def while_in_market_lead(self, my_transactive_node):
+    def while_in_market_lead(self):
         """
         For activities that should happen while a market object is in its "MarketLead" market state. This method may
         be overwritten by child classes of Market to create alternative market behaviors during this market state.
-        :param my_transactive_node: transactive node object--this agent
+
         :return: None
         """
         #_log.debug(f'{self.name} IS IN W_IN_MARKET_LEAD')
-        pass
-        # 210118DJH: NOTE: Flag "_stateIsComplete" must be set true after the market's responsibilities have been
-        #            completed in this next method or its replacements.
         self._stateIsCompleted = True
         return None
 
-    def transition_from_market_lead_to_delivery_lead(self, my_transactive_node):
+    def transition_from_market_lead_to_delivery_lead(self):
         """
         For activities that should accompany a market object's transition from market state "MarketLead" to
         "DeliveryLead," (i.e., the clearing of the market). This method may be overwritten by child classes of Market
         to create alternative market behaviors during this transition.
-        :param my_transactive_node: transactive node object--this agent
+
         :return: None
         """
         _log.debug(f'MARKET: {self.name} STATE IS NOW TRANSITIONING: Market Lead to Delivery Lead')
-        pass
         return None
 
-    def while_in_delivery_lead(self, my_transactive_node):
+    def while_in_delivery_lead(self):
         """
         For activities that should happen while a market object is in its "DeliveryLead" market state. This method may
         be overwritten by child classes of Market to create alternative market behaviors during this market state.
-        :param my_transactive_node: transactive node object--this agent
+
         :return: None
         """
         #_log.debug(f'{self.name} IS IN W_IN_DELIVERY_LEAD')
-        pass
-        # 210118DJH: NOTE: Flag "_stateIsComplete" must be set true after the market's responsibilities have been
-        #            completed in this next method or its replacements.
         self._stateIsCompleted = True
         return None
 
-    def transition_from_delivery_lead_to_delivery(self, my_transactive_node):
+    def transition_from_delivery_lead_to_delivery(self):
         """
         For activities that should accompany a market object's transition from market state "DeliveryLead" to
         "Delivery." This method may be overwritten by child classes of Market to create alternative market behaviors
         during this transition.
-        :param my_transactive_node: transactive node object--this agent
+
         :return: None
         """
         _log.debug(f'{self.name} IS IN T_F_DELIVERY_LEAD_TO_DELIVERY')
@@ -750,89 +722,71 @@ class Market(Component):
             self.price_model.update(time_interval.start_time, final_price.value)
 
         # Tell Local Assets it is time to actuate.
-        self._actuate_assets(my_transactive_node)
+        self._actuate_assets()
         self.balanced_price_publish()
         return None
 
     def balanced_price_publish(self):
-        # 240207DJH: Changing this next line. Unit testing throws an exception when self.tn is None.
-        # tn = self.tn()
-        if self.tn:
-            tn = self.tn()
-        else:
-            return
         scheduled_powers = defaultdict(dict)
-        for entity in tn.neighbors + tn.local_assets:
+        for entity in self.tn.neighbors + self.tn.local_assets:
             for time_interval, scheduled_power in entity.scheduled_powers.all:
                 if time_interval.market is self:
                     scheduled_powers[format_timestamp(time_interval.start_time)][entity.name] = scheduled_power.value
-        tn.publish(
+        self.tn.publish(
             'balanced_price_record', {
                 'tnt_market_name': self.name,
                 'balanced_prices': {format_timestamp(k.start_time): v.value for k, v in self.marginal_prices.all},
                 'schedule_powers': scheduled_powers
             })
 
-    def _actuate_assets(self, my_transactive_node):
-        for local_asset in my_transactive_node.local_assets:
+    def _actuate_assets(self):
+        for local_asset in self.tn.local_assets:
             _log.debug(f'MARKET {self.name} is ACTUATING: {local_asset.name}')
             local_asset.actuate(self)
 
-    def while_in_delivery(self, my_transactive_node):
+    def while_in_delivery(self):
         """
         For activities that should happen while a market object is in its "Delivery" market state. This method may be
         overwritten by child classes of Market to create alternative market behaviors during this market state.
-        :param my_transactive_node: transactive node object--this agent
+
         :return: None
         """
         #_log.debug(f'{self.name} IS IN W_IN_DELIVERY')
         # TBD: These actions will be common to most transactive systems during the delivery market state:
         # - monitor and meter assets and power exchanges
         # - control assets to negotiated average power
-        pass
-        # 210118DJH: NOTE: Flag "_stateIsComplete" must be set true after the market's responsibilities have been
-        #            completed in this next method or its replacements.
         self._stateIsCompleted = True
         return None
 
-    def transition_from_delivery_to_reconcile(self, my_transactive_node):
+    def transition_from_delivery_to_reconcile(self):
         """
         For activities that should accompany a market object's transition from market state "Delivery" to "Reconcile."
         This method may be overwritten by child classes of Market to create alternative market behaviors during this
         transition.
-        :param my_transactive_node: transactive node object--the agent
+
         :return: None
         """
         _log.debug(f'MARKET: {self.name} STATE IS NOW TRANSITIONING: Delivery to Reconcile')
-        pass
         return None
 
-    def while_in_reconcile(self, my_transactive_node):
+    def while_in_reconcile(self):
         """
         For activities that should happen while a market object is in its "Reconcile" market state. This method may be
         overwritten by child classes of Market to create alternative market behaviors during this market state.
-        :param my_transactive_node: transactive node object--this agent
+
         :return: None
         """
         #_log.debug(f'{self.name} IS IN W_IN_RECONCILE')
-
-        # NOTE: The implementer may wish to automatically assert reconciliation at this point, which allows a state
-        # transition to the Expired state. This could be done by making a call to this parent method directly, or by
-        # using a super() method call.
-        # 200908DJH: So, let's go ahead and claim it as our default.
         self.reconciled = True
-        # 210118DJH: NOTE: Flag "_stateIsComplete" must be set true after the market's responsibilities have been
-        #            completed in this next method or its replacements.
         self._stateIsCompleted = True
-
         return None
 
-    def transition_from_reconcile_to_expired(self, my_transactive_node):
+    def transition_from_reconcile_to_expired(self):
         """
         For activities that should accompany a market object's transition from market state "Reconcile" to "Expired."
         This method may be overwritten by child classes of Market to create alternative market behaviors during this
         transition.
-        :param my_transactive_node: transactive node object--the agent
+
         :return: None
         """
         _log.debug(f'MARKET: {self.name} STATE IS NOW TRANSITIONING: Reconcile to Expired')
@@ -849,27 +803,27 @@ class Market(Component):
                          self.active_vertices[x].value.power])
 
         # Append data for local assets:
-        for x in range(len(my_transactive_node.local_assets)):
-            vertices = [y for y in my_transactive_node.local_assets[x].active_vertices
+        for local_asset in self.tn.local_assets:
+            vertices = [y for y in local_asset.active_vertices
                         if y.time_interval.market == self]
 
-            for z in range(len(vertices)):
-                datum = [my_transactive_node.local_assets[x].name,
-                         vertices[z].time_interval.name,
-                         vertices[z].value.marginal_price,
-                         vertices[z].value.power]
+            for vertex in vertices:
+                datum = [local_asset.name,
+                         vertex.time_interval.name,
+                         vertex.value.marginal_price,
+                         vertex.value.power]
                 data.append(datum)
 
         # Append data for neighbor data:
-        for x in range(len(my_transactive_node.neighbors)):
-            vertices = [y for y in my_transactive_node.neighbors[x].active_vertices
+        for neighbor in self.tn.neighbors:
+            vertices = [y for y in neighbor.active_vertices
                         if y.time_interval.market == self]
 
-            for z in range(len(vertices)):
-                datum = [my_transactive_node.neighbors[x].name,
-                         vertices[z].time_interval.name,
-                         vertices[z].value.marginal_price,
-                         vertices[z].value.power]
+            for vertex in vertices:
+                datum = [neighbor.name,
+                         vertex.time_interval.name,
+                         vertex.value.marginal_price,
+                         vertex.value.power]
                 data.append(datum)
 
         # Write the vertex data into a csv file based on the current working directory.
@@ -902,7 +856,7 @@ class Market(Component):
             writer.writerows(price_data)
         return None
 
-    def assign_system_vertices(self, my_transactive_node):
+    def assign_system_vertices(self):
         """
         Collect active vertices from neighbor and asset models and reassign them with aggregate system information
         for all active time intervals.
@@ -919,9 +873,6 @@ class Market(Component):
 
         Calls method sum_vertices in each time interval.
 
-        INPUTS:
-        :param my_transactive_node: TransactiveNode object--the agent
-
         OUTPUTS:
         - Updates property activeVertices - vertices that define the net system balance and flexibility. The meaning of
           the vertex properties are
@@ -930,7 +881,6 @@ class Market(Component):
           production cost / total production)).
         - power: system net power at the vertex (The system "clears" where system net power is zero.)
         """
-
         for time_interval in self.time_intervals:
             # Find and delete existing aggregate active vertices in the indexed time interval. They will be recreated.
             self.active_vertices = [x for x in self.active_vertices
@@ -938,7 +888,7 @@ class Market(Component):
 
             # Call the utility sum_vertices to recreate the aggregate vertices in the indexed time interval. (This
             # method is separated out because it will be used by other methods.)
-            summed_vertices = self.sum_vertices(my_transactive_node, time_interval)
+            summed_vertices = self.sum_vertices(self.tn, time_interval)
 
             # Create and store an interval value for each vertex.
             for vertex in summed_vertices:
@@ -950,10 +900,10 @@ class Market(Component):
                                                           )
                                             )
 
-    def balance(self, my_transactive_node, k=1):
+    def balance(self, k=1):
         """
         Balance current market
-        :param my_transactive_node: my transactive node object
+
         :param k: iteration counter
         :return:
         """
@@ -963,9 +913,8 @@ class Market(Component):
         #            the iterative sub-gradient or interpolation approach. Iteration and preconditions may need to be
         #            completed within the market's state machine.
         # TODO: Consider having the balance method solve for both marginal price AND quantity.
-
         if self.method == Method.Interpolation:
-            self.assign_system_vertices(my_transactive_node)
+            self.assign_system_vertices()
             av = [(x.time_interval.name, x.value.marginal_price, x.value.power) for x in self.active_vertices]
             _log.debug("{} market active vertices are: {}".format(self.name, av))
 
@@ -1286,7 +1235,7 @@ class Market(Component):
                 # Then append one lone time interval for this starting time.
                 self.time_intervals.append(time_intervals[0])
 
-    def check_marginal_prices(self, my_transactive_node, return_prices=None):
+    def check_marginal_prices(self):
         """
         191212DJH: Much of the logic may be simplified upon the introduction of isNewestMarket flag and assertion that
         priorRefinedMarket points to the specific market object that is being refined or corrected.
@@ -1304,9 +1253,7 @@ class Market(Component):
            method Market.model_prices().
         5. If all above methods fail, market periods should be assigned the market's default price. See property
            Market.defaultPrice.
-        INPUTS:
-        :param my_transactive_node: myTransactiveNode object--this agent
-        :param return_prices: For future functionality. (Return prices if True.)
+
         OUTPUTS:
            populates list of active marginal prices (see class IntervalValue)
         """
@@ -1365,37 +1312,35 @@ class Market(Component):
                 # METHOD 6: If all the above logic fails to assign the marginal price, assign as None.
                 self.marginal_prices.update(time_interval, None)
 
-    def schedule(self, my_transactive_node):
+    def schedule(self):
         """
         Process called to
         (1) invoke all models to update the scheduling of their resources, loads, or neighbor
         (2) converge to system balance using sub-gradient search.
-        :param: my_transactive_node: TransactiveNode object--this agent
-        """
 
+        """
         # Call each local asset to schedule itself.
-        for local_asset in my_transactive_node.local_assets:
+        for local_asset in self.tn.local_assets:
             local_asset.schedule(self)
 
         # Call each neighbor to schedule itself.
-        for neighbor in my_transactive_node.neighbors:
+        for neighbor in self.tn.neighbors:
             neighbor.schedule(self)
 
-    def sum_vertices(self, my_transactive_node, time_interval, object_to_exclude=None):
+    def sum_vertices(self, time_interval, object_to_exclude=None):
         """
         Create system vertices with system information for a single time interval. An optional argument allows the
         exclusion of a transactive neighbor object, which is useful for transactive records and their corresponding
         demand or supply curves. This utility method should be used for creating transactive signals (by excluding the
         neighbor object), and for visualization tools that review the local system's net supply/demand curve.
-        :param: my_transactive_node:
+
         :param: time_interval:
         :param: object_to_exclude:
         :returns: vertices: list of Vertex objects in the given time interval.
         """
         # Initialize a list of marginal prices mps at which vertices will be created.
         marginal_price_list = []
-
-        for neighbor in my_transactive_node.neighbors:
+        for neighbor in self.tn.neighbors:
 
             # Jump out of this iteration if neighbor model happens to be the "object to exclude"
             if object_to_exclude is not None and neighbor == object_to_exclude:
@@ -1420,7 +1365,7 @@ class Market(Component):
 
                 marginal_price_list.extend(marginal_prices)  # marginal prices [$/kWh]
 
-        for asset in my_transactive_node.local_assets:
+        for asset in self.tn.local_assets:
 
             # Jump out of this iteration if local asset model nm happens to be
             # the "object to exclude"
@@ -1496,9 +1441,7 @@ class Market(Component):
             vertex_production_cost = 0.0  # [$]
 
             # Include power and production costs from neighbor models. Index through the active neighbor models.
-            for k in range(len(my_transactive_node.neighbors)):
-                neighbor = my_transactive_node.neighbors[k]
-
+            for neighbor in self.tn.neighbors:
                 if neighbor == object_to_exclude:
                     continue
 
@@ -1516,9 +1459,7 @@ class Market(Component):
                 vertex_power = vertex_power + neighbors_power  # [avg.kW]
 
             # Include power and production costs from local asset models. Index through the local asset models.
-            for k in range(len(my_transactive_node.local_assets)):
-                asset = my_transactive_node.local_assets[k]
-
+            for asset in self.tn.local_assets:
                 if asset == object_to_exclude:
                     continue
 
@@ -1544,7 +1485,7 @@ class Market(Component):
 
         return vertices
 
-    def update_costs(self, my_transactive_node):
+    def update_costs(self):
         """
         Sum the production and dual costs from all modeled local resources, local loads, and neighbors, and then sum
         them for the entire duration of the time horizon being calculated.
@@ -1552,9 +1493,6 @@ class Market(Component):
         PRESUMPTIONS:
         - Dual costs have been created and updated for all active time intervals for all neighbor objects
         - Production costs have been created and updated for all active time intervals for all asset objects
-
-        INPUTS:
-        :param: my_transactive_node - TransactiveNode object--this agent
 
         OUTPUTS:
         - Updates Market.productionCosts - an array of total production cost in each active time interval
@@ -1564,26 +1502,25 @@ class Market(Component):
         - Updates Market.totalDualCost - the sum of all the dual costs for the entire future time horizon of active
           time intervals
         """
-
         # Call each LocalAsset to update its costs.
-        for local_asset in my_transactive_node.local_assets:
+        for local_asset in self.tn.local_assets:
             local_asset.update_costs(self)
 
         # Call each Neighbor to update its costs.
-        for neighbor in my_transactive_node.neighbors:
+        for neighbor in self.tn.neighbors:
             neighbor.update_costs(self)
 
         for time_interval in self.time_intervals:
             sum_dual_cost = 0.0  # [$]
             sum_production_cost = 0.0  # [$]
 
-            for local_asset in my_transactive_node.local_assets:
-                sum_dual_cost += local_asset.dual_costs.get_by_interval(time_interval)       # [$]
+            for local_asset in self.tn.local_assets:
+                sum_dual_cost += local_asset.dual_costs.get_by_interval(time_interval)  # [$]
                 sum_production_cost += local_asset.production_costs.get_by_interval(time_interval)  # [$]
 
-            for neighbor in my_transactive_node.neighbors:
-                sum_dual_cost += neighbor.dual_costs.get_by_interval(time_interval)                 # [$]
-                sum_production_cost += neighbor.production_costs.get_by_interval(time_interval)      # [$]
+            for neighbor in self.tn.neighbors:
+                sum_dual_cost += neighbor.dual_costs.get_by_interval(time_interval)  # [$]
+                sum_production_cost += neighbor.production_costs.get_by_interval(time_interval)  # [$]
 
             # Create or update dual cost and production cost entries for this market in the indexed time interval.
             self.dual_costs.update(time_interval, sum_dual_cost)
@@ -1595,19 +1532,17 @@ class Market(Component):
         # Sum total primal cost for the entire time horizon
         self.total_production_cost = self.production_costs.total  # [$]
 
-    def update_supply_demand(self, my_transactive_node):
+    def update_supply_demand(self):
         """
         For each time interval, sum the power that is generated, imported, consumed, or exported for all modeled local
         resources, neighbors, and local load.
-        :param: my_transactive_node: TransactiveNode object--this agent
         """
-
         for time_interval in self.time_intervals:
             total_generation = 0.0  # [avg.kW]
             total_demand = 0.0  # [avg.kW]
 
-            for local_asset in my_transactive_node.local_assets:
-                scheduled_power =local_asset.scheduled_powers.get_by_interval(time_interval)  # [avg.kW]
+            for local_asset in self.tn.local_assets:
+                scheduled_power = local_asset.scheduled_powers.get_by_interval(time_interval)  # [avg.kW]
 
                 if scheduled_power > 0:  # Generation case: Add positive powers to total generation.
                     total_generation += scheduled_power  # [avg.kW]
@@ -1615,7 +1550,7 @@ class Market(Component):
                 else:  # Demand case: Add negative powers to total demand.
                     total_demand += scheduled_power  # [avg.kW]
 
-            for neighbor in my_transactive_node.neighbors:
+            for neighbor in self.tn.neighbors:
                 scheduled_power = neighbor.scheduled_powers.get_by_interval(time_interval)  # [avg.kW]
 
                 if scheduled_power > 0:  # Generation case: Add positive power to total generation.

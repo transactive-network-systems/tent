@@ -1,5 +1,3 @@
-import weakref
-
 from datetime import time, timedelta
 from typing import Union
 
@@ -27,6 +25,7 @@ class MarketSeries(Component):
     future markets in the series.
     """
     def __init__(self,
+                 transactive_node,
                  activation_lead_time: Union[timedelta, float, int] = timedelta(hours=0),
                  commitment: bool = False,
                  default_price: float = 0.05,
@@ -45,8 +44,7 @@ class MarketSeries(Component):
                  market_type: Union[MarketTypes, str, int] = MarketTypes.unknown,
                  method: Union[Method, str, int] = Method.Interpolation,
                  name='Market Series',
-                 negotiation_lead_time: Union[timedelta, float, int] = timedelta(hours=0),
-                 transactive_node=None):
+                 negotiation_lead_time: Union[timedelta, float, int] = timedelta(hours=0)):
         super(MarketSeries, self).__init__(description, name, transactive_node)
         self._activation_lead_time = activation_lead_time if isinstance(activation_lead_time, timedelta) \
             else timedelta(seconds=activation_lead_time)  # [timedelta] Time in market state "Active"
@@ -100,7 +98,7 @@ class MarketSeries(Component):
         #           It appears that no market clearing time should be sent so that the market constructor will find an
         #           acceptable first market clearing time.
         initial_market: Market = self.market_class(
-            activation_lead_time=self.activationLeadTime,
+            activation_lead_time=self.activation_lead_time,
             commitment=self.commitment,
             default_price=self.default_price,
             delivery_anchor_time=self.delivery_anchor_time,
@@ -125,14 +123,12 @@ class MarketSeries(Component):
         #            might have to manage BOTH places until this new architecture is proven and stable.
         self.active_markets = [initial_market]
 
-        # 240228DJH: Also append this MarketSeries to this transactive node's list of markets if the transactive node
-        #            has been referenced.
-        if self.tn and self.tn():
-            tn = self.tn()
-            tn.markets.append(self)
+        # TODO: Investigate removing tn.markets (All references will go through MarketSeries.markets).
+        #  Alternately, have tn.markets be a WeakSet or WeakValueDict.
+        self.tn.markets.append(self)
 
     @property
-    def activationLeadTime(self):
+    def activation_lead_time(self):
         return self._activation_lead_time
 
     @property

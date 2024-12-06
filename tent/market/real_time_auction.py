@@ -63,22 +63,12 @@ class RealTimeAuction(Auction):
     def __init__(self, *args, **kwargs):
         super(RealTimeAuction, self).__init__(*args, **kwargs)
 
-    # 240228DJH: Child classes inheriting from Auction class should typically not overwrite base method spawn_markets().
-    #            The dependency between real-time and day-ahead auctions is being broken and simplified.
-    #            TODO: Delete method spawn_markets() that has been commented out below.
-    '''
-    def spawn_markets(self, my_transactive_node=None, new_market_clearing_time=None):
-        # In this case, the real-time auctions are spawned by the day-ahead markets. Therefore, the real-time markets
-        # should not instantiate ANY market objects. The base class method is replaced.
-        pass
-        '''
-
-    def transition_from_delivery_lead_to_delivery(self, my_transactive_node):
+    def transition_from_delivery_lead_to_delivery(self):
         """
         For activities that should accompany a market object's transition from market state "DeliveryLead" to
         "Delivery." This method may be overwritten by child classes of Market to create alternative market behaviors
         during this transition.
-        :param my_transactive_node: transactive node object--this agent
+
         :return: None
         """
         _log.debug(f'MARKET: {self.name} STATE IS NOW TRANSITIONING: Delivery Lead to Delivery')
@@ -88,7 +78,7 @@ class RealTimeAuction(Auction):
         for time_interval, final_price in self.marginal_prices:
             self.price_model.update(time_interval.start_time, final_price.value)
         # Tell Local Assets it is time to actuate.
-        self._actuate_assets(my_transactive_node)
+        self._actuate_assets()
 
         self.delivery_lead_schedule_power = False
 

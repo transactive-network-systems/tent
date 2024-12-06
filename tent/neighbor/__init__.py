@@ -42,7 +42,6 @@ under Contract DE-AC05-76RL01830
 """
 
 import logging
-import weakref
 
 from copy import copy, deepcopy
 from datetime import datetime, timedelta
@@ -70,6 +69,7 @@ class Neighbor(Entity):
     # Members of the transactive network must be indicated by setting the "transactive" property true.
 
     def __init__(self,
+                 transactive_node,
                  convergence_threshold=0.05,
                  cost_parameters=None,
                  default_vertices=None,
@@ -90,12 +90,10 @@ class Neighbor(Entity):
                  name='',
                  subclass=None,
                  transactive=False,
-                 transactive_node=None,
                  up_or_down: Union[Direction, int, str] = Direction.unknown):
 
         super(Neighbor, self).__init__(cost_parameters, default_vertices, description, information_services, location,
                                        maximum_power, meter_points, minimum_power, name, transactive_node)
-        self.tn = None if transactive_node is None else weakref.ref(transactive_node)
 
         self.convergence_threshold = float(convergence_threshold)      # [Small positive fraction]: May affect negotiations
         if cost_parameters is None:
@@ -978,7 +976,7 @@ class Neighbor(Entity):
     #     av = [(x.time_interval.name, x.value.marginal_price, x.value.power) for x in self.active_vertices]
     #     _log.debug(f"{self.name} neighbor model active vertices are: {av}")
 
-    def prep_transactive_signal(self, market, this_transactive_node):
+    def prep_transactive_signal(self, market):
         # Prepare transactive records to send to a transactive neighbor. The prepared transactive signal should
         # represent the residual flexibility offered to the transactive neighbor in the form of a supply or demand
         # curve.
@@ -1037,7 +1035,6 @@ class Neighbor(Entity):
         #            (2) Act on the vertices to REMOVE impacts of demand charges and marginal losses in this copy.
         #            (3) Use the modified vertices to create transactive records stored in 'mySignal' ready to send to
         #                the remote neighbor.
-
         # Ensure that object tnm is a transactive neighbor.
         if not self.transactive:
             # log.warning('Neighbor must be transactive')
@@ -1055,7 +1052,7 @@ class Neighbor(Entity):
 
             # Create the vertices of the net supply or demand curve, EXCLUDING this transactive neighbor (i.e., "tnm").
             # NOTE: It is important that the transactive neighbor is excluded.
-            vertices = market.sum_vertices(this_transactive_node, time_interval, self)
+            vertices = market.sum_vertices(self.tn, time_interval, self)
 
             # This should be rare, Warn if no vertices are found.
             if vertices is None:
@@ -1159,14 +1156,14 @@ class Neighbor(Entity):
 
         # 201013DJH: Trim the list of transactive records in mySignal if they reference time intervals that are no
         #            longer in active markets.
-        all_markets = [x for x in this_transactive_node.markets]
+        all_markets = [x for x in self.tn.markets]
         valid_time_interval_names = []
         for i in range(len(all_markets)):
             valid_time_interval_names.extend([x.name for x in all_markets[i].time_intervals])
         self.my_signal = [x for x in self.my_signal
                           if x.time_interval in valid_time_interval_names]
 
-    def send_transactive_signal(self, market, this_transactive_node):
+    def send_transactive_signal(self, market):
         # Send transactive records to a transactive neighbor.
         #
         # Retrieves the current transactive records, formats them into a table, and "sends" them to a text file for the
@@ -1198,7 +1195,6 @@ class Neighbor(Entity):
         # 210303DJH: How on earth did this pass unit testing with a reference to undefined marketName???
         # transactive_records = [x for x in self.mySignal if x.market == market.marketName]
         transactive_records = [x for x in self.my_signal if x.market_name == market.name]
-
         if len(transactive_records) == 0:  # No signal records are ready to send
             _log.warning(f"No transactive records were found. No transactive signal can be sent to {self.name}.")
             return
@@ -1210,7 +1206,7 @@ class Neighbor(Entity):
             transactive_record.market_name = market.name
 
         # Publish the signal (if TN subclass implements messaging).
-        this_transactive_node.issue_signal(self.name, transactive_records)
+        self.tn.issue_signal(self.name, transactive_records)
 
         # Save the sent TransactiveRecord messages (i.e., sentSignal) as a copy of the calculated set that was drawn
         # upon by this method (i.e., mySignal).
@@ -1221,7 +1217,7 @@ class Neighbor(Entity):
             append_table(obj=transactive_records)
 
         # 210127DJH: Trim any records in the sentSignal list if their markets and time intervals are no longer active.
-        active_markets = [x for x in this_transactive_node.markets]
+        active_markets = [x for x in self.tn.markets]
         active_time_intervals = []
         for active_market in active_markets:
             active_time_intervals.extend(active_market.time_intervals)
@@ -1234,19 +1230,17 @@ class Neighbor(Entity):
     # def receive_transactive_signal(self, this_transactive_node, market, curves=None):
     def receive_transactive_signal(self, curves=None):
         # Receive and save transactive records from a transactive Neighbor.
-        # this_transactive_node = Agent's TransactiveNode object
         #
         # The process of receiving a transactive signal is emulated by reading an available text table that is presumed
         # to have been created by the transactive neighbor. This process may change in field settings and using Python
         # and other code environments.
-        tn = self.tn()
         # If trying to receive a transactive signal from a non-transactive neighbor, create a warning and return.
         if not self.transactive:
             _log.warning('Transactive signals are not expected to be received from non-transactive neighbors. '
                          'No signal is read.')
             return
         if curves is None:
-            _log.warning(f'Received Transactive signal is None. {tn.name}')
+            _log.warning(f'Received Transactive signal is None. {self.tn.name}')
             return
         elif isinstance(curves, dict) and 'curves' in curves:
             curves = curves['curves']
@@ -1265,7 +1259,7 @@ class Neighbor(Entity):
         newly_received_records = []
 
         for curve in curves:
-            if curve['marketName'] in [m.name for m in tn.markets]:
+            if curve['marketName'] in [m.name for m in self.tn.markets]:
                 new_record = TransactiveRecord(time_interval=curve['timeInterval'],
                                                neighbor_name=self.name,
                                                direction='received',
@@ -1284,7 +1278,7 @@ class Neighbor(Entity):
             append_table(obj=newly_received_records)
 
         # 210127DJH: Trim the received_signal list to remove any expired markets and time intervals.
-        active_markets = [x for x in tn.markets]
+        active_markets = [x for x in self.tn.markets]
         active_time_intervals = []
         for active_market in active_markets:
             active_time_intervals.extend(active_market.time_intervals)
@@ -1695,7 +1689,3 @@ class Neighbor(Entity):
             }
         ])
         return definitions
-
-
-if __name__ == '__main__':
-    nm = Neighbor()

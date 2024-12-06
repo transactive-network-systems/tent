@@ -56,7 +56,7 @@ class ConsensusMarket(Market):
             *args, **kwargs
         )
 
-    def while_in_negotiation(self, my_transactive_node):
+    def while_in_negotiation(self):
         # Almost all consensus balancing activities will occur while the market is in its negotiation state.
         # This method replaces Market.while_in_negotiation().
 
@@ -65,7 +65,7 @@ class ConsensusMarket(Market):
         self.check_intervals()
 
         # Clean up or initialize marginal prices. This should not be repeated in process iterations.
-        self.check_marginal_prices(my_transactive_node)
+        self.check_marginal_prices()
 
         # Set a flag to indicate solution has not converged.
         self.converged = False
@@ -79,7 +79,7 @@ class ConsensusMarket(Market):
 
         while not self.converged and k < 100:
 
-            self.balance(my_transactive_node)
+            self.balance(self.tn)
 
             # Invite all neighbors and local assets to schedule themselves based on current marginal prices
             # self.schedule(mtn)  # STAYS IN METHOD BALANCE.
@@ -120,7 +120,7 @@ class ConsensusMarket(Market):
             time_intervals = self.time_intervals  # TimeIntervals
 
             if self.method == Method.Interpolation:  # == 2
-                self.assign_system_vertices(my_transactive_node)
+                self.assign_system_vertices()
                 # av = [(x.timeInterval.name, x.value.marginalPrice, x.value.power) for x in self.activeVertices]
                 # _log.debug("{} market active vertices are: {}".format(self.name, av))
 
@@ -193,7 +193,7 @@ class ConsensusMarket(Market):
             if k == 100:
                 self.converged = True
 
-    def transition_from_negotiation_to_market_lead(self, this_transactive_node):
+    def transition_from_negotiation_to_market_lead(self):
         # This is an opportunity to wrap up any loose negotiation ends before the market fully closes.
         # No big activities should be undertaken here, however, so we don't risk working into the delivery period.
         pass  # TBD

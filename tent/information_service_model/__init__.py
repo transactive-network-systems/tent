@@ -56,13 +56,13 @@ class InformationServiceModel(Component):
         Manages an InformationService and predicts or interpolates the information it provides."""
 
     def __init__(self,
+                 transactive_node,
                  description='',
                  information_type: Union[int, str, MeasurementType] = MeasurementType.Unknown,
                  information_units: Union[int, str, MeasurementUnit] = MeasurementUnit.Unknown,
                  update_period: Union[float, timedelta] = timedelta(hours=1),
                  name='',
-                 update_interval: Union[float, timedelta] = timedelta(hours=1),
-                 transactive_node=None
+                 update_interval: Union[float, timedelta] = timedelta(hours=1)
                  ):
         super(InformationServiceModel, self).__init__(description, name, transactive_node)
         self.information_type: MeasurementType = information_type if isinstance(information_type, MeasurementType)\

@@ -113,7 +113,7 @@ class TransactiveRecord(Archivable):
 
     @property
     def data_manager(self):
-        return self.tn().data_manager
+        return self.tn.data_manager
         # TODO: There need to be actual references to the neighbor, market, and tn objects.
 
     @property

@@ -59,6 +59,7 @@ from tent.utils.timer import Timer
 
 class MeterPoint(Component):
     def __init__(self,
+                 transactive_node,
                  data_period_seconds: float = 10,
                  description: str = '',
                  max_buffer_seconds: float = 3600,
@@ -69,8 +70,7 @@ class MeterPoint(Component):
                  measurement_type: Union[MeasurementType, str, int] = MeasurementType.Unknown,
                  measurement_unit: Union[MeasurementUnit, str, int] = MeasurementUnit.Unknown,
                  name: str = '',
-                 scale_factor: float = 1.0,
-                 transactive_node=None
+                 scale_factor: float = 1.0
                  ):
         super(MeterPoint, self).__init__(description, name, transactive_node)
 
