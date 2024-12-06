@@ -47,7 +47,7 @@ import csv
 import logging
 import tzlocal
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 from zoneinfo import ZoneInfo
 
 from dateutil import parser
@@ -56,7 +56,6 @@ from typing import Union
 from tent.utils.helpers import format_timestamp
 from tent.information_service_model import InformationServiceModel
 from tent.enumerations import MeasurementType
-from tent.containers import IntervalValue
 from tent.utils.log import setup_logging
 
 setup_logging()
@@ -238,26 +237,3 @@ class TemperatureForecastModel(InformationServiceModel):
             }
         ])
         return definitions
-
-
-if __name__ == '__main__':
-    from tent.market import Market
-    from tent.utils.helpers import format_ts
-
-    # TODO: Move to tests directory and provide a valid path for configuration.
-    forecaster = TemperatureForecastModel(
-        '/home/hngo/PycharmProjects/volttron-applications/pnnl/TNSAgent/campus_config.json')
-
-    # Create market with some time intervals
-    market = Market()
-    market.market_clearing_time = datetime.now().replace(minute=0, second=0, microsecond=0)
-    market.next_market_clearing_time = market.market_clearing_time + market.market_clearing_interval
-
-    market.check_intervals()
-
-    # Test update_information
-    forecaster.update_information(market)
-
-    times = [format_ts(x.time_interval.start_time) for x in forecaster.predictedValues]
-
-    print(times)

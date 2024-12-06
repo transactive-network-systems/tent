@@ -99,7 +99,7 @@ class Vertex(Archivable):
 
     @staticmethod
     def check_rationality(v, action="None"):
-        # 240206DJH TODO: Delete this try-except, whis is not needed once order_vertices is corrected among import
+        # 240206DJH TODO: Delete this try-except, this is not needed once order_vertices is corrected among import
         #           statements.
         # try:
         #     from helpers import order_vertices
