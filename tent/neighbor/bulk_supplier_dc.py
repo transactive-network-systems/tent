@@ -74,7 +74,7 @@ class BulkSupplierDC(Neighbor):
         # mkt - Market object
         #
         # OUTPUTS:
-        # - Updates self.activeVertices for active time intervals.
+        # - Updates self.active_vertices for active time intervals.
         #
         # 200804DJH: Method was revised to be more concise and consistent with Version-3 practices:
         #            - Active vertices are first created from the perspective of the bulk supplier.
@@ -180,7 +180,7 @@ class BulkSupplierDC(Neighbor):
                 active_threshold = max(active_threshold, scheduled_power)
 
             # Find and delete active vertices in the indexed time interval. These vertices shall be re-created.
-            self.activeVertices = [x for x in self.activeVertices if x.time_interval != time_interval]
+            self.active_vertices = [x for x in self.active_vertices if x.time_interval != time_interval]
 
             # Save the corrected vertices as active vertices interval values.
             for v in range(len(vertices)):
@@ -198,11 +198,11 @@ class BulkSupplierDC(Neighbor):
 
         # 210331DJH: This modification using "new_active_vertices" allows the new active vertices to be captured easily
         #            as CSV records.
-        self.activeVertices.extend(new_active_vertices)
+        self.active_vertices.extend(new_active_vertices)
         append_table(obj=new_active_vertices)
 
         # 200929DJH: Trim any active vertices that lie in expired markets.
-        self.activeVertices = [x for x in self.activeVertices if x.market.market_state != MarketState.Expired]
+        self.active_vertices = [x for x in self.active_vertices if x.market.market_state != MarketState.Expired]
 
     # def old_update_vertices(self, mkt):
     #     # 200804DJH: Replaced. Newer version should be consistent with Version 3 treatment of demand charges and losses.
@@ -214,7 +214,7 @@ class BulkSupplierDC(Neighbor):
     #     # mkt - Market object
     #     #
     #     # OUTPUTS:
-    #     # - Updates self.activeVertices for active time intervals.
+    #     # - Updates self.active_vertices for active time intervals.
     #
     #     # Gather active time intervals
     #     time_intervals = mkt.time_intervals  # TimeInterval objects
@@ -255,7 +255,7 @@ class BulkSupplierDC(Neighbor):
     #     for interval_index, time_interval in enumerate(time_intervals):
     #
     #         # Find and delete active vertices in the indexed time interval. These vertices shall be recreated.
-    #         self.activeVertices = [x for x in self.activeVertices if x != time_interval]
+    #         self.active_vertices = [x for x in self.active_vertices if x != time_interval]
     #
     #         # Find the month number for the indexed time interval start time. The month is needed for rate lookup
     #         # tables.
@@ -413,7 +413,7 @@ class BulkSupplierDC(Neighbor):
     #
     #             # Append the active vertices to the list of active vertices
     #             # in the indexed time interval
-    #             self.activeVertices.extend(interval_values)
+    #             self.active_vertices.extend(interval_values)
     #
     #         else:  # indexed time interval is a LLH hour
     #             # LLH hours
@@ -481,6 +481,6 @@ class BulkSupplierDC(Neighbor):
     #
     #             # Append the active vertices to the list of active vertices
     #             # in the indexed time interval
-    #             self.activeVertices.extend(interval_values)
-    #     av = [(x.time_interval.name, x.value.marginal_price, x.value.power) for x in self.activeVertices]
+    #             self.active_vertices.extend(interval_values)
+    #     av = [(x.time_interval.name, x.value.marginal_price, x.value.power) for x in self.active_vertices]
 
