@@ -72,7 +72,7 @@ class LocalAsset(Entity):
     # constrained or invokes optimizations. Even then, implementers might need further subclassing to model their unique
     # assets.
     #
-    # Available subclasses that inherit from this base class: (This taxonomy is influenced by the thesis (Kok 2013).
+    # Available subclasses that inherit from this base class: This taxonomy is influenced by the thesis (Kok 2013).
     # Inelastic - dynamic scheduling independent of prices
     # Shiftable - schedule a fixed utility over a time range
     # Buffering - schedule power while managing a (thermal) buffer
@@ -182,7 +182,7 @@ class LocalAsset(Entity):
         #         which locational marginal prices have not yet been discovered.
         # - Transition costs, if relevant, are applied during the scheduling of assets.
         # - An engagement schedule, if used, is applied during an asset's power scheduling.
-        # - Scheduled power and engagement schedule must be self consistent at the end of this method. That is, power
+        # - Scheduled power and engagement schedule must be self-consistent at the end of this method. That is, power
         #   should not be scheduled while the asset is disengaged (uncommitted).
         #
         # INPUTS:
@@ -466,7 +466,7 @@ class LocalAsset(Entity):
         6. Nothing
         NOTE: This method is similar to Market.check_marginal_prices(), but that method's purpose is to specifically
               estimate marginal prices for active time intervals, not throughout the scheduling horizon.
-        :param market: Market object that these prices are relevant to
+        :param market: The Market object for which these prices are relevant
 
         :return: price_horizon, which may be placed into property self.schedulingHorizon by caller
         """

@@ -51,13 +51,6 @@ from tent.utils.helpers import safe_weak_proxy_callback
 from tent.utils.timer import Timer
 
 
-# TODO: Is this useful elsewhere, now that it is not used here?
-# class DefaultWeakKeyDictionary(defaultdict):
-#     def __init__(self, default_factory):
-#         super(DefaultWeakKeyDictionary, self).__init__(default_factory)
-#         self.data = WeakKeyDictionary()
-
-
 class MeasurementValue(Archivable):
     def __init__(self, measurement, interval, value):
         super(MeasurementValue, self).__init__()
@@ -66,7 +59,7 @@ class MeasurementValue(Archivable):
         self.value: float | bool = value  # TODO: Should there be separate Value classes for different types?
         self.archive()
 
-    def update(self, value: float):
+    def update(self, value: float | bool):
         self.value = value
         self.archive()
 

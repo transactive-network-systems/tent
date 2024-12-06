@@ -48,7 +48,6 @@ from typing import Union
 from tent import Component
 from tent.containers import Measurement
 from tent.enumerations import MeasurementType, MeasurementUnit
-from tent.utils.timer import Timer
 
 
 class InformationServiceModel(Component):

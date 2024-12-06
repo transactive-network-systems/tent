@@ -36,7 +36,7 @@
 # under Contract DE-AC05-76RL01830
 # }}}
 
-'''VOLTTRON platform™ messaging header name constants.'''
+"""VOLTTRON platform™ messaging header name constants."""
 
 
 __author__ = 'Brandon Carpenter <brandon.carpenter@pnnl.gov>'
@@ -62,7 +62,7 @@ COOKIE = 'Cookie'
 
 
 class Headers(dict):
-    '''Case-insensitive dictionary for HTTP-like headers.'''
+    """Case-insensitive dictionary for HTTP-like headers."""
 
     class Key(str):
         def __new__(cls, value):
@@ -93,7 +93,7 @@ class Headers(dict):
         return Headers(super(Headers, self).copy())
     @property
     def dict(self):
-        '''Return a dictionary with originally-cased keys.'''
+        """Return a dictionary with originally-cased keys."""
         return {str(k): v for k, v in self.items()}
     def setdefault(self, key, value):
         return super(Headers, self).setdefault(self.__class__.Key(key), value)

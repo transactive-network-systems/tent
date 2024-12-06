@@ -37,6 +37,7 @@ def setup_logging(level=logging.DEBUG, console=False):
             fmt = '%(asctime)s %(name)s %(levelname)s: %(message)s'
             handler.setFormatter(logging.Formatter(fmt))
         if level != logging.DEBUG:
+            # TODO: Why do we need InsecureRequestWarning? Is this relevant to TENT?
             # import it here so that when urllib3 imports the requests package, ssl would already got
             # monkey patched by gevent.
             # and this warning is needed only when log level is not debug

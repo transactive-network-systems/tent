@@ -83,9 +83,9 @@ class MarketSeries(Component):
             else timedelta(seconds=negotiation_lead_time)  # [timedelta] Time in market state "Negotiation"
 
         # TODO: Does isNewestMarket need a setting for instantiation of some markets at startup?
-        # 240206DJH: ANSWER: This is best handled by configuration of the initial market and its treatement by method
+        # 240206DJH: ANSWER: This is best handled by configuration of the initial market and its treatment by method
         #            spawn(). The "newest market" flag is held by the market that determines whether new markets must be
-        #            spawned, based on comparison of a calculated actcivation time and the current time.
+        #            spawned, based on comparison of a calculated activation time and the current time.
         #            A corrected assignment of isNewestMarket must always be checked as new markets are spawned.
         self.price_model: HourlyAveragePriceModel = HourlyAveragePriceModel(forgetting_factor=14,
                                                                             default_price=self.default_price)

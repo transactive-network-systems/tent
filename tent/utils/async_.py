@@ -36,10 +36,10 @@
 # under Contract DE-AC05-76RL01830
 # }}}
 
-'''Run gevent Greenlets in their own threads.
+"""Run gevent Greenlets in their own threads.
 
 Supports killing threads and executing callbacks from other threads.
-'''
+"""
 import functools
 import gevent
 import sys
@@ -53,13 +53,13 @@ __author__ = 'Brandon Carpenter <brandon.carpenter@pnnl.gov>'
 
 
 class AsyncCall(object):
-    '''Send functions to another thread's gevent hub for execution.'''
+    """Send functions to another thread's gevent hub for execution."""
 
     def __init__(self, hub=None):
-        '''Install this async handler in a hub.
+        """Install this async handler in a hub.
 
         If hub is None, the current thread's hub is used.
-        '''
+        """
         if hub is None:
             hub = gevent.get_hub()
         self.calls = calls = []
@@ -67,12 +67,12 @@ class AsyncCall(object):
         self.__async.start(functools.partial(self._run_calls, calls))
 
     def __del__(self):
-        '''Stop the async handler on deletion.'''
+        """Stop the async handler on deletion."""
         print('deleted')
         self.__async.stop()
 
     def send(self, receiver, func, *args, **kwargs):
-        '''Send a function to the hub to be called there.
+        """Send a function to the hub to be called there.
 
         All the arguments to this method are placed in a queue and the
         hub is signaled that a function is ready. When the hub switches
@@ -84,18 +84,18 @@ class AsyncCall(object):
         errors are printed when exceptions occur. Otherwise, receiver is
         called with the 2-tuple (exc_info, result). If an unhandled
         exception occurred, exc_info is the 3-tuple returned by
-        sys.exc_info() and result is None. Otherwise exc_info is None
+        sys.exc_info() and result is None. Otherwise, exc_info is None
         and the result is func's return value.
 
         Note that receiver is called from the hub's thread and may
         need to be injected into the thread of the receiver.
-        '''
+        """
         self.calls.append((receiver, func, args, kwargs))
         self.__async.send()
 
     @staticmethod
     def _run_call(receiver, func, args, kwargs):
-        '''Run a pending call in its own greenlet.'''
+        """Run a pending call in its own greenlet."""
         try:
             exc_info, result = None, func(*args, **kwargs)   # pylint: disable=star-args
         except Exception:   # pylint: disable=broad-except
@@ -110,7 +110,7 @@ class AsyncCall(object):
     # can be garbage collected without stopping the async handler.
     @classmethod
     def _run_calls(cls, calls):
-        '''Execute pending calls.'''
+        """Execute pending calls."""
         while calls:
             args = calls.pop()
             gevent.spawn(cls._run_call, *args)   # pylint: disable=star-args

@@ -56,7 +56,6 @@ from tent import Component
 from tent.containers import IntervalValue, Measurement, TimeInterval, Vertex
 from tent.enumerations import MarketState, MarketTypes, MeasurementType, MeasurementUnit, Method
 from tent.market.price_models import HourlyAveragePriceModel
-from tent.utils.data_manager import append_table
 from tent.utils.helpers import (find_objs_by_ti, format_timestamp, order_vertices, production,
                                 prod_cost_from_vertices, safe_weak_proxy_callback, validate_bool)
 from tent.utils.log import setup_logging
@@ -1099,7 +1098,7 @@ class Market(Component):
     #             mp = self.marginal_prices.get_by_interval(ti)
     #
     #             # Extract its  marginal price value.
-    #             xlamda = mp.value  # [$/kWh]
+    #             x_lambda = mp.value  # [$/kWh]
     #
     #             if self.method == 1:
     #                 # Find the net power corresponding to the indexed time interval.
@@ -1110,7 +1109,7 @@ class Market(Component):
     #                 np = np.value / (tg.value - td.value)
     #
     #                 # Update the marginal price using subgradient search.
-    #                 xlamda = xlamda - (np * 1e-1) / (10 + k)  # [$/kWh]
+    #                 x_lambda = x_lambda - (np * 1e-1) / (10 + k)  # [$/kWh]
     #
     #             elif self.method == 2:
     #                 # Get the indexed active system vertices
@@ -1141,7 +1140,7 @@ class Market(Component):
     #                     mp_range = upper_av.marginalPrice - lower_av.marginalPrice
     #                     if power_range == 0:
     #                         err_msg = "At {}, power range is 0".format(ti.name)
-    #                     xlamda = - mp_range * lower_av.power / power_range + lower_av.marginalPrice
+    #                     x_lambda = - mp_range * lower_av.power / power_range + lower_av.marginalPrice
     #                 except:
     #                     _log.warning(err_msg)
     #                     _log.warning(f"{mtn.name} failed to find balance point. "
@@ -1149,9 +1148,9 @@ class Market(Component):
     #                     self.converged = False
     #                     return
     #
-    #             # Regardless of the method used, variable "xlamda" should now hold the updated marginal price. Assign it
+    #             # Regardless of the method used, variable "x_lambda" should now hold the updated marginal price. Assign it
     #             # to the marginal price value for the indexed active time interval.
-    #             mp.value = xlamda  # [$/kWh]
+    #             mp.value = x_lambda  # [$/kWh]
     #
     #         # Increment the iteration counter.
     #         k = k + 1

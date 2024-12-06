@@ -53,8 +53,8 @@ _log = logging.getLogger(__name__)
 
 
 class SolarPvResource(LocalAsset):
-    # SolarPvResourceModel Subclass for renewable solar PV generation The Solar PV resource is treated here as a must-
-    # take resource. This is unlike dispatchable resources in this regard. Production may be predicted. The main
+    # SolarPvResourceModel Subclass for renewable solar PV generation The Solar PV resource is treated here as a
+    # must-take resource. This is unlike dispatchable resources in this regard. Production may be predicted. The main
     # features of this model are (1) the introduction of property cloudFactor, an IntervalValue, that allows us to
     # reduce the expected solar generation according to cloud cover, and (2) method solar_generation() that creates the
     # envelope, best-case, power production for the resource as a function of time-of-day.

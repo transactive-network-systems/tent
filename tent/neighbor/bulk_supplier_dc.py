@@ -48,7 +48,7 @@ from tent.enumerations import MarketState, MeasurementType
 from tent.neighbor import Neighbor
 from tent.utils.const import bpa_demand_rate, bpa_energy_rate
 from tent.utils.data_manager import append_table
-from tent.utils.helpers import get_duration_in_hour, is_heavyloadhour, power_from_vertices
+from tent.utils.helpers import is_heavyloadhour, power_from_vertices
 from tent.utils.log import setup_logging
 
 setup_logging()
@@ -294,13 +294,13 @@ class BulkSupplierDC(Neighbor):
     #             # Vertex 2: Available power at Vertex 2 is determined by the current peak demand charge threshold pdt
     #             # and possibly scheduled powers prior to the indexed time interval. The demand threshold in the indexed
     #             # time interval is at least equal to the parameter. NOTE this process will work only if the demand
-    #             # threshold is is updated based on actual, accurate measurements.
+    #             # threshold is updated based on actual, accurate measurements.
     #             peak_demand_threshold = self.demand_threshold  # [kW]
     #
     #             # Also consider, however, scheduled powers prior to the indexed interval that might have already set a
     #             # new demand threshold. For simplicity, presume that new demand thresholds would occur only during HLH
     #             # hour types. More complex code will be needed if only HLH hours must be considered. NOTE this process
-    #             # will work only if the load forcasts are meaningful and accurate.
+    #             # will work only if the load forecasts are meaningful and accurate.
     #
     #             # Gather scheduled powers.
     #             scheduled_powers = self.scheduled_powers
@@ -338,8 +338,8 @@ class BulkSupplierDC(Neighbor):
     #             # augmented by the demand rate itself.
     #             # NOTE: Some hand-waving is always needed to compare demand and energy rates. This approach assigns a
     #             # meaningful production cost, but it is not correct to say it describes an energy price. The cost is
-    #             # assigned to the entire hour. Shorter time intervals should not be further incremented. Evenso, a huge
-    #             # discontinuity appears in the marginal price.
+    #             # assigned to the entire hour. Shorter time intervals should not be further incremented. Even so,
+    #             a huge discontinuity appears in the marginal price.
     #             vertices[2].marginal_price = vertices[2].marginal_price + demand_rate  # [$/kWh]
     #
     #             # Evaluate the fourth of four vertices Vertex 4: The power at Vertex 4 is the maximum power, minus
@@ -387,7 +387,7 @@ class BulkSupplierDC(Neighbor):
     #             vertices[3].cost = vertices[3].cost + a1 * (
     #                         vertices[3].power - vertices[2].power)  # partial production cost [$/h]
     #
-    #             # Segment 3: NOTE: The second-order coeffiecient a2 on the second
+    #             # Segment 3: NOTE: The second-order coefficient a2 on the second
     #             # line segment is unchanged from the first segment
     #
     #             # Vertex 4: Add the second-order term to the Vertex-4 cost.
