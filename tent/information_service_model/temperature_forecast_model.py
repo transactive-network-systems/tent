@@ -89,12 +89,10 @@ class TemperatureForecastModel(InformationServiceModel):
 
         if self.weather_file_path is not None:
             self.init_weather_data()
-            self.update_information = self.get_forecast_file
             self.location = None
             self.max_gap_time = None
             self.oat_point_name = None
         else:
-            self.update_information = self.get_forecast_weather_service
             self.location = [dict(location)] if location else []
             self.max_gap_time = max_gap_time if isinstance(max_gap_time, timedelta) else\
                 timedelta(seconds=float(max_gap_time))
@@ -103,6 +101,12 @@ class TemperatureForecastModel(InformationServiceModel):
                 self.weather_file_path = str(tmy_fallback_path)
                 self.init_weather_data()
             self.weather_file_path = None
+
+    def update_information(self, market):
+        if self.weather_file_path is not None:
+            self.get_forecast_file(market)
+        else:
+            self.get_forecast_weather_service(market)
 
     def init_weather_data(self):
         """
