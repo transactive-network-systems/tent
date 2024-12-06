@@ -42,11 +42,12 @@ under Contract DE-AC05-76RL01830
 """
 from copy import deepcopy
 from datetime import datetime
-from weakref import WeakKeyDictionary
+from weakref import proxy, WeakKeyDictionary
 
 from tent import Archivable, Component
 from tent.containers.time_interval import TimeInterval
 from tent.enumerations import MeasurementType, MeasurementUnit
+from tent.utils.helpers import safe_weak_proxy_callback
 from tent.utils.timer import Timer
 
 
@@ -60,8 +61,8 @@ from tent.utils.timer import Timer
 class MeasurementValue(Archivable):
     def __init__(self, measurement, interval, value):
         super(MeasurementValue, self).__init__()
-        self.interval: TimeInterval = interval  # TODO: Should this be a weak reference?
-        self.measurement: Measurement = measurement
+        self.interval: TimeInterval = proxy(interval, safe_weak_proxy_callback(self, 'interval'))
+        self.measurement: Measurement = proxy(measurement, safe_weak_proxy_callback(self, 'measurement'))
         self.value: float | bool = value  # TODO: Should there be separate Value classes for different types?
         self.archive()
 
@@ -152,15 +153,13 @@ class Measurement(Archivable):
                  measurement_unit: MeasurementUnit = MeasurementUnit.Unknown,
                  ):
         super(Measurement, self).__init__()
-        # TODO: There should probably be something to distinguish between multiple measurements with same units and
-        #  type from same source. How often is this an issue?
-        self.source: Component = source
+        # TODO: There should probably be something (a name?) to distinguish between multiple measurements with same
+        #  units and type from same source. How often is this an issue?
+        self.source: Component = proxy(source, safe_weak_proxy_callback(self, 'source'))
         self.type: MeasurementType = measurement_type
         self.unit: MeasurementUnit = measurement_unit
 
         # TODO: Tests are needed to be sure that garbage collection works to remove these.
-        #  It may be necessary to manually delete the intervals from the market before the market is deleted
-        #  or to make the market a weak reference in the TimeInterval.
         self._data: WeakKeyDictionary[TimeInterval, MeasurementValue] = WeakKeyDictionary()
 
         self.archive()

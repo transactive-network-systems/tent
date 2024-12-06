@@ -63,6 +63,14 @@ def camel_to_snake(name):
     return all_cap_re.sub(r'\1_\2', s1).lower()
 
 
+def safe_weak_proxy_callback(obj: object, attribute: str):
+    """ Safe Weak Proxy Callback
+        Provides a callback function that will return a variable used by WeakRef Proxy to None if the reference dies."""
+    def back_to_none(_):  # A Weak Reference is passed in, but it is dead, and therefore useless, so using "_".
+        setattr(obj, attribute, None)
+    return back_to_none
+
+
 def validate_bool(value, name):
     if not (isinstance(value, bool) or isinstance(value, int) or isinstance(value, float)):
         raise ValueError(f'{name} must be bool, not {type(value)}')

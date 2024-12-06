@@ -50,6 +50,7 @@ from collections import defaultdict
 from datetime import datetime, time, timedelta
 from typing import Union
 from warnings import warn
+from weakref import proxy
 
 from tent import Component
 from tent.containers import IntervalValue, Measurement, TimeInterval, Vertex
@@ -57,7 +58,7 @@ from tent.enumerations import MarketState, MarketTypes, MeasurementType, Measure
 from tent.market.price_models import HourlyAveragePriceModel
 from tent.utils.data_manager import append_table
 from tent.utils.helpers import (find_objs_by_ti, format_timestamp, order_vertices, production,
-                                prod_cost_from_vertices, validate_bool)
+                                prod_cost_from_vertices, safe_weak_proxy_callback, validate_bool)
 from tent.utils.log import setup_logging
 from tent.utils.timer import Timer
 
@@ -97,7 +98,13 @@ class Market(Component):
                  real_time_duration: Union[timedelta, float, int] = timedelta(minutes=15)
                  ):
 
-        self.market_series = weakref.ref(market_series) if market_series else None
+        # TODO: Remove this SHIM once Market Series is correctly integrated in configuration.
+        ####### BEGIN SHIM
+        from tent.market.market_series import MarketSeries
+        self.tn = transactive_node
+        market_series = market_series if market_series else MarketSeries(self.tn)
+        ####### END SHIM
+        self.market_series = proxy(market_series, safe_weak_proxy_callback(self, 'market_series'))
 
         # 240222DJH: This is a model of how I propose to handle the many time durations of the market state machine:
         #   (1) Assign these simply as protected properties at first. Doing so allows existing methods to work as
@@ -134,9 +141,11 @@ class Market(Component):
         self._market_series_name = str(market_series_name)  # Successive market series objects share this name root
         # [Market] Pointer to market to be refined or corrected
         if isinstance(market_to_be_refined, Market):
-            self.market_to_be_refined = weakref.ref(market_to_be_refined)
-        elif market_to_be_refined and self.tn and self.tn():
-            self.market_to_be_refined = weakref.ref(self.tn().get_market_by_name(market_to_be_refined))
+            self.market_to_be_refined = proxy(market_to_be_refined,
+                                              safe_weak_proxy_callback(self, 'market_to_be_refined'))
+        elif market_to_be_refined:
+            self.market_to_be_refined = proxy(self.tn.get_market_by_name(market_to_be_refined),
+                                              safe_weak_proxy_callback(self, 'market_to_be_refined'))
         else:
             self.market_to_be_refined = None
         self.market_type = market_type if isinstance(market_type, MarketTypes)\
@@ -150,9 +159,12 @@ class Market(Component):
         self.negotiation_lead_time = negotiation_lead_time if isinstance(negotiation_lead_time, timedelta)\
             else timedelta(seconds=negotiation_lead_time)  # [timedelta] Time in market state "Negotiation"
         if isinstance(prior_market_in_series, Market):
-            self.prior_market_in_series = weakref.ref(prior_market_in_series) # [Market] Pointer to preceding market in this market series
-        elif prior_market_in_series and self.tn and self.tn():
-            self.prior_market_in_series = weakref.ref(self.tn().get_market_by_name(prior_market_in_series))
+            # [Market] Reference to preceding market in this market series
+            self.prior_market_in_series = proxy(prior_market_in_series,
+                                                safe_weak_proxy_callback(self, 'prior_market_in_series'))
+        elif prior_market_in_series:
+            self.prior_market_in_series = proxy(self.tn.get_market_by_name(prior_market_in_series),
+                                                safe_weak_proxy_callback(self, 'prior_market_in_series'))
         else:
             self.prior_market_in_series = None
         # 240222DJH: TODO: Depreciate, halt usage of real_time_duration.
@@ -163,8 +175,7 @@ class Market(Component):
         # Super is called after initializing variables so that everything has been calculated to get the market name.
         # TODO: This logic should belong to the MarketSeries.
         market_name = self.get_market_name()
-        # TODO: Should there ever not be a marketSeries?
-        description = self.market_series().description if self.market_series else market_name
+        description = self.market_series.description if self.market_series else market_name
         super(Market, self).__init__(description, market_name, transactive_node)
 
         # These are dynamic properties that are assigned in code and should not be manually configured:
@@ -199,42 +210,41 @@ class Market(Component):
         for neighbor in self.tn.neighbors:
             neighbor.schedule(self)
 
-        # 210118DJH: Must introduce a flag to end activities after various market states. This flag should be made
-        #            false in each transition and made true after all the tasks have been completed in the ensuing
-        #            market state.
+        # This flag should be made False in each transition.
+        # It should be made True after all the tasks have been completed in the ensuing market state.
         self._stateIsCompleted = False
 
     @property
     def activation_lead_time(self):
-        return self.market_series().activationLeadTime if self.market_series and self.market_series() else self._activation_lead_time
+        return self.market_series.activation_lead_time if self.market_series else self._activation_lead_time
 
     @property
     def delivery_lead_time(self):
-        return self.market_series().deliveryLeadTime if self.market_series and self.market_series() else self._delivery_lead_time
+        return self.market_series.delivery_lead_time if self.market_series else self._delivery_lead_time
 
     @property
     def interval_duration(self):
-        return self.market_series().intervalDuration if self.market_series and self.market_series() else self._interval_duration
+        return self.market_series.interval_duration if self.market_series else self._interval_duration
 
     @property
     def intervals_to_clear(self):
-        return self.market_series().intervalsToClear if self.market_series and self.market_series() else self._intervals_to_clear
+        return self.market_series.intervals_to_clear if self.market_series else self._intervals_to_clear
 
     @property
     def market_clearing_interval(self):
-        return self.market_series().marketClearingInterval if self.market_series and self.market_series() else self._market_clearing_interval
+        return self.market_series.market_clearing_interval if self.market_series else self._market_clearing_interval
 
     @property
     def market_lead_time(self):
-        return self.market_series().marketLeadTime if self.market_series and self.market_series() else self._market_lead_time
+        return self.market_series.market_lead_time if self.market_series else self._market_lead_time
 
     @property
     def initial_market_state(self):
-        return self.market_series().initialMarketState if self.market_series and self.market_series() else self._initial_market_state
+        return self.market_series.initial_market_state if self.market_series else self._initial_market_state
 
     @property
     def market_series_name(self):  # 240222DJH: I chose not to protect this at class MarketState.
-        return self.market_series().marketSeriesName if self.market_series and self.market_series() else self._market_series_name
+        return self.market_series.market_series_name if self.market_series else self._market_series_name
 
     def _calculate_clearing_time(self):
         # 240221DJH: TODO: Move this method to new market series class.
@@ -587,14 +597,7 @@ class Market(Component):
         if new_market.market_series and new_market.market_series():
             new_market.market_series().activeMarkets.append(new_market)
 
-        # 210127DJH: Save information about the new Market object into a formatted csv file.
-        try:
-            append_table(obj=new_market)
-        except Exception as e:
-            _log.warning('Exception in append_table:')
-            _log.warning(e)
-
-    def transition_from_initial_to_inactive(self, my_transactive_node):
+    def transition_from_initial_to_inactive(self):
         """
         Steps for initialization of the first market in a new market series which cannot be completed by __init__()
 
@@ -1267,9 +1270,9 @@ class Market(Component):
                 #   This can be the case where if more than one time interval is cleared by each market and
                 #   similar successive markets' delivery periods overlap, e.g., a rolling window of 24 hours.
 
-                if self.prior_market_in_series and self.prior_market_in_series() and self.intervals_to_clear > 1:
+                if self.prior_market_in_series and self.intervals_to_clear > 1:
                     marginal_price = None
-                    for prior_interval, refined_marginal_price in self.prior_market_in_series().marginal_prices.all:
+                    for prior_interval, refined_marginal_price in self.prior_market_in_series.marginal_prices.all:
                         # If the currently indexed time interval lies within the prior market's interval,
                         #   capture its value for the new marginal price in this time interval.
                         prior_interval_end_time = prior_interval.start_time + prior_interval.duration
@@ -1283,9 +1286,9 @@ class Market(Component):
                 # METHOD #3. If this market corrects another prior market, its cleared price should be used,
                 #   e.g., a real-time market that corrects day-ahead market periods.
 
-                if self.market_to_be_refined and self.market_to_be_refined():
+                if self.market_to_be_refined:
                     marginal_price = None
-                    for refined_interval, refined_marginal_price in self.market_to_be_refined().marginal_prices.all:
+                    for refined_interval, refined_marginal_price in self.market_to_be_refined.marginal_prices.all:
                         # If the currently indexed time interval lies within the refined market's interval,
                         #   capture its value as the marginal price in this time interval.
                         refined_interval_end_time = refined_interval.start_time + refined_interval.duration
@@ -1693,8 +1696,7 @@ class Market(Component):
         return 'market'
 
     def get_record(self) -> dict:
-        prior_market_id = self.prior_market_in_series().id \
-            if self.prior_market_in_series is not None and self.prior_market_in_series() else None
+        prior_market_id = self.prior_market_in_series.id if self.prior_market_in_series else None
         record = super(Market, self).get_record()
         record.update({
             'prior_market_id': prior_market_id,
@@ -1706,7 +1708,7 @@ class Market(Component):
             'market_clearing_time': self.market_clearing_time,
             'reconciliation_time': datetime.now(),#self.reconciliation_time,  # TODO: Need to have actual times, not lead intervals.
             'expiration_time': datetime.now(), #self.expiration_time,  # TODO: Need to have actual times, not lead intervals.
-            'market_series_id': self.market_series().id if self.market_series else None  # TODO: Should there ever not be a marketSeries?
+            'market_series_id': self.market_series.id if self.market_series else None  # TODO: Should there ever not be a marketSeries?
         })
         return record
 

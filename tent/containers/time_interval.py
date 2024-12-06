@@ -42,9 +42,10 @@ under Contract DE-AC05-76RL01830
 """
 
 from datetime import datetime, timedelta
+from weakref import proxy
 
 from tent import Archivable
-from tent.utils.helpers import format_ts
+from tent.utils.helpers import format_ts, safe_weak_proxy_callback
 
 
 class TimeInterval(Archivable):
@@ -57,7 +58,7 @@ class TimeInterval(Archivable):
     def __init__(self, market, duration, start_time):
         super(TimeInterval, self).__init__()
         self.duration = duration if isinstance(duration, timedelta) else timedelta(seconds=duration)
-        self.market = market
+        self.market = proxy(market, safe_weak_proxy_callback(self, 'market'))
         self.start_time: datetime = start_time
 
         # The TimeInterval name is used by the transactive record, and must be unique to its market.
