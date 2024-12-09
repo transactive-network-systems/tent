@@ -1482,10 +1482,10 @@ class Market(Component):
             self.production_costs.update(time_interval, sum_production_cost)
 
         # Sum total dual cost for the entire forward horizon.
-        self.total_dual_cost = self.dual_costs.total  # [$]
+        self.total_dual_cost = self.dual_costs.total()  # [$]
 
         # Sum total primal cost for the entire time horizon
-        self.total_production_cost = self.production_costs.total  # [$]
+        self.total_production_cost = self.production_costs.total()  # [$]
 
     def update_supply_demand(self):
         """

@@ -558,8 +558,8 @@ class LocalAsset(Entity):
         #  This does not take markets into account, where those do (for example, from update_production_costs):
         #     self.total_production_cost = sum([v.value for k, v in self.production_costs.all if k.market == market])  # [$]
         #  Further, this seems to just save over the sums which were calculated in those two functions....
-        self.total_production_cost = sum([v.value for k, v in self.production_costs.all])  # [$]
-        self.total_dual_cost = sum([v.value for k, v in self.dual_costs.all])
+        self.total_production_cost = self.production_costs.total()  # [$]
+        self.total_dual_cost = self.dual_costs.total()
 
     def actuate(self, mkt):
         """

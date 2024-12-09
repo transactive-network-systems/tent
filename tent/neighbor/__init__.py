@@ -299,7 +299,7 @@ class Neighbor(Entity):
         # If any of the convergence flags in active time intervals is false, the overall convergence flag should be set
         # false, too. Otherwise, true, meaning the coordination sub-problem is converged with this Neighbor.
         # TODO: This works but is ugly. Measurement should be an Iterator to allow "any(self.convergent_flags)".
-        self.converged = False if any([not v.value for _, v in self.convergence_flags.all]) else True
+        self.converged = False if any(self.convergence_flags.values) else True
 
         _log.debug(f"TCC convergence flags for {self.name} are {self.convergence_flags.log_report}")
         _log.debug(f"TCC convergence flag for {self.name} is {self.converged}.")

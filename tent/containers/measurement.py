@@ -57,11 +57,9 @@ class MeasurementValue(Archivable):
         self.interval: TimeInterval = proxy(interval, safe_weak_proxy_callback(self, 'interval'))
         self.measurement: Measurement = proxy(measurement, safe_weak_proxy_callback(self, 'measurement'))
         self.value: float | bool = value  # TODO: Should there be separate Value classes for different types?
-        self.archive()
 
     def update(self, value: float | bool):
         self.value = value
-        self.archive()
 
     def __add__(self, other):
         return self.value + other.value
@@ -162,10 +160,6 @@ class Measurement(Archivable):
         return sorted(self._data.items(), key=lambda x: x[0].start_time)
 
     @property
-    def log_report(self):
-        return {k.name: v.value for k, v in self.all}
-
-    @property
     def first(self):
         return self._data[min(self._data.keys(), key=lambda x: x.start_time)]
 
@@ -174,8 +168,16 @@ class Measurement(Archivable):
         return self._data[max(self._data.keys(), key=lambda x: x.start_time)]
 
     @property
-    def total(self, market=None):
-        return sum(v.value for k, v in self._data.items() if k.market == market) if market else sum(self._data)
+    def log_report(self):
+        return {ti.name: mv.value for ti, mv in self.all}
+
+    @property
+    def start_times(self):
+        return (ti.start_time for ti, mv in self.all)
+
+    @property
+    def values(self):
+        return (mv.value for ti, mv in self.all)
 
     def copy(self):
         return deepcopy(self)
@@ -190,11 +192,16 @@ class Measurement(Archivable):
     def get_by_start_time(self, start_time: datetime) -> MeasurementValue | None:
         return next(filter(lambda ti: ti.start_time == start_time, self._data.keys()), None)
 
-    def update(self, time_interval: TimeInterval, value: any):
+    def total(self, market=None):
+        return sum(mv.value for ti, mv in self._data.items() if ti.market == market) if market else sum(self.values)
+
+    def update(self, time_interval: TimeInterval, value: any, archive: bool = True):
         if time_interval in self._data:
             self._data[time_interval].update(value)
         else:
             self._data[time_interval] = MeasurementValue(self, time_interval, value)
+        if archive:
+            self.archive()
 
     def __bool__(self):
         return bool(self._data)
