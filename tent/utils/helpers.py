@@ -97,15 +97,8 @@ def find_objs_by_ti(items, ti):
     # found_items = [x for x in items if x.timeInterval.startTime == ti.startTime]
     found_items = [x for x in items if x.time_interval == ti]
     return found_items
-
-
-# def find_obj_by_ti(items, ti):
-#     # 200922DJH: This is lacking in Version 3 because multiple markets can share the same start time. Changing to match
-#     #            the actual TimeInterval object, which is unique to a market.
-#     # found_items = [x for x in items if x.timeInterval.startTime == ti.startTime]
-#     found_items = [x for x in items if x.timeInterval == ti]
-#     return found_items[0] if len(found_items) > 0 else None
 ######## END DEPRECATED
+
 
 def is_heavyloadhour(datetime_value):
     """True if time is within a HLH hour
@@ -115,6 +108,7 @@ def is_heavyloadhour(datetime_value):
         # noinspection PyStringException
         raise 'Input value has to be an instance of datetime'
 
+    # TODO: Why do we have a function that only recognizes holidays in the US in 2018?
     # These holidays are always LLH. If New Year's Day, Independence Day, or
     # Labor Day fall on a Sunday, the following Monday is LLH. These dates
     holidays = [

@@ -1154,8 +1154,8 @@ class Neighbor(Entity):
 
         # 201013DJH: Trim the list of transactive records in mySignal if they reference time intervals that are no
         #            longer in active markets.
-        all_markets = [x for x in self.tn.markets]
-        valid_time_interval_names = []
+        all_markets = [x for x in self.tn.markets]  # TODO: Is this going to work with MarketSeries?
+        valid_time_interval_names = []  # TODO: If this code stays, it can be reorganized as a single comprehension.
         for i in range(len(all_markets)):
             valid_time_interval_names.extend([x.name for x in all_markets[i].time_intervals])
         self.my_signal = [x for x in self.my_signal
@@ -1215,8 +1215,8 @@ class Neighbor(Entity):
             append_table(obj=transactive_records)
 
         # 210127DJH: Trim any records in the sentSignal list if their markets and time intervals are no longer active.
-        active_markets = [x for x in self.tn.markets]
-        active_time_intervals = []
+        active_markets = [x for x in self.tn.markets]  # TODO: Will this code work with MarketSeries?
+        active_time_intervals = []  # TODO: If this code stays, it can be refactored as a single comprehension.
         for active_market in active_markets:
             active_time_intervals.extend(active_market.time_intervals)
         active_time_interval_names = [x.name for x in active_time_intervals]
@@ -1276,8 +1276,8 @@ class Neighbor(Entity):
             append_table(obj=newly_received_records)
 
         # 210127DJH: Trim the received_signal list to remove any expired markets and time intervals.
-        active_markets = [x for x in self.tn.markets]
-        active_time_intervals = []
+        active_markets = [x for x in self.tn.markets]  # TODO: Is this going to work with MarketSeries?
+        active_time_intervals = []  # TODO: If this code stays, it can be reorganized as a single comprehension.
         for active_market in active_markets:
             active_time_intervals.extend(active_market.time_intervals)
         active_time_interval_names = [x.name for x in active_time_intervals]
