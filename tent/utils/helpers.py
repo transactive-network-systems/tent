@@ -77,94 +77,9 @@ def validate_bool(value, name):
     return bool(value)
 
 
-def format_date(dt):
-    return dt.strftime('%Y%m%d')
-
-
-def format_ts(dt):
-    return dt.strftime('%Y%m%dT%H%M%S')
-
-
-def format_timestamp(time_stamp):
-    """Create a consistent datetime string representation based on
-    ISO 8601 format.
-
-    YYYY-MM-DDTHH:MM:SS.mmmmmm for unaware datetime objects.
-    YYYY-MM-DDTHH:MM:SS.mmmmmm+HH:MM for aware datetime objects
-
-    :param time_stamp: value to convert
-    :type time_stamp: datetime
-    :returns: datetime in string format
-    :rtype: str
-    """
-
-    time_str = time_stamp.strftime("%Y-%m-%dT%H:%M:%S.%f")
-
-    if time_stamp.tzinfo is not None:
-        sign = '+'
-        td = time_stamp.tzinfo.utcoffset(time_stamp)
-        if td.days < 0:
-            sign = '-'
-            td = -td
-
-        seconds = td.seconds
-        minutes, seconds = divmod(seconds, 60)
-        hours, minutes = divmod(minutes, 60)
-        time_str += "{sign}{HH:02}:{MM:02}".format(sign=sign,
-                                                   HH=hours,
-                                                   MM=minutes)
-
-    return time_str
-
-
-def parse_timestamp_string(time_stamp_str):
-    """
-    Create a datetime object from the supplied date/time string.
-    Uses dateutil.parse with no extra parameters.
-
-    For performance reasons we try
-    YYYY-MM-DDTHH:MM:SS.mmmmmm
-    or
-    YYYY-MM-DDTHH:MM:SS.mmmmmm+HH:MM
-    based on the string length before falling back to dateutil.parse.
-
-    @param time_stamp_str:
-    @return: value to convert
-    """
-
-    if len(time_stamp_str) == 26:
-        try:
-            return datetime.strptime(time_stamp_str, "%Y-%m-%dT%H:%M:%S.%f")
-        except ValueError:
-            pass
-
-    elif len(time_stamp_str) == 32:
-        try:
-            base_time_stamp_str = time_stamp_str[:26]
-            time_zone_str = time_stamp_str[26:]
-            time_stamp = datetime.strptime(base_time_stamp_str, "%Y-%m-%dT%H:%M:%S.%f")
-            # Handle most common case.
-            if time_zone_str == "+00:00":
-                return time_stamp.replace(tzinfo=pytz.UTC)
-
-            hours_offset = int(time_zone_str[1:3])
-            minutes_offset = int(time_zone_str[4:6])
-
-            seconds_offset = hours_offset * 3600 + minutes_offset * 60
-            if time_zone_str[0] == "-":
-                seconds_offset = -seconds_offset
-
-            return time_stamp.replace(tzinfo=dateutil.tz.tzoffset("", seconds_offset))
-
-        except ValueError:
-            pass
-
-    return dateutil.parser.parse(time_stamp_str)
-
-
 def json_encoder(obj):
     if isinstance(obj, datetime):
-        return format_ts(obj)
+        return obj.isoformat()
     else:
         return obj.__dict__
 
@@ -215,7 +130,7 @@ def is_heavyloadhour(datetime_value):
     # The basic definition of HLH is based on hour and weekday memberships.
     h = datetime_value.hour
     d = datetime_value.weekday()
-    d_str = format_date(datetime_value)
+    d_str = datetime_value.date().isoformat()
     is_holiday = d_str in holidays
     is_in_hlh_hours = 6 <= h <= 21
     is_sunday = d == 6  # Sunday

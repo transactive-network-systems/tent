@@ -53,7 +53,6 @@ from zoneinfo import ZoneInfo
 from dateutil import parser
 from typing import Union
 
-from tent.utils.helpers import format_timestamp
 from tent.information_service_model import InformationServiceModel
 from tent.enumerations import MeasurementType
 from tent.utils.log import setup_logging
@@ -202,7 +201,7 @@ class TemperatureForecastModel(InformationServiceModel):
 
                 # None exist, raise exception
                 if len(items) == 0:
-                    raise Exception('No weather data for time: {}'.format(format_timestamp(ti.start_time)))
+                    raise Exception('No weather data for time: {}'.format(ti.start_time.isoformat()))
 
             # Add temperature to predicted values
             self.predicted_values.update(ti, items[0]['Value'])

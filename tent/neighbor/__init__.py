@@ -53,7 +53,7 @@ from tent.containers import IntervalValue, Measurement, TransactiveRecord, Verte
 from tent.enumerations import Direction, MarketState, MeasurementType, MeasurementUnit
 from tent.utils.data_manager import append_table
 from tent.utils.helpers import (are_different1, are_different2, find_objs_by_ti,
-                                format_timestamp, get_duration_in_hour, order_vertices, production,
+                                get_duration_in_hour, order_vertices, production,
                                 prod_cost_from_vertices, validate_bool, power_from_vertices)
 from tent.utils.timer import Timer
 from tent.utils.log import setup_logging
@@ -1628,7 +1628,7 @@ class Neighbor(Entity):
         return vertices
 
     def get_dict(self):
-        scheduled_powers = [(format_timestamp(k.start_time), v.value) for k, v in self.scheduled_powers.all]
+        scheduled_powers = [(k.start_time.isoformat(), v.value) for k, v in self.scheduled_powers.all]
         received_signal = [(x.time_interval, x.marginal_price, x.power) for x in self.received_signal]
         sent_signal = [(x.time_interval, x.marginal_price, x.power) for x in self.sent_signal]
 

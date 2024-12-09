@@ -49,7 +49,7 @@ from typing import Union
 from tent import Entity
 from tent.containers import IntervalValue, Measurement, TimeInterval, Vertex
 from tent.enumerations import MarketState, MeasurementType, MeasurementUnit
-from tent.utils.helpers import find_objs_by_ti, format_timestamp, prod_cost_from_vertices
+from tent.utils.helpers import find_objs_by_ti, prod_cost_from_vertices
 from tent.utils.log import setup_logging
 from tent.utils.timer import Timer
 
@@ -569,8 +569,8 @@ class LocalAsset(Entity):
         pass
 
     def get_dict(self):
-        scheduled_powers = [(format_timestamp(k.start_time), v.value) for k, v in self.scheduled_powers.all]
-        vertices = [(format_timestamp(x.time_interval.start_time), x.value.marginal_price, x.value.power) for x in
+        scheduled_powers = [(k.start_time.isoformat(), v.value) for k, v in self.scheduled_powers.all]
+        vertices = [(x.time_interval.start_time.isoformat(), x.value.marginal_price, x.value.power) for x in
                     self.activeVertices]
         local_asset_dict = {
             "name": self.name,

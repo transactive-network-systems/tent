@@ -56,7 +56,7 @@ from tent import Component
 from tent.containers import IntervalSeries, IntervalValue, Measurement, TimeInterval, Vertex
 from tent.enumerations import MarketState, MarketTypes, MeasurementType, MeasurementUnit, Method
 from tent.market.price_models import HourlyAveragePriceModel
-from tent.utils.helpers import (find_objs_by_ti, format_timestamp, order_vertices, production,
+from tent.utils.helpers import (find_objs_by_ti, order_vertices, production,
                                 prod_cost_from_vertices, safe_weak_proxy_callback, validate_bool)
 from tent.utils.log import setup_logging
 from tent.utils.timer import Timer
@@ -735,11 +735,11 @@ class Market(Component):
         for entity in self.tn.neighbors + self.tn.local_assets:
             for time_interval, scheduled_power in entity.scheduled_powers.all:
                 if time_interval.market is self:
-                    scheduled_powers[format_timestamp(time_interval.start_time)][entity.name] = scheduled_power.value
+                    scheduled_powers[time_interval.start_time.isoformat()][entity.name] = scheduled_power.value
         self.tn.publish(
             'balanced_price_record', {
                 'tnt_market_name': self.name,
-                'balanced_prices': {format_timestamp(k.start_time): v.value for k, v in self.marginal_prices.all},
+                'balanced_prices': {k.start_time.isoformat(): v.value for k, v in self.marginal_prices.all},
                 'schedule_powers': scheduled_powers
             })
 

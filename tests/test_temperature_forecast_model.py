@@ -1,6 +1,7 @@
+from datetime import datetime
+
 from tent.information_service_model.temperature_forecast_model import TemperatureForecastModel
 from tent.market import Market
-from tent.utils.helpers import format_ts
 
 # TODO: Move to tests directory and provide valid parameters to forecaster.
 forecaster = TemperatureForecastModel(
@@ -14,6 +15,6 @@ market.next_market_clearing_time = market.market_clearing_time + market.market_c
 # Test update_information
 forecaster.update_information(market)
 
-times = [format_ts(x.time_interval.start_time) for x in forecaster.predictedValues]
+times = [ti.isoformat() for ti in forecaster.predicted_values.start_times]
 
 print(times)

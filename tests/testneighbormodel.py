@@ -44,20 +44,16 @@ under Contract DE-AC05-76RL01830
 import weakref
 
 from datetime import date, time, datetime, timedelta
-# from dateutil import relativedelta
 
-from tent.containers.vertex import Vertex
-from tent.utils.helpers import format_ts, order_vertices
-from tent.enumerations.measurement_type import MeasurementType
-from tent.containers.interval_value import IntervalValue
-from tent.containers.transactive_record import TransactiveRecord
-from tent.meter_point import MeterPoint
-from tent.market import Market
-from tent.containers.time_interval import TimeInterval
-from tent.neighbor import Neighbor
+from tent.containers import IntervalValue, TimeInterval, TransactiveRecord, Vertex
+from tent.enumerations import MeasurementType
 from tent.local_asset import LocalAsset
-from tent.transactive_node import TransactiveNode
+from tent.market import Market
+from tent.meter_point import MeterPoint
+from tent.neighbor import Neighbor
 from tent.neighbor.bulk_supplier_dc import BulkSupplierDC
+from tent.transactive_node import TransactiveNode
+from tent.utils.helpers import order_vertices
 
 
 def test_calculate_reserve_margin():
@@ -236,8 +232,8 @@ def test_check_for_convergence():
     # TEST 4: Sent and received signals differ, no signal received since last send
     print('    Test 4: No received signal since last send')
     dt = datetime.now()
-    test_model.sent_signal[0].timestamp = format_ts(dt)  # Must be >5 minutes ago
-    test_model.received_signal[0].timestamp = format_ts(dt)
+    test_model.sent_signal[0].timestamp = dt.isoformat()  # Must be >5 minutes ago
+    test_model.received_signal[0].timestamp = dt.isoformat()
 
     try:
         test_model.check_for_convergence(test_market)
@@ -258,12 +254,12 @@ def test_check_for_convergence():
     test_model.sent_signal = [tr[0]]
 
     #   Ensure that the sent signal was sent much more than 5 minutes ago
-    test_model.sent_signal[0].timestamp = format_ts(dt - one_hour)
+    test_model.sent_signal[0].timestamp = (dt - one_hour).isoformat()
 
     #   Ensure that a signal has NOT been received since the last one was sent.
     #   This intentionally violates a precondition so that the method under
     #   test will not compare the sent and received messages.
-    test_model.received_signal[0].timestamp = format_ts(dt - 2 * one_hour)
+    test_model.received_signal[0].timestamp = (dt - 2 * one_hour).isoformat()
 
     try:
         test_model.check_for_convergence(test_market)

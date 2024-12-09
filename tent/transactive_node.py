@@ -51,7 +51,7 @@ from itertools import chain
 from tent import Archivable
 import tent.containers as containers
 from tent.market import Market
-from tent.utils.helpers import format_timestamp, camel_to_snake
+from tent.utils.helpers import camel_to_snake
 from tent.utils.log import setup_logging
 from tent.utils.timer import Timer
 
@@ -104,7 +104,7 @@ class TransactiveNode(Archivable):
             "neighbors": self.neighbors
         }
         if self.simulation:
-            self.default_config["simulation_start_time"] = format_timestamp(self.simulation_start_time)
+            self.default_config["simulation_start_time"] = self.simulation_start_time.isoformat()
             self.default_config["simulation_one_hour_in_seconds"] = self.simulation_one_hour_in_seconds
 
     def configure_node(self, configs):
