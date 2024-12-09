@@ -477,17 +477,17 @@ class LocalAsset(Entity):
         # Case 1: Actual marginal prices offered by the market object that has requested the asset to schedule.
         if market.marginal_prices:
             price_horizon = market.marginal_prices.copy()
-            end_of_calculated_horizon = market.marginal_prices.last.start_time + market.interval_duration
+            end_of_calculated_horizon = market.marginal_prices.last.interval.start_time + market.interval_duration
 
             if end_of_calculated_horizon >= end_of_scheduling_horizon:
                 return price_horizon
 
         # Case 2: Actual marginal prices in prior sequential markets that are similar to the market object.
-        if market.prior_market_in_series and market.prior_market_in_series() and market.prior_market_in_series().marginal_prices:
+        if market.prior_market_in_series and market.prior_market_in_series.marginal_prices:
             # Get the marginal prices from the latest similar market.
 
             # Find any market prices from the corrected market to add to the price horizon
-            for time_interval, marginal_price in market.prior_market_in_series().marginal_prices:
+            for time_interval, marginal_price in market.prior_market_in_series.marginal_prices:
                 if time_interval.end_time > end_of_calculated_horizon:
                     # TODO: This should probably be creating/updating an interval for this market with the same time.
                     price_horizon.update(time_interval, marginal_price)
@@ -498,7 +498,7 @@ class LocalAsset(Entity):
 
         # Case 3. Actual marginal prices in prior markets that are being corrected by the market object.
         # Start by gathering similar prior markets that are in the market series being corrected
-        if market.priorRefinedMarket and market.priorRefinedMarket() and market.priorRefinedMarket().marginal_prices:
+        if market.priorRefinedMarket and market.priorRefinedMarket.marginal_prices:
             # Find any market prices from the latest similar market to add to the price horizon
             # TODO: If the refined market has different starts/durations than ours, are these TimeIntervals correct?
             for time_interval, marginal_price in market.priorRefinedMarket.marginal_prices.all:
