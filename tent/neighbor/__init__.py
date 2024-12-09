@@ -520,9 +520,7 @@ class Neighbor(Entity):
                     'No active vertices can be created and scheduling was not performed')
             return
 
-        time_intervals = sorted(set(market.time_intervals), key=attrgetter('start_time'))
-
-        for time_interval in time_intervals:
+        for time_interval in market.time_intervals:
 
             self.active_vertices = [x for x in self.active_vertices if x.time_interval != time_interval]
 
@@ -629,7 +627,7 @@ class Neighbor(Entity):
 
         # Index again through the active market time intervals.
         new_active_vertices = []
-        for time_interval in time_intervals:
+        for time_interval in market.time_intervals:
 
             # Collect the active vertices that are in this time interval (and market). These will be acted upon to
             # include effects of losses and demand charges.

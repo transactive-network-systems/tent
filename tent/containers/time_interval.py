@@ -45,24 +45,26 @@ from datetime import datetime, timedelta
 from weakref import proxy
 
 from tent import Archivable
-from tent.utils.helpers import format_ts, safe_weak_proxy_callback
+from tent.utils.helpers import safe_weak_proxy_callback
 
 
 class TimeInterval(Archivable):
     """
-    The TimeInterval is the Market time interval. It progresses through
-    a series of MarketStates (see MarketState enumeration).
+    The TimeInterval is the Market time interval.
     """
 
-    # def __init__(self, activation_time, duration, market, market_clearing_time, start_time):
     def __init__(self, market, duration, start_time):
         super(TimeInterval, self).__init__()
-        self.duration = duration if isinstance(duration, timedelta) else timedelta(seconds=duration)
+        self.duration: timedelta = duration if isinstance(duration, timedelta) else timedelta(seconds=duration)
         self.market = proxy(market, safe_weak_proxy_callback(self, 'market'))
         self.start_time: datetime = start_time
+        # TODO: Should we have an owner attribute in addition to market?
 
         # The TimeInterval name is used by the transactive record, and must be unique to its market.
-        self.name: str = str(self.market.market_series_name) + ":" + format_ts(self.start_time)
+        # TODO: Confirm that this change to naming is appropriate.
+        # TODO: Is even the old version actually unique? How about multiple markets in series with same start interval?
+        #self.name: str = str(self.market.market_series_name) + ":" + format_ts(self.start_time)
+        self.name: str = f'{self.market.market_series_name}@{self.start_time.isoformat()}'
 
     @property
     def data_manager(self):
@@ -105,3 +107,48 @@ class TimeInterval(Archivable):
             }
         ])
         return definitions
+
+
+class IntervalSeries:
+    def __init__(self, market, first_start_time: datetime, duration: timedelta, number_of_intervals: int):
+        self.first_start_time = first_start_time
+        self.interval_duration = duration
+        self.market = proxy(market, safe_weak_proxy_callback(self, 'market'))
+        # TODO: How to have intervals be unique to markets, but comparable between markets?
+        # TODO: See the TODO notes in LocalAsset.get_extended_prices(). --- These concern TimeInterval handling.
+        self.number_of_intervals = number_of_intervals
+        self.total_duration = duration * number_of_intervals
+
+        self._intervals: dict[datetime, TimeInterval] = {}  # Key is start_time.
+        # Note: self._intervals should not be directly manipulated. If setting or adding intervals becomes necessary,
+        #   then this should be accomplished by a method that insures the current sort order (by start_time).
+        #   This intrinsic sorting is a property of the order in which they are created (dicts are ordered since 3.7)
+
+        for i in range(number_of_intervals):
+            new_interval = TimeInterval(self.market, duration, first_start_time + duration * i)
+            self._intervals[new_interval.start_time] = new_interval
+            new_interval.archive()
+
+    def __getitem__(self, index):
+        l = tuple(self._intervals.values())
+        return l[index]
+
+    def __iter__(self):
+        # Allows IntervalSeries to act as an iterator.
+        # Intervals should always be sorted by start time, so long as they were created using the constructor.
+        return iter(self._intervals.values())
+
+    @property
+    def first(self):
+        return self[0]
+
+    @property
+    def last(self):
+        return self[-1]
+
+    @property
+    def start_times(self):
+        return iter(self._intervals.keys())
+
+    def destroy(self):
+        self._intervals = {}

@@ -193,12 +193,8 @@ class LocalAsset(Entity):
         # - Updates self.engagementSchedule - an array that states whether the
         #   asset is engaged (committed) (true) or not (false) in the time interval
 
-        # Gather and sort the active time intervals
-        time_intervals = market.time_intervals
-        time_intervals.sort(key=lambda x: x.start_time)
-
         # Index through the active time intervals ti
-        for time_interval in time_intervals:
+        for time_interval in market.time_intervals:
             # TODO: Eliminate or fix parameter default_powers, which has been defined independent of market period.
             #  Reassign default value if there is power value for this time interval
             #  No, no, and no. Do not assign default values apart from specific times. The real world does not always
@@ -326,12 +322,8 @@ class LocalAsset(Entity):
         # OUTPUTS:
         # Assigns values to self.transition_costs
 
-        # Gather active time intervals and sort by time interval start times.
-        time_intervals = market.time_intervals
-        time_intervals.sort(key=lambda x: x.start_time)
-
         # Index through all but the first time interval.
-        for time_interval in time_intervals:
+        for time_interval in market.time_intervals:
             # Find the current and prior engagement states based on the current indexed time interval
             current_engagement_state = self.engagement_schedule.get_by_interval(time_interval)
             prior_engagement_state = self.engagement_schedule.get_prior_by_interval(time_interval)
@@ -469,6 +461,13 @@ class LocalAsset(Entity):
         :return: price_horizon, which may be placed into property self.schedulingHorizon by caller
         """
 
+        # TODO: This function uses a Measurement with TimeIntervals from multiple markets and/or created locally.
+        #  Should this really be constructing a new IntervalSeries?
+        #  If it does, how to distinguish these from ones owned by the (canonical, as passed in) market?
+        #  If these should be the same intervals as the market, how to handle extra ones
+        #       (they can't be added to the market itself, since it shouldn't get extras)?
+        #  Adding an owner property to the intervals would make them unique, even sharing the same market.
+        #  If we have intervals from multiple markets, how to compare these or convert from market ones to local ones?
         # The scheduling horizon is a distance into the future. The price horizon is initialized, then prices are found
         # from now until the end of the scheduling horizon.
         end_of_calculated_horizon = Timer.get_cur_time()
@@ -490,6 +489,7 @@ class LocalAsset(Entity):
             # Find any market prices from the corrected market to add to the price horizon
             for time_interval, marginal_price in market.prior_market_in_series().marginal_prices:
                 if time_interval.end_time > end_of_calculated_horizon:
+                    # TODO: This should probably be creating/updating an interval for this market with the same time.
                     price_horizon.update(time_interval, marginal_price)
                     end_of_calculated_horizon = time_interval.end_time
 
@@ -503,6 +503,7 @@ class LocalAsset(Entity):
             # TODO: If the refined market has different starts/durations than ours, are these TimeIntervals correct?
             for time_interval, marginal_price in market.priorRefinedMarket.marginal_prices.all:
                 if time_interval.end_time > end_of_calculated_horizon:
+                    # TODO: This should probably be creating/updating an interval for this market with the same time.
                     price_horizon.update(time_interval, marginal_price)
                     end_of_calculated_horizon = time_interval.end_time
 
@@ -516,6 +517,7 @@ class LocalAsset(Entity):
                 #            an object of class HourlyAveragePriceModel, but it is being made equivalent to the model
                 #            itself instead.
                 price = market.price_model.get(end_of_calculated_horizon)
+                # TODO: Why are we hard coding hours here?
                 start_time = end_of_calculated_horizon.replace(minute=0, second=0)
                 end_time = start_time + timedelta(hours=1)  # TODO: Why are we doing specifically hours now?
                 duration = end_time - start_time

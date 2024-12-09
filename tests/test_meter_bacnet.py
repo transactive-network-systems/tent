@@ -78,7 +78,6 @@ class TestBACnetMeterPoint(unittest.TestCase):
 
         # Mock market object creation
         self.test_market = Market(intervals_to_clear=(self.test_csv_length-1), market_clearing_time=self.test_date)
-        self.test_market.check_intervals()
 
         # Initialize CSVMeterPoint object
         self.test_bacnet_meter = BACnetMeterPoint(bacnet_config)

@@ -73,9 +73,7 @@ class BuildingZoneModel(LocalAsset):
 
         end_temperature = self.currentTemperature
 
-        intervals = market.time_intervals
-
-        for interval in intervals:
+        for interval in market.time_intervals:
             starting_temperature = end_temperature
             # TODO: The scheduled value(s) are determined by optimization of net comfort - cost.
             # Note that the flexibility should be estimated in update_vertices() method.

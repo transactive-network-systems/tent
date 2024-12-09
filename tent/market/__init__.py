@@ -53,7 +53,7 @@ from warnings import warn
 from weakref import proxy
 
 from tent import Component
-from tent.containers import IntervalValue, Measurement, TimeInterval, Vertex
+from tent.containers import IntervalSeries, IntervalValue, Measurement, TimeInterval, Vertex
 from tent.enumerations import MarketState, MarketTypes, MeasurementType, MeasurementUnit, Method
 from tent.market.price_models import HourlyAveragePriceModel
 from tent.utils.helpers import (find_objs_by_ti, format_timestamp, order_vertices, production,
@@ -197,14 +197,16 @@ class Market(Component):
                                                                             default_price=self.default_price)
         self.production_costs = Measurement(self, MeasurementType.ProductionCost, MeasurementUnit.Monetary)  # [$]
         self.reconciled = False  # [Boolean] Convergence flag
-        self.time_intervals = []  # [TimeInterval] Current list of active time intervals
+        self.time_intervals = IntervalSeries(self,  # [TimeInterval] Current list of active time intervals
+                                             first_start_time=self.market_clearing_time + self.delivery_lead_time,
+                                             duration=self.interval_duration,
+                                             number_of_intervals=self.intervals_to_clear)
         self.total_demand = Measurement(self, MeasurementType.TotalDemand, MeasurementUnit.kW)  # [avg.kW]
         self.total_dual_cost = 0.0  # [$]
         self.total_generation = Measurement(self, MeasurementType.TotalGeneration, MeasurementUnit.kW)  # [avg.kW]
         self.total_production_cost = 0.0  # [$]
 
         # Set up market
-        self.check_intervals()
         self.check_marginal_prices()
         for neighbor in self.tn.neighbors:
             neighbor.schedule(self)
@@ -533,7 +535,7 @@ class Market(Component):
         if self.market_state == MarketState.Expired and self._stateIsCompleted is not True:
 
             # Delete market intervals that are defined by this market object.
-            self.time_intervals = []
+            self.time_intervals.destroy()
 
             # Remove the expired market.
             self.tn.markets[:] = [x for x in self.tn.markets if x != self]
@@ -1172,12 +1174,8 @@ class Market(Component):
         The blended price does not include supply surplus and may therefore be a preferred representation of price for
         local loads and friendly neighbors, for which myTransactiveNode is not competitive and profit-seeking.
         """
-
-        self.check_intervals()
-
         # Perform checks on interval primal production costs to ensure smooth calculations.
         # NOTE: This does not check the veracity of the primal costs.
-
         if not self.production_costs:
             warn('Production costs have not been calculated.')
             #            _log.warning('Primal costs have not yet been calculated.')
@@ -1191,51 +1189,6 @@ class Market(Component):
 
             # Create or update blended price entry for this time interval.
             self.blended_prices1.update(time_interval, blended_price)
-
-    def check_intervals(self):
-        # Check or create the set of instantiated TimeIntervals in this Market
-
-        # Initialize the first interval starting time in this market.
-        starting_times = [self.market_clearing_time + self.delivery_lead_time]
-
-        # Find the last starting time in the market delivery period.
-        last_starting_time = starting_times[0] + self.interval_duration * (self.intervals_to_clear - 1)
-
-        # Assign the remaining interval start times in the market delivery period.
-        while starting_times[-1] < last_starting_time:
-            starting_times.append(starting_times[-1] + self.interval_duration)
-
-        # Index through the needed TimeIntervals based on their start times.
-        for starting_time in starting_times:
-
-            # This is a test to see whether the interval exists.
-            # 200924DJH: This check is inadequate in Version 3 because starting times are no longer necessarily unique.
-            #            The criterion must be revised to make sure the time interval is also in this market.
-            # time_intervals = [x for x in self.timeIntervals if x.start_time == starting_time]
-            time_intervals = [x for x in self.time_intervals if x.start_time == starting_time and x.market == self]
-
-            # TODO: This entire if/else block becomes irrelevant if self.timeIntervals is a dictionary by start_time.
-            #  That would already guarantee a single interval for each start time.
-            #  We only need to check whether to create one.
-            if len(time_intervals) == 0:  # None was found. Append a new time interval to the list of time intervals.
-                new_interval = TimeInterval(self, self.interval_duration, starting_time)
-                new_interval.archive()
-                self.time_intervals.append(new_interval)
-
-            elif len(time_intervals) == 1:  # The TimeInterval already exists. There is really no problem.
-                pass  # All is OK. There's no action to take.
-
-            else:  # Duplicate time intervals exist. Remove all but one.
-                # First remove ALL the time intervals having the current starting time.
-                # 200924DJH: This logic must be revised in Version 3 to make sure OTHER market intervals are not
-                #            eliminated.
-                # self.timeIntervals = [x for x in self.timeIntervals if x.start_time != starting_time]
-                # TODO: Shouldn't this be an or condition?
-                #  self.timeIntervals is already unique to this market, though, and we should just eliminate this block.
-                self.time_intervals = [x for x in self.time_intervals
-                                       if x.start_time != starting_time and x.market != self]
-                # Then append one lone time interval for this starting time.
-                self.time_intervals.append(time_intervals[0])
 
     def check_marginal_prices(self):
         """

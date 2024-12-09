@@ -60,10 +60,6 @@ class ConsensusMarket(Market):
         # Almost all consensus balancing activities will occur while the market is in its negotiation state.
         # This method replaces Market.while_in_negotiation().
 
-        # Check and update the time intervals at the beginning of the process. This should not need to be repeated in
-        # process iterations.
-        self.check_intervals()
-
         # Clean up or initialize marginal prices. This should not be repeated in process iterations.
         self.check_marginal_prices()
 
@@ -116,16 +112,14 @@ class ConsensusMarket(Market):
             # System is not converged. Iterate. The next code in this method revised the marginal prices in active
             # intervals to drive the system toward balance and convergence.
 
-            # Gather active time intervals
-            time_intervals = self.time_intervals  # TimeIntervals
-
+            # TimeIntervals
             if self.method == Method.Interpolation:  # == 2
                 self.assign_system_vertices()
                 # av = [(x.timeInterval.name, x.value.marginalPrice, x.value.power) for x in self.activeVertices]
                 # _log.debug("{} market active vertices are: {}".format(self.name, av))
 
             # Index through active time intervals.
-            for time_interval in time_intervals:
+            for time_interval in self.time_intervals:
                 # Find the marginal price interval value for the corresponding indexed time interval.
                 cleared_marginal_price = self.marginal_prices.get_by_interval(time_interval).value  # [$/kWh]
 

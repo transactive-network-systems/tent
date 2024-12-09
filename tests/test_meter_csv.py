@@ -79,7 +79,6 @@ class TestCSVMeterPoint(unittest.TestCase):
 
         # Mock market object creation
         self.test_market = Market(intervals_to_clear=(self.test_csv_length-1), market_clearing_time=self.test_date)
-        self.test_market.check_intervals()
 
         # Initialize CSVMeterPoint object
         self.test_csv_meter = CSVMeterPoint(name="TestCSVMeter", csv_path=self.test_csv_path)
@@ -124,7 +123,6 @@ class TestCSVMeterPoint(unittest.TestCase):
         assert len(self.test_csv_meter.meter_intervals) == 0
         # 240229DJH: Property intervals_to_clear has become a protected property.
         self.test_market._intervals_to_clear += 1
-        self.test_market.check_intervals()
         # Read in all values in csv
         self.test_csv_meter.read_meter(self.test_market)
         # Verify that all values have been read in.

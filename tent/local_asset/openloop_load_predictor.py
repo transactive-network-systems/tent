@@ -106,11 +106,8 @@ class OpenLoopLoadPredictor(LocalAsset):
         :return:
         """
 
-        # Get the active time intervals.
-        time_intervals = mkt.time_intervals  # TimeInterval objects
-
         # Index through the active time intervals.
-        for time_interval in time_intervals:
+        for time_interval in mkt.time_intervals:
             # Extract the start time from the indexed time interval.
             interval_start_time = time_interval.start_time
 

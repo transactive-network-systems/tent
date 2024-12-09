@@ -185,6 +185,7 @@ def test_check_intervals():
                          delivery_lead_time=timedelta(minutes=10))
 
     try:
+        # TODO: check_intervals has been removed. This should be a standard part of instantiation now.
         test_market.check_intervals()
         print(' - The case ran without errors.')
     except RuntimeWarning as warning:

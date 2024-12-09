@@ -104,8 +104,8 @@ def predict_2017(cls):
 
     # Control steps using horizon
     mkt.future_horizon = timedelta(days=365)
-
-    mkt.check_intervals(analysis_time)  # TODO: Wrong signature. Test will need updated to run.
+    # TODO: What was this doing? It had the wrong signature, and now this function is removed. Test won't work....
+    mkt.check_intervals(analysis_time)
 
     # set time intervals
     forecaster.update_information(mkt)

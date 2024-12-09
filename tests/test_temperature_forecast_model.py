@@ -11,8 +11,6 @@ market = Market()
 market.market_clearing_time = datetime.now().replace(minute=0, second=0, microsecond=0)
 market.next_market_clearing_time = market.market_clearing_time + market.market_clearing_interval
 
-market.check_intervals()
-
 # Test update_information
 forecaster.update_information(market)
 

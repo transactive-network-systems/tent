@@ -170,7 +170,7 @@ class TemperatureForecastModel(InformationServiceModel):
         weather_data = self.query_weather_data()
         if not self.map_forecast_to_interval(mkt, weather_data):
             if self.predicted_values:
-                gap_time = mkt.time_intervals[0].start_time - self.predicted_values.first.interval.start_time
+                gap_time = mkt.time_intervals.first.start_time - self.predicted_values.first.interval.start_time
                 if gap_time > self.max_gap_time:
                     if self.weather_data:
                         _log.debug("WEATHER using fallback1 tmy data for forecast!")
@@ -178,9 +178,9 @@ class TemperatureForecastModel(InformationServiceModel):
                 else:
                     # TODO: This seems to be intended to shift values forward by one interval.
                     #  Why do this at all? Is this really the best way to handle missing data?
-                    for i in range(1, len(mkt.time_intervals)):
-                        self.predicted_values.update(mkt.time_intervals[i],
-                                                     self.predicted_values.get_by_interval(mkt.time_intervals[i - 1]))
+                    for time_interval in mkt.time_intervals[1:]:
+                        self.predicted_values.update(time_interval,
+                                                     self.predicted_values.get_prior_by_interval(time_interval))
             else:
                 if self.weather_data:
                     _log.debug("WEATHER using fallback2 tmy data for forecast!")
