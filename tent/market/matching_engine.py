@@ -78,6 +78,7 @@ class MatchingEngine(Market):
         the market clearing time refers to the end of the Negotiation period within its market state engine.
     - Protected properties may be read, but they should not be changeable after an object is initialized.
     """
+    MARKET_TYPE = MarketTypes.matching_engine
 
     def __init__(
             self,
@@ -95,7 +96,7 @@ class MatchingEngine(Market):
             prior_market_in_series=None  # PROTECTED
     ):
         super(MatchingEngine, self).__init__(
-            market_type=MarketTypes.matching_engine,
+
             activation_lead_time=timedelta(hours=0.0),
             delivery_lead_time=delivery_lead_time,
             initial_market_state=MarketState.Negotiation,
@@ -104,12 +105,11 @@ class MatchingEngine(Market):
             market_clearing_interval=interval_duration,
             market_clearing_time=delivery_start_time - delivery_lead_time,
             market_lead_time=timedelta(hours=0.0),
-            market_order=2,  # Presume the matching engine follows a subscription
             market_series_name=market_series_name,
             market_to_be_refined="Subscription_Market",
             negotiation_lead_time=negotiation_lead_time,
             prior_market_in_series=prior_market_in_series
-        )
+        )  # Note: Before market_order was moved up to the MarketSeries, this class had a default of 2.
         self.orderList: list or Order or IntervalValue = []  # List of standing orders not yet matched
         self.matchList: list or Order or IntervalValue = []  # List of orders successfully matched
         if matching_strategy:
@@ -121,7 +121,8 @@ class MatchingEngine(Market):
         self.__deliveryStartTime__ = delivery_start_time
         self._stateIsCompleted: bool = False
         self.__priorMarketInSeries__: Market or None = prior_market_in_series
-        self.__nextMarketClearingTime__: datetime = self.marketClearingTime + self.marketClearingInterval
+        self.__nextMarketClearingTime__: datetime = (self.transition_times.delivery_lead
+                                                     + self.series.duration.market_clearing_interval)
 
     @property
     def matchingStrategy(self):
@@ -417,8 +418,8 @@ class MatchingEngine(Market):
             delivery_lead_time=self.deliveryLeadTime,
             delivery_start_time=new_market_clearing_time + self.deliveryLeadTime,
             has_market=True,
-            interval_duration=self.intervalDuration,
-            market_series_name=self.marketSeriesName,
+            interval_duration=self.series.duration.market_interval,
+            market_series_name=self.series.name,
             matching_strategy=self.matchingStrategy,
             # name=self.name,
             negotiation_lead_time=self.negotiationLeadTime,

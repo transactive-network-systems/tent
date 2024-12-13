@@ -75,6 +75,17 @@ def validate_bool(value, name):
         raise ValueError(f'{name} must be bool, not {type(value)}')
     return bool(value)
 
+def get_class_from_spec(spec:dict, default_class_name: str = None, default_module_prefix: str = None,
+                        transactive_node=None):
+    class_name = spec.pop('class_name', default_class_name)
+    if not class_name:
+        raise ValueError(f'Cannot load class --- Spec is missing class name: {spec}')
+    # TODO: This could probably use logic that searches standard locations and a default user-extensions directory.
+    module_name = spec.pop('module_name', '.'.join((default_module_prefix, camel_to_snake(class_name))))
+    module = importlib.import_module(module_name)
+    if transactive_node:
+        spec['transactive_node'] = transactive_node
+    return getattr(module, class_name)
 
 def json_encoder(obj):
     if isinstance(obj, datetime):

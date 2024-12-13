@@ -100,10 +100,10 @@ def predict_2017(cls):
     mkt = Market()
     analysis_time = parser.parse("2017-01-01 00:00:00")
     mkt.market_clearing_time = analysis_time
-    mkt.next_market_clearing_time = mkt.market_clearing_time + mkt.market_clearing_interval
+    mkt.next_market_clearing_time = mkt.transition_times.delivery_lead + mkt.series.duration.market_clearing_interval
 
     # Control steps using horizon
-    mkt.future_horizon = timedelta(days=365)
+    mkt.series.future_horizon = timedelta(days=365)
     # TODO: What was this doing? It had the wrong signature, and now this function is removed. Test won't work....
     mkt.check_intervals(analysis_time)
 

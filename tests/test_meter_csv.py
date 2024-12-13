@@ -122,7 +122,8 @@ class TestCSVMeterPoint(unittest.TestCase):
         # Verify nothing is stored in meter_intervals
         assert len(self.test_csv_meter.meter_intervals) == 0
         # 240229DJH: Property intervals_to_clear has become a protected property.
-        self.test_market._intervals_to_clear += 1
+        # TODO: What is happening here? If a series is required, are we incrementing this for the series in this test?
+        self.test_market.series.intervals_to_clear += 1
         # Read in all values in csv
         self.test_csv_meter.read_meter(self.test_market)
         # Verify that all values have been read in.

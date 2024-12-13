@@ -41,17 +41,17 @@ operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
 
-import importlib
 import logging
 
 from datetime import datetime, timezone
 from dateutil import parser
 from itertools import chain
+from sortedcontainers import SortedList
 
 from tent import Archivable
 import tent.containers as containers
 from tent.market import Market
-from tent.utils.helpers import camel_to_snake
+from tent.utils.helpers import get_class_from_spec
 from tent.utils.log import setup_logging
 from tent.utils.timer import Timer
 
@@ -82,7 +82,7 @@ class TransactiveNode(Archivable):
         # The agent must keep track of various devices and their models that are listed among these properties.
         self.information_service_models = []
         self.local_assets = []
-        self.markets = []
+        self.market_series = SortedList(key=lambda series: series.market_order)
         self.meter_points = []
         self.neighbors = []
 
@@ -155,7 +155,8 @@ class TransactiveNode(Archivable):
             _log.debug('DONE WITH ASSETS')
             self.neighbors = self._configure_components(config.get('neighbors'), 'Neighbors')
             _log.debug('DONE WITH NEIGHBORS')
-            self.markets = self._configure_components(config.get('markets'), 'Markets')
+            self.market_series = self._configure_components(config.get('markets'), 'Markets')
+            # TODO: Organize them by market order?
             _log.debug('DONE WITH MARKETS')
         except ValueError as e:
             _log.error("ERROR PROCESSING CONFIGURATION {}".format(e))
@@ -170,7 +171,7 @@ class TransactiveNode(Archivable):
         if not configs:
             return components
         for config in configs:
-            component_class = self._get_component_class(config)
+            component_class = get_class_from_spec(config, default_module_prefix='tent', transactive_node=self)
             self.data_manager.add_tables(component_class.get_archive_definitions())
             if issubclass(component_class, Market):
                 config['first_market_in_series'] = True
@@ -184,19 +185,9 @@ class TransactiveNode(Archivable):
 
     def _setup_data_manager(self, config):
         dm_configs = config.get('data_manager', {})
-        dm_class = self._get_component_class(dm_configs)
+        dm_class =  get_class_from_spec(dm_configs, default_module_prefix='tent.data_manager', transactive_node=self)
         self._data_manager = dm_class(**dm_configs)
         self.data_manager.add_tables(self.get_archive_definitions())
-
-    def _get_component_class(self, config: dict):
-        cls = config.pop('class_name')
-        # TODO: What will be the default directory for classes? Does this even make sense within a library package?
-        default_module_name = 'tent.' + camel_to_snake(cls)
-        module = config.pop('module_name', default_module_name)
-        _log.info(f'Configuring class: {cls} from module: {module}')
-        module = importlib.import_module(module)
-        config['transactive_node'] = self
-        return getattr(module, cls)
 
     def get_meters_by_attribute(self, attribute, match, first_only=False):
         return self.get_objects_by_attribute(self.meter_points, attribute, match, first_only)
@@ -204,8 +195,8 @@ class TransactiveNode(Archivable):
     def get_isms_by_attribute(self, attribute, match, first_only=False):
         return self.get_objects_by_attribute(self.information_service_models, attribute, match, first_only)
 
-    def get_markets_by_attribute(self, attribute, match, first_only=False):
-        return self.get_objects_by_attribute(self.markets, attribute, match, first_only)
+    def get_market_series_by_attribute(self, attribute, match, first_only=False):
+        return self.get_objects_by_attribute(self.market_series, attribute, match, first_only)
 
     def get_assets_by_attribute(self, attribute, match, first_only=False):
         return self.get_objects_by_attribute(self.local_assets, attribute, match, first_only)

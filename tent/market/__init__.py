@@ -45,19 +45,16 @@ import logging
 import os
 import sys
 
-from copy import deepcopy
 from collections import defaultdict
-from datetime import datetime, time, timedelta
-from typing import Union
 from warnings import warn
 from weakref import proxy
 
 from tent import Component
-from tent.containers import IntervalSeries, IntervalValue, Measurement, TimeInterval, Vertex
+from tent.containers import IntervalSeries, IntervalValue, MarketTimings, Measurement, Vertex
 from tent.enumerations import MarketState, MarketTypes, MeasurementType, MeasurementUnit, Method
 from tent.market.price_models import HourlyAveragePriceModel
 from tent.utils.helpers import (find_objs_by_ti, order_vertices, production,
-                                prod_cost_from_vertices, safe_weak_proxy_callback, validate_bool)
+                                prod_cost_from_vertices, safe_weak_proxy_callback)
 from tent.utils.log import setup_logging
 from tent.utils.timer import Timer
 
@@ -69,113 +66,30 @@ class Market(Component):
     # Market Base Class
     # At least one Market must exist (see the firstMarket object) to drive the timing with which new TimeIntervals are
     # created.
+    MARKET_TYPE = MarketTypes.unknown
 
     def __init__(self,
                  transactive_node,
-                 market_series=None,
-                 activation_lead_time: Union[timedelta, float, int] = timedelta(hours=0),
-                 commitment=False,
-                 default_price=0.05,
-                 delivery_anchor_time=None,
-                 delivery_lead_time: Union[timedelta, float, int] = timedelta(hours=0),
-                 duality_gap_threshold=0.01,
-                 first_market_in_series: bool = False,
-                 future_horizon: Union[timedelta, float, int] = timedelta(hours=24),
-                 initial_market_state: Union[MarketState, str, int] = MarketState.Inactive,
-                 interval_duration: Union[timedelta, float, int] = timedelta(hours=1),
-                 intervals_to_clear=1,
-                 market_clearing_interval: Union[timedelta, float, int] = timedelta(hours=1),
-                 market_clearing_time=None,
-                 market_lead_time: Union[timedelta, float, int] = timedelta(hours=0),
-                 market_order=1,
-                 market_series_name='Market Series',
+                 market_series,
+                 transition_times: MarketTimings,
                  market_to_be_refined=None,
-                 market_type: Union[MarketTypes, str, int] = MarketTypes.unknown,
-                 method: Union[Method, str, int] = Method.Interpolation,
-                 negotiation_lead_time: Union[timedelta, float, int] = timedelta(hours=0),
                  prior_market_in_series=None,
-                 real_time_duration: Union[timedelta, float, int] = timedelta(minutes=15)
+                 price_model=None
                  ):
+        market_name = '_'.join((*self.name.split(' '), transition_times.delivery_lead.isoformat(timespec='seconds')))
+        super(Market, self).__init__(market_series.description, market_name, transactive_node)
+        self.series = proxy(market_series, safe_weak_proxy_callback(self, 'market_series'))
+        self.transition_times: MarketTimings = transition_times
 
-        # TODO: Remove this SHIM once Market Series is correctly integrated in configuration.
-        ####### BEGIN SHIM
-        from tent.market.market_series import MarketSeries
-        self.tn = transactive_node
-        market_series = market_series if market_series else MarketSeries(self.tn)
-        ####### END SHIM
-        self.market_series = proxy(market_series, safe_weak_proxy_callback(self, 'market_series'))
-
-        # 240222DJH: This is a model of how I propose to handle the many time durations of the market state machine:
-        #   (1) Assign these simply as protected properties at first. Doing so allows existing methods to work as
-        #       before.
-        #   (2) All such time durations have been duplicated in new class TimeSeries. Each market object now has a weak
-        #       reference to its TimeSeries object.
-        #   (3) Manage these properties by having the market return the corresponding TimeSeries protected property
-        #       whenever there exists the weak reference, the local protected property otherwise.
-        #   (4) In the future we might delete the market classes' local protected time durations, as these will more
-        #       appropriately reside with each market's market series.
-        self._activation_lead_time = activation_lead_time if isinstance(activation_lead_time, timedelta) else \
-            timedelta(seconds=activation_lead_time)  # [timedelta] Time in market state "Active"
-        self.commitment = validate_bool(commitment, 'commitment')  # [Boolean] If true, scheduled power & price are
-        #                                                            commitments
-        self.default_price = float(default_price)  # [$/kWh] Static default price assignment
-        # deliveryAnchorTime [time] A time of day a market will always start (start immediately if None)
-        self.delivery_anchor_time = time.fromisoformat(delivery_anchor_time) if isinstance(delivery_anchor_time, str)\
-            else delivery_anchor_time
-        self._delivery_lead_time = delivery_lead_time if isinstance(delivery_lead_time, timedelta)\
-            else timedelta(seconds=delivery_lead_time)  # [timedelta] Time in market state "DeliveryLead"
-        self.duality_gap_threshold = float(duality_gap_threshold)  # [dimensionless]; 0.01 = 1%
-        self.future_horizon = future_horizon if isinstance(future_horizon, timedelta)\
-            else timedelta(seconds=future_horizon)  # Future functionality: future of price-discovery relevance
-        self._initial_market_state = initial_market_state if isinstance(initial_market_state, MarketState)\
-            else MarketState[initial_market_state]  # [MarketState] New market's initial state
-        self._interval_duration = interval_duration if isinstance(interval_duration, timedelta)\
-            else timedelta(seconds=interval_duration)  # [timedelta] Duration of this market's time intervals
-        self._intervals_to_clear = int(intervals_to_clear)  # [int] Market intervals to be cleared by this market object
-        self._market_clearing_interval = market_clearing_interval if isinstance(market_clearing_interval, timedelta)\
-            else timedelta(seconds=market_clearing_interval)  # [timedelta] Time between successive market clearings
-        self._market_lead_time = market_lead_time if isinstance(market_lead_time, timedelta)\
-            else timedelta(seconds=market_lead_time)  # [timedelta] Time in market state "MarketLead"
-        self.market_order = int(market_order)  # [pos. integer] Ordering of sequential markets  (Unused)
-        self._market_series_name = str(market_series_name)  # Successive market series objects share this name root
-        # [Market] Pointer to market to be refined or corrected
-        if isinstance(market_to_be_refined, Market):
-            self.market_to_be_refined = proxy(market_to_be_refined,
+        #### References to other markets: ####
+        # Market to be refined or corrected
+        self.market_to_be_refined: Market = (proxy(market_to_be_refined,
                                               safe_weak_proxy_callback(self, 'market_to_be_refined'))
-        elif market_to_be_refined:
-            self.market_to_be_refined = proxy(self.tn.get_market_by_name(market_to_be_refined),
-                                              safe_weak_proxy_callback(self, 'market_to_be_refined'))
-        else:
-            self.market_to_be_refined = None
-        self.market_type = market_type if isinstance(market_type, MarketTypes)\
-            else MarketTypes[market_type]  # [MarketTypes] enumeration
-        if isinstance(method, Method): # Solution method {1: subgradient, 2: interpolation}
-            self.method = method
-        elif isinstance(method, int):
-            self.method = Method(method)
-        else:
-            self.method = Method[method]
-        self.negotiation_lead_time = negotiation_lead_time if isinstance(negotiation_lead_time, timedelta)\
-            else timedelta(seconds=negotiation_lead_time)  # [timedelta] Time in market state "Negotiation"
-        if isinstance(prior_market_in_series, Market):
-            # [Market] Reference to preceding market in this market series
-            self.prior_market_in_series = proxy(prior_market_in_series,
-                                                safe_weak_proxy_callback(self, 'prior_market_in_series'))
-        elif prior_market_in_series:
-            self.prior_market_in_series = proxy(self.tn.get_market_by_name(prior_market_in_series),
-                                                safe_weak_proxy_callback(self, 'prior_market_in_series'))
-        else:
-            self.prior_market_in_series = None
-        # 240222DJH: TODO: Depreciate, halt usage of real_time_duration.
-        self.real_time_duration = real_time_duration if isinstance(real_time_duration, timedelta)\
-            else timedelta(seconds=real_time_duration)
-        self.market_clearing_time = market_clearing_time if market_clearing_time else self._calculate_clearing_time()
-
-        # Super is called after initializing variables so that everything has been calculated to get the market name.
-        # TODO: This logic should belong to the MarketSeries.
-        market_name = self.get_market_name()
-        description = self.market_series.description if self.market_series else market_name
-        super(Market, self).__init__(description, market_name, transactive_node)
+                                     if isinstance(market_to_be_refined, Market) else None)
+        # [Market] Reference to preceding market in this market series
+        self.prior_market_in_series: Market = (proxy(prior_market_in_series,
+                                             safe_weak_proxy_callback(self, 'prior_market_in_series'))
+                                       if isinstance(prior_market_in_series, Market) else None)
 
         # These are dynamic properties that are assigned in code and should not be manually configured:
         self.active_vertices = []  # [IntervalValue]; values are [vertices]
@@ -183,24 +97,16 @@ class Market(Component):
         self.blended_prices2 = Measurement(self, MeasurementType.BlendedPrice, MeasurementUnit.Monetary)  # (future functionality)
         self.converged = False
         self.dual_costs = Measurement(self, MeasurementType.DualCost, MeasurementUnit.Monetary)  # Values are [$]
-        # TODO: Does isNewestMarket need a setting for instantiation of some markets at startup?
-        # 240206DJH: ANSWER: This is best handled by configuration of the initial market and its treatment by method
-        #            spawn(). The "newest market" flag is held by the market that determines whether new markets must be
-        #            spawned, based on comparison of a calculated activation time and the current time.
-        #            A corrected assignment of isNewestMarket must always be checked as new markets are spawned.
-        self.is_newest_market = True  # [Boolean] Flag held by only the newest market in market series
-        self.market_state = self.initial_market_state if self.initial_market_state else MarketState.Initial
+        self.market_state = self.series.initial_market_state  # TODO: Is this still even needed?
         self.marginal_prices = Measurement(self, MeasurementType.MarginalPrice, MeasurementUnit.Monetary) # [$/kWh]
         self.net_powers = Measurement(self, MeasurementType.NetPower, MeasurementUnit.kW)  # [avg.kW]
-        self.next_market_clearing_time = self.market_clearing_time + self.market_clearing_interval
-        self.price_model: HourlyAveragePriceModel = HourlyAveragePriceModel(forgetting_factor=14,
-                                                                            default_price=self.default_price)
+        self.price_model = price_model
         self.production_costs = Measurement(self, MeasurementType.ProductionCost, MeasurementUnit.Monetary)  # [$]
         self.reconciled = False  # [Boolean] Convergence flag
         self.time_intervals = IntervalSeries(self,  # [TimeInterval] Current list of active time intervals
-                                             first_start_time=self.market_clearing_time + self.delivery_lead_time,
-                                             duration=self.interval_duration,
-                                             number_of_intervals=self.intervals_to_clear)
+                                             first_start_time=self.transition_times.delivery,
+                                             duration=self.series.duration.market_interval,
+                                             number_of_intervals=self.series.intervals_to_clear)
         self.total_demand = Measurement(self, MeasurementType.TotalDemand, MeasurementUnit.kW)  # [avg.kW]
         self.total_dual_cost = 0.0  # [$]
         self.total_generation = Measurement(self, MeasurementType.TotalGeneration, MeasurementUnit.kW)  # [avg.kW]
@@ -214,51 +120,6 @@ class Market(Component):
         # This flag should be made False in each transition.
         # It should be made True after all the tasks have been completed in the ensuing market state.
         self._stateIsCompleted = False
-
-    @property
-    def activation_lead_time(self):
-        return self.market_series.activation_lead_time if self.market_series else self._activation_lead_time
-
-    @property
-    def delivery_lead_time(self):
-        return self.market_series.delivery_lead_time if self.market_series else self._delivery_lead_time
-
-    @property
-    def interval_duration(self):
-        return self.market_series.interval_duration if self.market_series else self._interval_duration
-
-    @property
-    def intervals_to_clear(self):
-        return self.market_series.intervals_to_clear if self.market_series else self._intervals_to_clear
-
-    @property
-    def market_clearing_interval(self):
-        return self.market_series.market_clearing_interval if self.market_series else self._market_clearing_interval
-
-    @property
-    def market_lead_time(self):
-        return self.market_series.market_lead_time if self.market_series else self._market_lead_time
-
-    @property
-    def initial_market_state(self):
-        return self.market_series.initial_market_state if self.market_series else self._initial_market_state
-
-    @property
-    def market_series_name(self):  # 240222DJH: I chose not to protect this at class MarketState.
-        return self.market_series.market_series_name if self.market_series else self._market_series_name
-
-    def _calculate_clearing_time(self):
-        # 240221DJH: TODO: Move this method to new market series class.
-        # 240221DJH: TODO: Ensure that this base method begins delivery on major temporal transitions.
-        now = Timer.get_cur_time()
-        run_gap = (self.delivery_lead_time + self.market_lead_time + self.negotiation_lead_time
-                   + self.activation_lead_time)
-        if not self.delivery_anchor_time:
-            delivery_start = now + run_gap
-        else:
-            delivery_anchor_today = datetime.combine(now.date(), self.delivery_anchor_time)
-            delivery_start = now + ((delivery_anchor_today - now - run_gap) % self.market_clearing_interval)
-        return delivery_start - self.delivery_lead_time
 
     def events(self):
         """
@@ -312,34 +173,19 @@ class Market(Component):
         # the market's clearing time. Note that this logic seems a little backward because the state's start must be
         # determined *before* the needed market object exists.
 
-        # 191212DJH: This logic is simplified greatly by the introduction of flag isNewestMarket. The potential need for
-        # new market objects is triggered only by the newest market in any series.
+        # TODO: Moved spawn() call to next block, since it has same time trigger.
+        #  Rework comments to reflect use of self.transition_times.
 
-        if self.is_newest_market is True:
-            future_clearing_time = current_time + self.activation_lead_time \
-                                   + self.negotiation_lead_time + self.market_lead_time
-            if self.next_market_clearing_time < future_clearing_time:
-                self.spawn_markets(self.next_market_clearing_time)
-                self.is_newest_market = False
-                # # 210118DJH: New flag. Set true when responsibilities in market state are completed.
-                # self._stateIsCompleted = True
-
-        # EVENT 1B: TRANSITION FROM INACTIVE TO ACTIVE STATE ***********************************************************
-        # 210118DJH: Adding flag. No state transition should be allowed unless the prior state is done.
+        # EVENT 1B: TRANSITION FROM INACTIVE TO ACTIVE STATE ***********************************************************.
         if self.market_state == MarketState.Inactive:  # and self._stateIsCompleted is True:
-
-            activation_start_time = self.market_clearing_time - self.market_lead_time - self.negotiation_lead_time \
-                                    - self.activation_lead_time
-
-            if current_time >= activation_start_time:
+            if current_time >= self.transition_times.active:
                 # Change the market state to "Active."
                 self.market_state = MarketState.Active
                 _log.debug(f'MARKET: {self.name} STATE IS NOW: MarketState.Active')
-
+                self.series.spawn()
                 # Call this replaceable method where appropriate actions can be taken.
                 self.transition_from_inactive_to_active()
 
-                # 210118DJH: New flag. Set false upon transition to new market state.
                 self._stateIsCompleted = False
 
         # EVENT 1C: ACTIONS WHILE IN THE ACTIVE STATE ******************************************************************
@@ -360,9 +206,7 @@ class Market(Component):
         # 210118DJH. New flag. Do not transition out of a state until it is completed.
         if self.market_state == MarketState.Active and self._stateIsCompleted is True:
 
-            negotiation_start_time = self.market_clearing_time - self.market_lead_time - self.negotiation_lead_time
-
-            if current_time >= negotiation_start_time:
+            if current_time >= self.transition_times.negotiation:
                 # Change the market state to "Negotiation."
                 self.market_state = MarketState.Negotiation
                 _log.debug(f'MARKET: {self.name} STATE IS NOW: MarketState.Negotiation')
@@ -393,9 +237,7 @@ class Market(Component):
         # 210118DJH: Adding flag. No state transition should be allowed unless the prior state is completed.
         if self.market_state == MarketState.Negotiation and self._stateIsCompleted is True:
 
-            market_lead_start_time = self.market_clearing_time - self.market_lead_time
-
-            if current_time >= market_lead_start_time:
+            if current_time >= self.transition_times.market_lead:
                 # Change the market state to "MarketLead."
                 self.market_state = MarketState.MarketLead
                 _log.debug(f'MARKET: {self.name} STATE IS NOW: MarketState.MarketLead')
@@ -419,13 +261,9 @@ class Market(Component):
 
         # EVENT 4A: TRANSITION FROM MARKET LEAD TO DELIVERY LEAD STATE *************************************************
         # This is the transition from "MarketLead" to "DeliveryLead" market states.
-        # 210118DJH: Adding flag. No state transition should be allowed unless the prior state is done.
         if self.market_state == MarketState.MarketLead and self._stateIsCompleted is True:
 
-            # This transition is simply the market clearing time.
-            delivery_lead_start_time = self.market_clearing_time
-
-            if current_time >= delivery_lead_start_time:
+            if current_time >= self.transition_times.delivery_lead:
                 # Set the market state to "DeliveryLead."
                 self.market_state = MarketState.DeliveryLead
                 _log.debug(f'MARKET: {self.name} STATE IS NOW: MarketState.DeliveryLead')
@@ -453,9 +291,7 @@ class Market(Component):
         # 210118DJH: Adding flag. No state transition should be allowed unless the prior state is done.
         if self.market_state == MarketState.DeliveryLead and self._stateIsCompleted is True:
 
-            delivery_start_time = self.market_clearing_time + self.delivery_lead_time
-
-            if current_time >= delivery_start_time:
+            if current_time >= self.transition_times.delivery:
                 # Change the market state from "DeliverLead" to "Delivery."
                 self.market_state = MarketState.Delivery
                 _log.debug(f'MARKET: {self.name} STATE IS NOW: MarketState.Delivery')
@@ -483,10 +319,7 @@ class Market(Component):
         # 210118DJH: Adding flag. No state transition should be allowed unless the prior state is completed.
         if self.market_state == MarketState.Delivery and self._stateIsCompleted is True:
 
-            reconcile_start_time = self.market_clearing_time + self.delivery_lead_time \
-                                   + self.intervals_to_clear * self.interval_duration
-
-            if current_time >= reconcile_start_time:
+            if current_time >= self.transition_times.reconciliation:
 
                 # Change the market state to "Reconcile."
                 self.market_state = MarketState.Reconcile
@@ -539,64 +372,7 @@ class Market(Component):
 
             # Remove the expired market.
             self.tn.markets[:] = [x for x in self.tn.markets if x != self]
-
             # NOTE: We let garbage collection finally delete the object once it is entirely out of scope.
-
-    def spawn_markets(self, new_market_clearing_time):
-        """
-        This method is called when a test determines that a new market object may be needed. The base method creates the
-        new market object, as will be normal for systems having only one market. This method must be replaced or
-        extended if
-        (1) Still more markets should be instantiated, as may happen when market self is refined or corrected by another
-        market series. If this is the case, not only the next needed market in this series, but also one or more markets
-        in another market series must be instantiated.
-        (2) The markets in this series are instantiated by another market series. In this case, this method should be
-        replaced by a pass (no action).
-
-        :param: new_market_clearing_time: new market objects market clearing time
-        :return: None
-        """
-        _log.debug(f'{self.name} IS IN SPAWN_MARKETS')
-        # A new market object must be instantiated. Many of its properties are the same as that of the called market
-        # or can be derived therefrom. The new market should typically be initialized from the same class as the calling
-        # market (i.e., self).
-        new_market = self.__class__(
-            activation_lead_time=self.activation_lead_time,
-            commitment=self.commitment,
-            default_price=self.default_price,
-            delivery_lead_time=self.delivery_lead_time,
-            future_horizon=self.future_horizon,
-            initial_market_state=self.initial_market_state,
-            interval_duration=self.interval_duration,
-            intervals_to_clear=self.intervals_to_clear,
-            market_clearing_interval=self.market_clearing_interval,
-            market_clearing_time=new_market_clearing_time,
-            market_lead_time=self.market_lead_time,
-            market_order=self.market_order,
-            market_series_name=self.market_series_name,  # This often points to self.marketSeries.market_series_name
-            market_to_be_refined=self.market_to_be_refined,
-            method=self.method,
-            negotiation_lead_time=self.negotiation_lead_time,
-            prior_market_in_series=self,
-            market_series=self.market_series,  # 240228DJH: new weak reference to the market's market series object.
-            transactive_node=self.tn
-        )
-        new_market.market_type = self.market_type if isinstance(self.market_type, MarketTypes) else MarketTypes.unknown
-
-        new_market.price_model = deepcopy(self.price_model)  # It must be clear that this is a copy, not a reference.
-
-        if new_market.initial_market_state:
-            new_market.market_state = new_market.initial_market_state
-        else:
-            new_market.market_state = MarketState.Initial
-
-        # Append the new market object to the list of market objects that is maintained by the agent.
-        self.tn.markets.append(new_market)
-
-        # 240228DJH: If this market references its MarketSeries object, then also place the market into its list of
-        #            active markets.
-        if new_market.market_series and new_market.market_series():
-            new_market.market_series().activeMarkets.append(new_market)
 
     def transition_from_initial_to_inactive(self):
         """
@@ -832,7 +608,7 @@ class Market(Component):
 
         # Write the vertex data into a csv file based on the current working directory.
 
-        filename = self.market_series_name + ".csv"
+        filename = self.series.name + ".csv"
         data_folder = os.getcwd()
         data_folder = data_folder + "\\.."
         data_folder = data_folder + "\\Market_Data\\"
@@ -917,7 +693,7 @@ class Market(Component):
         #            the iterative sub-gradient or interpolation approach. Iteration and preconditions may need to be
         #            completed within the market's state machine.
         # TODO: Consider having the balance method solve for both marginal price AND quantity.
-        if self.method == Method.Interpolation:
+        if self.series.method == Method.Interpolation:
             self.assign_system_vertices()
             av = [(x.time_interval.name, x.value.marginal_price, x.value.power) for x in self.active_vertices]
             _log.debug("{} market active vertices are: {}".format(self.name, av))
@@ -928,9 +704,9 @@ class Market(Component):
             marginal_price = self.marginal_prices.get_by_interval(time_interval)
 
             # Extract its marginal price value as a trial clearing price (that may be replaced).
-            cleared_marginal_price = self.default_price if marginal_price is None else marginal_price.value  # [$/kWh]
+            cleared_marginal_price = self.series.default_price if marginal_price is None else marginal_price.value  # [$/kWh]
 
-            if self.method == Method.Subgradient:
+            if self.series.method == Method.Subgradient:
                 # Find the net power corresponding to the indexed time interval.
                 net_power = self.net_powers.get_by_interval(time_interval)
                 total_generation = self.total_generation.get_by_interval(time_interval)
@@ -941,7 +717,7 @@ class Market(Component):
                 # Update the marginal price using sub-gradient search.
                 cleared_marginal_price = cleared_marginal_price - (net_power * 1e-1) / (10 + k)  # [$/kWh]
 
-            elif self.method == Method.Interpolation:
+            elif self.series.method == Method.Interpolation:
                 # Get the indexed active system vertices.
                 active_vertices = [x.value for x in self.active_vertices
                                    if x.time_interval.start_time == time_interval.start_time]
@@ -1190,6 +966,17 @@ class Market(Component):
             # Create or update blended price entry for this time interval.
             self.blended_prices1.update(time_interval, blended_price)
 
+    @staticmethod
+    def _extract_price_from_other_market(other_market, time_interval):
+        marginal_price = None
+        for other_mkt_ti, other_mkt_mp in other_market.marginal_prices.all:
+            # If the currently indexed time interval lies within the refined market's interval,
+            #   capture its value as the marginal price in this time interval.
+            other_interval_end_time = other_mkt_ti.start_time + other_mkt_ti.duration
+            if other_mkt_ti.start_time <= time_interval.start_time < other_interval_end_time:
+                marginal_price = other_mkt_mp.value
+        return marginal_price
+
     def check_marginal_prices(self):
         """
         191212DJH: Much of the logic may be simplified upon the introduction of isNewestMarket flag and assertion that
@@ -1222,15 +1009,8 @@ class Market(Component):
                 #   This can be the case where if more than one time interval is cleared by each market and
                 #   similar successive markets' delivery periods overlap, e.g., a rolling window of 24 hours.
 
-                if self.prior_market_in_series and self.intervals_to_clear > 1:
-                    marginal_price = None
-                    for prior_interval, refined_marginal_price in self.prior_market_in_series.marginal_prices.all:
-                        # If the currently indexed time interval lies within the prior market's interval,
-                        #   capture its value for the new marginal price in this time interval.
-                        prior_interval_end_time = prior_interval.start_time + prior_interval.duration
-                        if prior_interval.start_time <= time_interval.start_time < prior_interval_end_time:
-                            marginal_price = refined_marginal_price.value
-
+                if self.prior_market_in_series and self.series.intervals_to_clear > 1:
+                    marginal_price = self._extract_price_from_other_market(self.prior_market_in_series, time_interval)
                     if marginal_price is not None:
                         self.marginal_prices.update(time_interval, marginal_price)
                         continue
@@ -1239,14 +1019,7 @@ class Market(Component):
                 #   e.g., a real-time market that corrects day-ahead market periods.
 
                 if self.market_to_be_refined:
-                    marginal_price = None
-                    for refined_interval, refined_marginal_price in self.market_to_be_refined.marginal_prices.all:
-                        # If the currently indexed time interval lies within the refined market's interval,
-                        #   capture its value as the marginal price in this time interval.
-                        refined_interval_end_time = refined_interval.start_time + refined_interval.duration
-                        if refined_interval.start_time <= time_interval.start_time < refined_interval_end_time:
-                            marginal_price = refined_marginal_price.value
-
+                    marginal_price = self._extract_price_from_other_market(self.market_to_be_refined, time_interval)
                     if marginal_price is not None:
                         self.marginal_prices.update(time_interval, marginal_price)
                         continue
@@ -1260,8 +1033,8 @@ class Market(Component):
                         continue
 
                 # METHOD 5. If all above methods fail, market periods should be assigned the market's default price.
-                if self.default_price is not None:
-                    self.marginal_prices.update(time_interval, self.default_price)
+                if self.series.default_price is not None:
+                    self.marginal_prices.update(time_interval, self.series.default_price)
                     continue
 
                 # METHOD 6: If all the above logic fails to assign the marginal price, assign as None.
@@ -1613,7 +1386,7 @@ class Market(Component):
     #
     #     start_times, marginal_prices = zip(*[(k.start_time, v.value) for k, v in self.marginal_prices.all])
     #     marginal_prices.append(marginal_prices[-1])
-    #     start_times.append(start_times[-1] + self.interval_duration)
+    #     start_times.append(start_times[-1] + self.series.duration.market_interval)
     #
     #     fig, ax = plt.subplots()
     #     ax.step(start_times, marginal_prices, where='post')
@@ -1630,7 +1403,7 @@ class Market(Component):
     def get_dict(self):
         market_dict = {
             "market_name": self.name,
-            "marketSeriesId": self.market_series_name,
+            "marketSeriesId": self.series.name,
             "totalDemand": self.total_demand,
             "totalDualCost": self.total_dual_cost,
             "totalGeneration": self.total_generation,
@@ -1638,29 +1411,24 @@ class Market(Component):
         }
         return market_dict
 
-    def get_market_name(self):
-        dt = str(self.market_clearing_time)
-        market_name = self.market_series_name.replace(' ', '_') + '_' + dt[:19]
-        return market_name
-
     @property
     def table_name(self):
         return 'market'
 
     def get_record(self) -> dict:
-        prior_market_id = self.prior_market_in_series.id if self.prior_market_in_series else None
         record = super(Market, self).get_record()
         record.update({
-            'prior_market_id': prior_market_id,
+            'prior_market_id': self.prior_market_in_series.id if self.prior_market_in_series else None,
             'market_to_be_refined_id': self.market_to_be_refined.id if self.market_to_be_refined else None,
-            'market_type': self.market_type,
-            'activation_time': datetime.now(), #self.activationTime,  # TODO: Need to have actual times, not lead intervals.
-            'negotiation_start_time': datetime.now(), #self.negotiationStartTime,  # TODO: Need to have actual times, not lead intervals.
-            'market_lead_time': datetime.now(),  # self.market_lead_time,  # TODO: Need to have actual times, not lead intervals.
-            'market_clearing_time': self.market_clearing_time,
-            'reconciliation_time': datetime.now(),#self.reconciliation_time,  # TODO: Need to have actual times, not lead intervals.
-            'expiration_time': datetime.now(), #self.expiration_time,  # TODO: Need to have actual times, not lead intervals.
-            'market_series_id': self.market_series.id if self.market_series else None  # TODO: Should there ever not be a marketSeries?
+            'market_type': self.series.market_type,
+            'active_start_time': self.transition_times.active,
+            'negotiation_start_time': self.transition_times.negotiation,
+            'market_lead_start_time': self.transition_times.market_lead,
+            'market_clearing_time': self.transition_times.delivery_lead,
+            'delivery_start_time': self.transition_times.delivery,
+            'reconciliation_start_time': self.transition_times.reconciliation,
+            'expiration_time': self.transition_times.expiration,
+            'market_series_id': self.series.id
         })
         return record
 
@@ -1676,11 +1444,12 @@ class Market(Component):
                     {"name": "prior_market_id", "foreign_key": "market.id", "nullable": True},
                     {"name": "market_to_be_refined_id", "foreign_key": "market.id", "nullable": True},
                     {"name": "market_type", "enumeration": "MarketTypes"},
-                    {"name": "activation_time", "type": "DateTime"},
+                    {"name": "active_start_time", "type": "DateTime"},
                     {"name": "negotiation_start_time", "type": "DateTime"},
-                    {"name": "market_lead_time", "type": "DateTime"},
+                    {"name": "market_lead_start_time", "type": "DateTime"},
                     {"name": "market_clearing_time", "type": "DateTime"},
-                    {"name": "reconciliation_time", "type": "DateTime"},
+                    {"name": "delivery_start_time", "type": "DateTime"},
+                    {"name": "reconciliation_start_time", "type": "DateTime"},
                     {"name": "expiration_time", "type": "DateTime"},
                     {"name": "market_series_id", "foreign_key": "market_series.id"}
                 ]

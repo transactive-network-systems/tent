@@ -58,9 +58,11 @@ class Auction(Market):
     An Auction object may be a formal driver of myTransactiveNode's responsibilities within a formal auction. At least
     one Market must exist (see the firstMarket object) to drive the timing with which new TimeIntervals are created.
     """
+    MARKET_TYPE = MarketTypes.auction
+
     def __init__(self, *args, **kwargs):
         # Properties and methods inherited from Market class:
-        super(Auction, self).__init__(market_type=MarketTypes.auction, *args, **kwargs)
+        super(Auction, self).__init__(*args, **kwargs)
 
     def transition_from_active_to_negotiation(self):
         """

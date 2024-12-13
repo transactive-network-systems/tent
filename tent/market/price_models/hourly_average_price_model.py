@@ -11,6 +11,10 @@ setup_logging()
 _log = logging.getLogger(__name__)
 
 
+# TODO: Long run, might be better to have a factory method for PriceModel that builds one based on MarketSeries.
+# TODO: There should be a method to output a new PriceModel descended from this (w/ deepcopy of the internal data).
+# TODO: There should be a base PriceModel class.
+# TODO: Update MarketSeries to simplify the logic around this when all the above are done.
 class HourlyAveragePriceModel:
     """
     Tracks ths mean and standard deviation of prices for the market series on an hourly basis.

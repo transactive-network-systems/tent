@@ -109,7 +109,7 @@ def append_interval_value_table(method=METHOD, objects=None):
     for obj in objects:
         SOURCE_TYPE = obj.associatedClass
         SOURCE_NAME = obj.associatedObject  # 211116DJH: TODO: This should probably be the object's name.
-        MARKET_SERIES = obj.market.market_series_name
+        MARKET_SERIES = obj.market.series.name
         # 211109DJH: The use of strftime() throws errors if these datetime objects were not defined. This approach
         #            should be more tolerant.
         if obj.market.market_clearing_time:
@@ -197,14 +197,14 @@ def append_market_object_table(method=METHOD, objects=None):
 
     for obj in objects:
         MARKET_NAME = obj.name
-        MARKET_SERIES = obj.market_series_name
-        NUMBER_INTERVALS = obj.intervals_to_clear
+        MARKET_SERIES = obj.series.name
+        NUMBER_INTERVALS = obj.series.intervals_to_clear
         MARKET_CLEARING_DATE = format(obj.market_clearing_time, DATE_FORMAT)
         MARKET_CLEARING_TIME = format(obj.market_clearing_time, TIME_FORMAT)
         start_time = min(obj.time_intervals.start_times)
         DELIVERY_START_DATE = format(start_time, DATE_FORMAT)
         DELIVERY_START_TIME = format(start_time, TIME_FORMAT)
-        TOTAL_DELIVERY_HOURS = obj.intervals_to_clear * obj.interval_duration
+        TOTAL_DELIVERY_HOURS = obj.series.intervals_to_clear * obj.series.duration.market_interval
         TOTAL_GENERATION = None
         TOTAL_DEMAND = None
         TOTAL_PRODUCTION_COST = None

@@ -47,11 +47,10 @@ from tent.utils.helpers import order_vertices
 
 
 class ConsensusMarket(Market):
+    MARKET_TYPE = MarketTypes.consensus
 
     def __init__(self, market_series_name='Consensus_Market_Series', *args, **kwargs):
         super(ConsensusMarket, self).__init__(
-            market_series_name=market_series_name,
-            market_type=MarketTypes.consensus,
             method='Interpolation',
             *args, **kwargs
         )
@@ -105,7 +104,7 @@ class ConsensusMarket(Market):
             """
 
             # Check convergence condition
-            if abs(duality_gap) <= self.duality_gap_threshold:  # Converged
+            if abs(duality_gap) <= self.series.duality_gap_threshold:  # Converged
                 # 1.3.1 System has converged to an acceptable balance.
                 self.converged = True
 
@@ -113,7 +112,7 @@ class ConsensusMarket(Market):
             # intervals to drive the system toward balance and convergence.
 
             # TimeIntervals
-            if self.method == Method.Interpolation:  # == 2
+            if self.series.method == Method.Interpolation:  # == 2
                 self.assign_system_vertices()
                 # av = [(x.timeInterval.name, x.value.marginalPrice, x.value.power) for x in self.activeVertices]
                 # _log.debug("{} market active vertices are: {}".format(self.name, av))
@@ -123,7 +122,7 @@ class ConsensusMarket(Market):
                 # Find the marginal price interval value for the corresponding indexed time interval.
                 cleared_marginal_price = self.marginal_prices.get_by_interval(time_interval).value  # [$/kWh]
 
-                if self.method == Method.Subgradient:  # == 1
+                if self.series.method == Method.Subgradient:  # == 1
                     # Find the net power corresponding to the indexed time interval.
                     net_power = self.net_powers.get_by_interval(time_interval)
                     total_generation = self.total_generation.get_by_interval(time_interval)
@@ -134,7 +133,7 @@ class ConsensusMarket(Market):
                     # Update the cleared marginal price using sub-gradient search.
                     cleared_marginal_price = cleared_marginal_price - (net_power * 1e-1) / (10 + k)  # [$/kWh]
 
-                elif self.method == Method.Interpolation:  # === 2
+                elif self.series.method == Method.Interpolation:  # === 2
                     # Get the indexed active system vertices
                     active_vertices = [x.value for x in self.active_vertices
                                        if x.time_interval.start_time == time_interval.start_time]

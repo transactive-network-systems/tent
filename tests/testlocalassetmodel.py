@@ -630,7 +630,7 @@ def test_get_extended_prices():
 
     assert len(test_market.marginal_prices) == 1, 'The market was supposed to have a marginal price'
     assert datetime.now() + test_asset_model.scheduling_horizon \
-           < test_market.time_intervals[0].start_time + test_market.interval_duration, \
+           < test_market.time_intervals[0].start_time + test_market.series.interval_duration, \
         'For this test, the existing marginal price intervals should not extend beyond the scheduling horizon.'
 
     try:
@@ -662,7 +662,6 @@ def test_get_extended_prices():
                                 measurement_type='test',
                                 value=price0)
     test_market = Market(
-        market_series_name="Test Market",
         market_clearing_time=now
     )
 
@@ -670,7 +669,6 @@ def test_get_extended_prices():
     test_market.marginal_prices = [test_price0]
 
     prior_market = Market(
-        market_series_name=test_market.market_series_name,
         market_clearing_time=test_market.market_clearing_time - timedelta(hours=1)
     )
 
@@ -699,7 +697,7 @@ def test_get_extended_prices():
 
     assert len(test_market.marginal_prices) == 1, 'The market was supposed to have a marginal price'
     assert len(prior_market.marginal_prices) == 2, "The prior market should have had two prices"
-    assert test_market.market_series_name == prior_market.market_series_name, 'The market names must be the same'
+    assert test_market.series.name == prior_market.series.name, 'The market names must be the same'
     assert test_market.prior_market_in_series == prior_market, "The market must point to its predecessor in market series"
 
     try:
@@ -725,7 +723,6 @@ def test_get_extended_prices():
     test_asset_model.scheduling_horizon = timedelta(hours=2.5)  # Should cause asset to use prior market
 
     test_market = Market(
-        market_series_name="Test Market",
         market_clearing_time=now
     )
 
@@ -740,7 +737,6 @@ def test_get_extended_prices():
     test_market.marginal_prices = [test_price0]
 
     prior_market = Market(
-        market_series_name=test_market.market_series_name,
         market_clearing_time=test_market.market_clearing_time - timedelta(hours=1)
     )
     test_interval1 = TimeInterval(prior_market, timedelta(hours=1), now)
@@ -762,7 +758,6 @@ def test_get_extended_prices():
     test_market.prior_market_in_series = prior_market
 
     corrected_market = Market(
-        market_series_name="Corrected Market",
         market_clearing_time=test_market.market_clearing_time - timedelta(hours=2),
         interval_duration=timedelta(hours=1)
     )
@@ -795,7 +790,7 @@ def test_get_extended_prices():
     assert len(test_market.marginal_prices) == 1, 'The market was supposed to have a marginal price'
     assert len(prior_market.marginal_prices) == 2, "The prior market should have had two prices"
     assert len(corrected_market.marginal_prices) == 3, 'The corrected market should have three prices'
-    assert test_market.market_series_name == prior_market.market_series_name, 'The market names must be the same'
+    assert test_market.series.name == prior_market.series.name, 'The market names must be the same'
 
     try:
         price_set = test_asset_model.get_extended_prices(test_market)
@@ -817,7 +812,6 @@ def test_get_extended_prices():
     test_asset_model.scheduling_horizon = timedelta(hours=3.5)  # Should cause asset to use prior market
 
     test_market = Market(
-        market_series_name="Test Market",
         market_clearing_time=now
     )
 
@@ -884,7 +878,7 @@ def test_get_extended_prices():
     test_mtn = TransactiveNode()
     test_mtn.markets = [test_market]
 
-    assert type(test_market.default_price) == float, 'A valid default price must be defined'
+    assert type(test_market.series.default_price) == float, 'A valid default price must be defined'
 
     try:
         price_set = test_asset_model.get_extended_prices(test_market)

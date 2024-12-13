@@ -78,7 +78,6 @@ class TestAppendIntervalValueTable:
         self.test_caller = Neighbor()
         self.test_caller.name = 'test_neighbor'
         self.test_market = Market(
-            market_series_name='test_market_series',
             market_clearing_time=dt
         )
 
@@ -169,11 +168,10 @@ class TestAppendTransactiveRecordTable:
         self.test_neighbor = Neighbor()
         self.test_neighbor.name = 'test_neighbor'
         self.test_market = Market(
-            market_series_name='test_market_series',
             market_clearing_time=dt
         )
 
-        self.test_market.name = self.test_market.market_series_name.replace(' ', '_') + '_' + str(dt)[:19]
+        self.test_market.name = self.test_market.series.name.replace(' ', '_') + '_' + str(dt)[:19]
         self.test_vertex = Vertex(marginal_price=0,
                                   prod_cost=0,
                                   power=0)
@@ -238,10 +236,9 @@ class TestAppendMarketObjectTable:
         self.test_market = Market(
             intervals_to_clear=1,
             interval_duration=timedelta(hours=1),
-            market_series_name='test_market_series',
             market_clearing_time=dt
         )
-        self.test_market.name = self.test_market.market_series_name.replace(' ', '_') + '_' + str(dt)[:19]
+        self.test_market.name = self.test_market.series.name.replace(' ', '_') + '_' + str(dt)[:19]
         self.test_vertex = Vertex(marginal_price=0,
                                   prod_cost=0,
                                   power=0)

@@ -73,7 +73,7 @@ def test_assign_system_vertices():
     test_node.local_assets = [test_asset]
     test_neighbor = Neighbor()
     test_node.neighbors = [test_neighbor]
-    test_interval = TimeInterval(test_market, test_market.interval_duration, now)
+    test_interval = TimeInterval(test_market, test_market.series.interval_duration, now)
     test_market.time_intervals = [test_interval]
 
     vertex1 = Vertex(0.02, 0, 0)
@@ -124,7 +124,7 @@ def test_balance():
     test_node.local_assets = [test_asset]
     test_neighbor = Neighbor()
     test_node.neighbors = [test_neighbor]
-    test_interval = TimeInterval(test_market, test_market.interval_duration, now)
+    test_interval = TimeInterval(test_market, test_market.series.interval_duration, now)
     test_market.time_intervals = [test_interval]
 
     vertex1 = Vertex(0.02, 0, 0)
@@ -138,7 +138,7 @@ def test_balance():
     interval_value3 = IntervalValue(test_market, test_interval, test_market, None, vertex3)
     test_asset.activeVertices = [interval_value3]
 
-    test_market.method = Method.Interpolation
+    test_market.series.method = Method.Interpolation
     test_market.marginal_prices = [IntervalValue(test_market, test_interval, test_market, 'marginalPrice', 0.06)]
 
     assert vertex1.power == 0, 'The first vertex was configured at 0 kW.'
@@ -191,12 +191,12 @@ def test_check_intervals():
     except RuntimeWarning as warning:
         print('  - ERRORS WERE ENCOUNTERED:', warning)
 
-    assert len(test_market.time_intervals) == test_market.intervals_to_clear, \
+    assert len(test_market.time_intervals) == test_market.series.intervals_to_clear, \
         'The wrong number of time intervals was created.'
-    assert test_market.time_intervals[0].start_time == test_market.market_clearing_time + test_market.delivery_lead_time, \
+    assert test_market.time_intervals[0].start_time == test_market.transition_times.delivery, \
         'The time intervals do not begin with the correct start time.'
     assert test_market.time_intervals[1].start_time == test_market.time_intervals[0].start_time \
-           + test_market.interval_duration, 'The intervals might not be separated by the correct duration'
+           + test_market.series.interval_duration, 'The intervals might not be separated by the correct duration'
 
     # Success
     print('Method test_check_intervals() ran to completion.\n')
@@ -250,14 +250,11 @@ def test_check_marginal_prices():
     print("**Case 2: If the same time interval exists from a prior market clearing, its price may be used.")  # ********
 
     # Configure the test.
-    prior_mkt = Market(
-        market_series_name="Test Market"
-    )
+    prior_mkt = Market()
 
     new_mp = 1.234
 
     test_mkt = Market(
-        market_series_name="Test Market",
         intervals_to_clear=2
     )
 
@@ -312,7 +309,7 @@ def test_check_marginal_prices():
         market_series_name="Test Market",  # This points to the market series that is to be corrected.
         market_clearing_time=prior_mkt.market_clearing_time + timedelta(hours=1)  # Must be after prior market.
     )
-    test_mkt.market_to_be_refined = prior_mkt.market_series_name  # Assuming here this is not a list.
+    test_mkt.market_to_be_refined = prior_mkt.series.name  # Assuming here this is not a list.
     test_mkt.market_to_be_refined = weakref.ref(prior_mkt)  # Important pointer to market that is being refined
 
     test_ti = TimeInterval(test_mkt, timedelta(hours=1), datetime.now())
@@ -333,7 +330,7 @@ def test_check_marginal_prices():
     assert test_mkt.time_intervals[0] == test_ti, "The active time interval is not as configured"
     assert len(test_mkt.marginal_prices) == 0, "No marginal price should exist in the test_mkt"
     assert len(test_mtn.markets) == 2, "Two active markets should exist"
-    assert prior_mkt.market_series_name != test_mkt.market_series_name, \
+    assert prior_mkt.series.name != test_mkt.series.name, \
         "Prior market and current market should not have the same market name"
     assert test_mkt.market_to_be_refined() is prior_mkt, \
         "The current market must identify its prior market object that is being corrected"
@@ -361,8 +358,7 @@ def test_check_marginal_prices():
     print("**Case 4: If there exists a price forecast model for this market, this model should be used.")  # ***********
 
     # Configure the test.
-    test_mkt = Market(market_series_name="Test Market",
-                      market_clearing_time=datetime.now() + timedelta(hours=1),  # Must be after prior market.
+    test_mkt = Market(market_clearing_time=datetime.now() + timedelta(hours=1),  # Must be after prior market.
                       market_to_be_refined=None)
     # 240206DJH: This unit test must be changed significantly now that markets are configured by setting priceModel
     #            equal to a model class object (e.g., HourlyAveragePriceModel).
@@ -405,12 +401,11 @@ def test_check_marginal_prices():
 
     # Configure the test.
     test_mkt = Market(
-        market_series_name="Test Market",
         market_clearing_time=datetime.now() + timedelta(hours=1)  # Must be after prior market.
     )
     test_mkt.market_to_be_refined = None  # There should be no prior market to correct
     pi = 3.14159
-    test_mkt.default_price = pi
+    test_mkt.series.default_price = pi
     test_mkt.price_model = None  # The lack of price model will excite this final method.
 
     test_ti = TimeInterval(test_mkt, timedelta(hours=1), datetime.now())
@@ -449,11 +444,10 @@ def test_check_marginal_prices():
 
     # Configure the test.
     test_mkt = Market(
-        market_series_name="Test Market",
         market_clearing_time=datetime.now() + timedelta(hours=1)  # Must be after prior market.
     )
     test_mkt.market_to_be_refined = None  # There should be no prior market to correct
-    test_mkt.default_price = None
+    test_mkt.series.default_price = None
     test_mkt.price_model = None  # The lack of price model will excite this final method.
 
     test_ti = TimeInterval(test_mkt, timedelta(hours=1), datetime.now())
@@ -471,7 +465,7 @@ def test_check_marginal_prices():
     assert len(test_mtn.markets) == 1, "A single active market should exist"
     # NOTE: This next requirement may be revised if price models get more sophisticated
     assert test_mkt.price_model is None, "There should exist no price model"
-    assert test_mkt.default_price is None, "There should be no market default price for this test"
+    assert test_mkt.series.default_price is None, "There should be no market default price for this test"
 
     try:
         test_mkt.check_marginal_prices(test_mtn)
@@ -535,7 +529,6 @@ def test_events():
         intervals_to_clear=24,
         interval_duration=timedelta(hours=1),
         initial_market_state=MarketState.Delivery,
-        market_series_name="Test Market",
         market_clearing_time=market_clearing_time,
         market_clearing_interval=market_clearing_interval,
     )
@@ -548,14 +541,13 @@ def test_events():
 
     # Check required conditions of Case 1a:
     # On the state of the EXISTING market:
-    delivery_start_time = test_mkt.market_clearing_time + test_mkt.delivery_lead_time
-    delivery_end_time = delivery_start_time + test_mkt.intervals_to_clear * test_mkt.interval_duration
-    assert delivery_start_time < now < delivery_end_time, "The existing market must be in delivery"
+    assert test_mkt.transition_times.delivery < now < (test_mkt.transition_times.reconciliation
+                                                       + test_mkt.series.intervals_to_clear
+                                                       * test_mkt.series.interval_duration),\
+                                                        "The existing market must be in delivery"
 
     # On the state of the new market:
-    activation_time = test_mkt.next_market_clearing_time - test_mkt.market_lead_time - test_mkt.negotiation_lead_time \
-                      - test_mkt.activation_lead_time
-    assert now < activation_time, "The current time must precede the new activation time"
+    assert now < test_mkt.transition_times.active, "The current time must precede the new activation time"
 
     assert test_mkt.is_newest_market is True, "The existing market should be the newest for fair test"
 
@@ -583,7 +575,6 @@ def test_events():
         intervals_to_clear=24,
         interval_duration=timedelta(hours=1),
         initial_market_state=MarketState.Initial,
-        market_series_name="Test Market",
         market_clearing_time=now + 0.5 * activation_lead_time + negotiation_lead_time + market_lead_time,
         market_clearing_interval=timedelta(days=1)
     )
@@ -597,10 +588,7 @@ def test_events():
     test_mtn.markets = [test_mkt]  # %%%%%%%%%%%%%
 
     # Check required conditions before Case 1b:
-    activation_time = test_mkt.market_clearing_time - test_mkt.market_lead_time - test_mkt.negotiation_lead_time \
-                      - test_mkt.activation_lead_time
-    negotiation_start_time = activation_time + test_mkt.activation_lead_time
-    assert activation_time < now < negotiation_start_time, "The existing market must be in its active state period"
+    assert test_mkt.transition_times.active < now < test_mkt.transition_times.negotiation, "The existing market must be in its active state period"
 
     assert test_mkt.is_newest_market is True, "Existing market must be newest to trigger instantiation of another market"
 
@@ -630,7 +618,6 @@ def test_events():
         delivery_lead_time=timedelta(minutes=10),
         intervals_to_clear=24,
         interval_duration=timedelta(hours=1),
-        market_series_name="Test Market",
         market_clearing_time=now + 0.5 * activation_lead_time + negotiation_lead_time + market_lead_time,
         market_clearing_interval=timedelta(days=1)
     )
@@ -646,9 +633,7 @@ def test_events():
 
     # Check required conditions before Case 1b:
     # While not essential to the test, let's make sure that the existing market does not expire during the test.
-    delivery_end_time = test_mkt.market_clearing_time + test_mkt.delivery_lead_time \
-                        + test_mkt.intervals_to_clear * test_mkt.interval_duration
-    assert now < delivery_end_time, "The existing market must be in delivery"
+    assert now < test_mkt.transition_times.reconciliation, "The existing market must be in delivery"
 
     next_activation_time = test_mkt.next_market_clearing_time - test_mkt.market_lead_time - test_mkt.negotiation_lead_time \
                            - test_mkt.activation_lead_time
@@ -664,12 +649,12 @@ def test_events():
 
     assert len(test_mtn.markets) == 2, "There should be two active markets"
     assert test_mtn.markets[0] == test_mkt, "The existing market should be in position 0"
-    assert test_mtn.markets[1].market_series_name == test_mkt.market_series_name, \
+    assert test_mtn.markets[1].series.name == test_mkt.series.name, \
         "The new market name should be the same as that of the existing market"
     # 240207DJH: This next assert now fails, but the test might be wrong. Comment out for now.
     # assert test_mtn.markets[1].marketState == MarketState.Active, \
     #     "The new market should have been created and remain in its active state"
-    assert len(test_mtn.markets[1].time_intervals) == test_mkt.intervals_to_clear, \
+    assert len(test_mtn.markets[1].time_intervals) == test_mkt.series.intervals_to_clear, \
         "The new market did not create the expected number of market intervals"
     assert test_mkt.is_newest_market is False, "The existing market should have abdicated the newest market flag"
     assert test_mtn.markets[1].is_newest_market is True, "The new market should have captured the newest market flag"
@@ -687,7 +672,6 @@ def test_events():
         delivery_lead_time=timedelta(minutes=10),
         interval_duration=timedelta(hours=1),
         intervals_to_clear=24,
-        market_series_name="Test Market",
         market_clearing_time=now + 0.5 * negotiation_lead_time + market_lead_time,
         market_clearing_interval=timedelta(days=1)
             )
@@ -702,10 +686,7 @@ def test_events():
     test_mkt.converged = True  # Setting convergence true avoids testing all the negotiation unit tests.
 
     # Check required conditions before Case 1b:
-    negotiation_start_time = test_mkt.market_clearing_time - test_mkt.market_lead_time - test_mkt.negotiation_lead_time \
-                             - test_mkt.activation_lead_time + test_mkt.activation_lead_time
-    negotiation_end_time = negotiation_start_time + test_mkt.negotiation_lead_time
-    assert negotiation_start_time < now < negotiation_end_time, \
+    assert test_mkt.transition_times.negotiation < now < test_mkt.transition_times.market_lead, \
         "The existing market must be in its negotiation state period"
     assert test_mkt.market_state == MarketState.Active, "The market must be in its Active state"
     assert test_mkt.next_market_clearing_time > now, \
@@ -737,7 +718,6 @@ def test_events():
         delivery_lead_time=timedelta(minutes=10),
         intervals_to_clear=24,
         interval_duration=timedelta(hours=1),
-        market_series_name="Test Market",
         market_clearing_time=now + 0.5 * negotiation_lead_time + market_lead_time,
         market_clearing_interval=timedelta(days=1)
     )
@@ -752,10 +732,7 @@ def test_events():
     test_mkt.converged = True  # Setting convergence true avoids testing all the negotiation unit tests.
 
     # Check required conditions before Case 1b:
-    negotiation_start_time = test_mkt.market_clearing_time - test_mkt.market_lead_time - test_mkt.negotiation_lead_time \
-                             - test_mkt.activation_lead_time + test_mkt.activation_lead_time
-    negotiation_end_time = negotiation_start_time + test_mkt.negotiation_lead_time
-    assert negotiation_start_time < now < negotiation_end_time, \
+    assert test_mkt.transition_times.negotiation < now < test_mkt.transition_times.market_lead, \
         "The existing market must be in its negotiation state period"
     assert test_mkt.market_state == MarketState.Negotiation, "The market must be in its Negotiation state"
     assert test_mkt.next_market_clearing_time > now, \
@@ -785,7 +762,6 @@ def test_events():
         delivery_lead_time=timedelta(minutes=10),
         intervals_to_clear=24,
         interval_duration=timedelta(hours=1),
-        market_series_name="Test Market",
         market_clearing_interval=timedelta(days=1)
     )
 
@@ -800,9 +776,7 @@ def test_events():
     test_mkt.converged = True  # Setting convergence true avoids testing all the negotiation unit tests.
 
     # Check required conditions before Case 1b:
-    negotiation_end_time = test_mkt.market_clearing_time - test_mkt.market_lead_time
-    market_clearing_lead_start_time = negotiation_end_time + test_mkt.market_lead_time
-    assert negotiation_end_time < now < market_clearing_lead_start_time, \
+    assert test_mkt.transition_times.market_lead < now < test_mkt.transition_times.delivery_lead, \
         "The existing market must be in its Market Lead state period"
     assert test_mkt.market_state == MarketState.Negotiation, "The market must be in its Negotiation state"
     assert test_mkt.next_market_clearing_time > now, \
@@ -832,7 +806,6 @@ def test_events():
         delivery_lead_time=timedelta(minutes=10),
         intervals_to_clear=24,
         interval_duration=timedelta(hours=1),
-        market_series_name="Test Market",
         market_clearing_interval=timedelta(days=1)
     )
 
@@ -847,9 +820,7 @@ def test_events():
     test_mkt.converged = True  # Setting convergence true avoids testing all the negotiation unit tests.
 
     # Check required conditions before Case 1b:
-    negotiation_end_time = test_mkt.market_clearing_time - test_mkt.market_lead_time
-    market_clearing_lead_start_time = test_mkt.market_clearing_time
-    assert negotiation_end_time < now < market_clearing_lead_start_time, \
+    assert test_mkt.transition_times.negotiation < now < test_mkt.transition_times.delivery_lead, \
         "The existing market must be in its Market Lead state period"
     assert test_mkt.market_state == MarketState.MarketLead, "The market must be in its Market Lead state"
     assert test_mkt.next_market_clearing_time > now, \
@@ -880,7 +851,6 @@ def test_events():
         delivery_lead_time=delivery_lead_time,
         intervals_to_clear=24,
         interval_duration=timedelta(hours=1),
-        market_series_name="Test Market",
         market_clearing_time=now - 0.5 * delivery_lead_time,
         market_clearing_interval=timedelta(days=1)
     )
@@ -895,8 +865,7 @@ def test_events():
     test_mkt.converged = True  # Setting convergence true avoids testing all the negotiation unit tests.
 
     # Check required conditions before Case 1b:
-    delivery_start_time = test_mkt.market_clearing_time + test_mkt.delivery_lead_time
-    assert test_mkt.market_clearing_time < now < delivery_start_time, \
+    assert test_mkt.market_clearing_time < now < test_mkt.transition_times.delivery, \
         "The existing market must be in its Delivery Lead state period"
     assert test_mkt.market_state == MarketState.MarketLead, "The market must be in its Market Lead state"
     assert test_mkt.next_market_clearing_time > now, \
@@ -927,7 +896,6 @@ def test_events():
         delivery_lead_time=delivery_lead_time,
         intervals_to_clear=24,
         interval_duration=timedelta(hours=1),
-        market_series_name="Test Market",
         market_clearing_time=now - 0.5 * delivery_lead_time,
         market_clearing_interval=timedelta(days=1)
     )
@@ -942,8 +910,7 @@ def test_events():
     test_mkt.converged = True  # Setting convergence true avoids testing all the negotiation unit tests.
 
     # Check required conditions before Case 1b:
-    delivery_start_time = test_mkt.market_clearing_time + test_mkt.delivery_lead_time
-    assert test_mkt.market_clearing_time < now < delivery_start_time, \
+    assert test_mkt.market_clearing_time < now < test_mkt.transition_times.delivery, \
         "The existing market must be in its Delivery Lead state period"
     assert test_mkt.market_state == MarketState.DeliveryLead, "The market must be in its Delivery Lead state"
     assert test_mkt.next_market_clearing_time > now, \
@@ -975,7 +942,6 @@ def test_events():
         delivery_lead_time=delivery_lead_time,
         intervals_to_clear=24,
         interval_duration=interval_duration,
-        market_series_name="Test Market",
         market_clearing_time=now - delivery_lead_time - 0.5 * interval_duration,
         market_clearing_interval=timedelta(days=1)
     )
@@ -990,9 +956,7 @@ def test_events():
     test_mkt.converged = True  # Setting convergence true avoids testing all the negotiation unit tests.
 
     # Check required conditions before Case 1b:
-    delivery_start_time = test_mkt.market_clearing_time + test_mkt.delivery_lead_time
-    delivery_end_time = delivery_start_time + test_mkt.intervals_to_clear * test_mkt.interval_duration
-    assert delivery_start_time < now < delivery_end_time, \
+    assert test_mkt.transition_times.delivery < now < test_mkt.transition_times.reconciliation, \
         "The existing market must be in its Delivery state period"
     assert test_mkt.market_state == MarketState.DeliveryLead, "The market must be in its Delivery Lead state"
     assert test_mkt.next_market_clearing_time > now, \
@@ -1024,7 +988,6 @@ def test_events():
         delivery_lead_time=delivery_lead_time,
         intervals_to_clear=24,
         interval_duration=interval_duration,
-        market_series_name="Test Market",
         market_clearing_time=now - delivery_lead_time - 0.5 * interval_duration,
         market_clearing_interval=timedelta(days=1)
     )
@@ -1039,9 +1002,7 @@ def test_events():
     test_mkt.converged = True  # Setting convergence true avoids testing all the negotiation unit tests.
 
     # Check required conditions before Case 1b:
-    delivery_start_time = test_mkt.market_clearing_time + test_mkt.delivery_lead_time
-    delivery_end_time = delivery_start_time + test_mkt.intervals_to_clear * test_mkt.interval_duration
-    assert delivery_start_time < now < delivery_end_time, \
+    assert test_mkt.transition_times.delivery < now < test_mkt.transition_times.reconciliation, \
         "The existing market must be in its Delivery state period"
     assert test_mkt.market_state == MarketState.Delivery, "The market must be in its Delivery state"
     assert test_mkt.next_market_clearing_time > now, \
@@ -1074,7 +1035,6 @@ def test_events():
         delivery_lead_time=delivery_lead_time,
         intervals_to_clear=intervals_to_clear,
         interval_duration=interval_duration,
-        market_series_name="Test Market",
         market_clearing_time=now - delivery_lead_time - intervals_to_clear * interval_duration - timedelta(minutes=1),
         market_clearing_interval=timedelta(days=1)
     )
@@ -1089,9 +1049,7 @@ def test_events():
     test_mkt.converged = True  # Setting convergence true avoids testing all the negotiation unit tests.
 
     # Check required conditions before Case 1b:
-    delivery_end_time = test_mkt.market_clearing_time + test_mkt.delivery_lead_time \
-                        + test_mkt.intervals_to_clear * test_mkt.interval_duration
-    assert delivery_end_time < now, "The existing market must be in its Reconcile state period"
+    assert test_mkt.transition_times.reconciliation < now, "The existing market must be in its Reconcile state period"
     assert test_mkt.market_state == MarketState.Delivery, "The market must be in its Delivery state"
     assert test_mkt.reconciled is False, "The market must not be reconciled"
     assert test_mkt.next_market_clearing_time > now, \
@@ -1122,7 +1080,6 @@ def test_events():
         delivery_lead_time=delivery_lead_time,
         intervals_to_clear=intervals_to_clear,
         interval_duration=interval_duration,
-        market_series_name="Test Market",
         market_clearing_time=now - delivery_lead_time - intervals_to_clear * interval_duration - timedelta(minutes=1),
         market_clearing_interval=timedelta(days=1)
     )
@@ -1137,9 +1094,7 @@ def test_events():
     test_mkt.converged = True  # Setting convergence true avoids testing all the negotiation unit tests.
 
     # Check required conditions before Case 1b:
-    delivery_end_time = test_mkt.market_clearing_time + test_mkt.delivery_lead_time \
-                        + test_mkt.intervals_to_clear * test_mkt.interval_duration
-    assert delivery_end_time < now, "The existing market must be in its Reconcile state period"
+    assert test_mkt.transition_times.reconciliation < now, "The existing market must be in its Reconcile state period"
     assert test_mkt.market_state == MarketState.Reconcile, "The market must be in its Reconcile state"
     assert test_mkt.reconciled is False, "The market must not be reconciled"
     assert test_mkt.next_market_clearing_time > now, \
@@ -1169,7 +1124,6 @@ def test_events():
         delivery_lead_time=delivery_lead_time,
         intervals_to_clear=intervals_to_clear,
         interval_duration=interval_duration,
-        market_series_name="Test Market",
         market_clearing_time=now - delivery_lead_time - intervals_to_clear * interval_duration - timedelta(minutes=1),
         market_clearing_interval=timedelta(days=1)
     )
@@ -1184,9 +1138,7 @@ def test_events():
     test_mkt.converged = True  # Setting convergence true avoids testing all the negotiation unit tests.
 
     # Check required conditions before Case 1b:
-    delivery_end_time = test_mkt.market_clearing_time + test_mkt.delivery_lead_time \
-                        + test_mkt.intervals_to_clear * test_mkt.interval_duration
-    assert delivery_end_time < now, "The existing market must be in its Reconcile state period"
+    assert test_mkt.transition_times.reconciliation < now, "The existing market must be in its Reconcile state period"
     assert test_mkt.market_state == MarketState.Reconcile, "The market must be in its Reconcile state"
     assert test_mkt.reconciled is True, "The market must be reconciled to allow the transition to Expired"
     assert test_mkt.next_market_clearing_time > now, \
@@ -1216,7 +1168,6 @@ def test_events():
         delivery_lead_time=delivery_lead_time,
         intervals_to_clear=intervals_to_clear,
         interval_duration=interval_duration,
-        market_series_name="Test Market",
         market_clearing_time=now - delivery_lead_time - intervals_to_clear * interval_duration - timedelta(minutes=1),
         market_clearing_interval=timedelta(days=1)
     )
@@ -1231,9 +1182,7 @@ def test_events():
     test_mkt.converged = True  # Setting convergence true avoids testing all the negotiation unit tests.
 
     # Check required conditions before Case 1b:
-    delivery_end_time = test_mkt.market_clearing_time + test_mkt.delivery_lead_time \
-                        + test_mkt.intervals_to_clear * test_mkt.interval_duration
-    assert delivery_end_time < now, "The existing market must be in its Reconcile state period"
+    assert test_mkt.transition_times.reconciliation < now, "The existing market must be in its Reconcile state period"
     assert test_mkt.market_state == MarketState.Expired, "The market must be in its Expired state"
     assert test_mkt.reconciled is True, "The market must be reconciled"
     assert test_mkt.next_market_clearing_time > now, \
@@ -1383,7 +1332,6 @@ def test_spawn_markets():
     print('  NOTE: The test method will often be replaced to spawn additional, or no, new markets.')
     test_node = TransactiveNode()
     test_market = Market(
-        market_series_name='Test Market Series',
         market_clearing_time=datetime(year=2020, month=1, day=1, hour=0, second=0, microsecond=0),
         market_clearing_interval=timedelta(hours=1),
         interval_duration=timedelta(minutes=15),
@@ -1404,11 +1352,11 @@ def test_spawn_markets():
         print('  - ERRORS WERE ENCOUNTERED:', warning)
 
     assert len(test_node.markets) == 2, 'A second active market should have been added.'
-    assert test_node.markets[1].name == (test_market.market_series_name.replace(' ', '_')
+    assert test_node.markets[1].name == (test_market.series.name.replace(' ', '_')
                                                                 + '_2020-01-01 01:00:00'), 'Check the new market name.'
     assert test_node.markets[1].is_newest_market is True, 'The new market should be flagged as newest.'
     assert test_node.markets[1].market_clearing_time == new_clearing_time, 'The new clearing time is wrong.'
-    assert len(test_node.markets[1].time_intervals) == test_market.intervals_to_clear, \
+    assert len(test_node.markets[1].time_intervals) == test_market.series.intervals_to_clear, \
                                                                     'There should have been four new market intervals.'
 
     print('test_spawn_markets() ran to completion\n')

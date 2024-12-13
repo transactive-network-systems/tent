@@ -477,7 +477,7 @@ class LocalAsset(Entity):
         # Case 1: Actual marginal prices offered by the market object that has requested the asset to schedule.
         if market.marginal_prices:
             price_horizon = market.marginal_prices.copy()
-            end_of_calculated_horizon = market.marginal_prices.last.interval.start_time + market.interval_duration
+            end_of_calculated_horizon = market.marginal_prices.last.interval.start_time + market.series.duration.market_interval
 
             if end_of_calculated_horizon >= end_of_scheduling_horizon:
                 return price_horizon
@@ -526,7 +526,7 @@ class LocalAsset(Entity):
             return price_horizon
 
         # Case 5. The market's default price value.
-        price = market.default_price
+        price = market.series.default_price
         while end_of_scheduling_horizon > end_of_calculated_horizon:
             start_time = end_of_calculated_horizon
             end_time = start_time + timedelta(hours=1)  # TODO: Why are we doing hours here?

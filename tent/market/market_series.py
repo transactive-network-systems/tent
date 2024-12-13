@@ -1,16 +1,14 @@
-from datetime import time, timedelta
-from typing import Union
+from copy import deepcopy
+from datetime import datetime, timedelta
+from sortedcontainers import SortedList
+from typing import Type, Union
+from weakref import proxy
 
 from tent import Component
+from tent.containers import MarketDurations
 from tent.enumerations import MarketState, MarketTypes, Method
 from tent.market import Market
-from tent.market.price_models.hourly_average_price_model import HourlyAveragePriceModel
-from tent.utils.helpers import validate_bool
-
-
-# 240228DJH: TODO: Make MarketSeries reference another market series that is to be revised or corrected. If this is
-#                  done, then individual markets in the series can easily find the specific market object that is to be
-#                  revised or corrected. (This is pretty low priority)
+from tent.utils.helpers import get_class_from_spec, safe_weak_proxy_callback, validate_bool
 
 
 class MarketSeries(Component):
@@ -26,134 +24,107 @@ class MarketSeries(Component):
     """
     def __init__(self,
                  transactive_node,
-                 activation_lead_time: Union[timedelta, float, int] = timedelta(hours=0),
-                 commitment: bool = False,
-                 default_price: float = 0.05,
-                 delivery_anchor_time=None,
-                 delivery_lead_time: Union[timedelta, float, int] = timedelta(hours=0),
-                 description='',
-                 duality_gap_threshold=0.01,
-                 future_horizon: Union[timedelta, float, int] = timedelta(hours=24),
-                 initial_market_state: Union[MarketState, str, int] = MarketState.Inactive,
-                 interval_duration: Union[timedelta, float, int] = timedelta(hours=1),
-                 intervals_to_clear: int = 1,
-                 market_class: type = Market,
-                 market_clearing_interval: Union[timedelta, float, int] = timedelta(hours=1),
-                 market_lead_time: Union[timedelta, float, int] = timedelta(hours=0),
-                 market_order=1,
-                 market_type: Union[MarketTypes, str, int] = MarketTypes.unknown,
-                 method: Union[Method, str, int] = Method.Interpolation,
+                 commitment: bool = False,                  # [Boolean] Are scheduled power & price commitments?
+                 default_price: float = 0.05,               # [$/kWh] Static default price assignment
+                 delivery_anchor_time: str | None = None,   # A time of day a market will always start (immediate if None)
+                 description: str = '',
+                 duality_gap_threshold: float = 0.01,       # [dimensionless] 0.01 = 1%
+                 duration_active: float = 0.0,              # [seconds] Length of time between activation and negotiation.
+                 duration_delivery_lead: float = 0.0,       # [seconds] Length of time between clearing and delivery.
+                 duration_market_lead: float = 3600.0,      # [seconds] Length of the market_lead period.
+                 duration_negotiation: float = 0.0,         # [seconds] Length of time allowed for negotiation.
+                 duration_reconciliation: float = 0.0,      # [seconds] Length of time allotted to reconciliation.
+                 future_horizon: Union[timedelta, float] = timedelta(hours=24),  # [seconds or timedelta] Forward window of price-discovery relevance. (Future Use.)
+                 initial_market_state: Union[MarketState, str, int] = MarketState.Inactive, # New market's initial state
+                 interval_duration: Union[timedelta, float] = timedelta(hours=1), # [seconds or timedelta] Length of 1 interval during delivery.
+                 intervals_to_clear: int = 1,               # Number of market intervals to be cleared by each market.
+                 market_class: Type[Market] = Market,       # The subclass of Market spawned by this series.
+                 market_clearing_interval: float = 3600.0,  # [seconds] Time between successive market clearings.
+                 market_order=1,                            # [pos. integer] Ordering of sequential markets  (Unused)
+                 method: Union[Method, str, int] = Method.Interpolation,#Solution method {1:subgradient,2:interpolation}
+                 price_model: dict = None,                  # Configuration spec for a PriceModel class.
                  name='Market Series',
-                 negotiation_lead_time: Union[timedelta, float, int] = timedelta(hours=0)):
+                 refined_series=None,
+                 ):
         super(MarketSeries, self).__init__(description, name, transactive_node)
-        self._activation_lead_time = activation_lead_time if isinstance(activation_lead_time, timedelta) \
-            else timedelta(seconds=activation_lead_time)  # [timedelta] Time in market state "Active"
-        self.commitment = validate_bool(commitment, 'commitment')  # [Boolean] If true, scheduled power & price are
-        #                                                            commitments
-        self.default_price = float(default_price)  # [$/kWh] Static default price assignment
-        # deliveryAnchorTime [time] A time of day a market will always start (start immediately if None)
-        self.delivery_anchor_time = time.fromisoformat(delivery_anchor_time) if isinstance(delivery_anchor_time, str) \
-            else delivery_anchor_time
-        self._delivery_lead_time = delivery_lead_time if isinstance(delivery_lead_time, timedelta) \
-            else timedelta(seconds=delivery_lead_time)  # [timedelta] Time in market state "DeliveryLead"
-        self.duality_gap_threshold = float(duality_gap_threshold)  # [dimensionless]; 0.01 = 1%
-        self.future_horizon = future_horizon if isinstance(future_horizon, timedelta) \
-            else timedelta(seconds=future_horizon)  # Future functionality: future of price-discovery relevance
-        self._initial_market_state = initial_market_state if isinstance(initial_market_state, MarketState) \
-            else MarketState[initial_market_state]  # [MarketState] New market's initial state
-        self._interval_duration = interval_duration if isinstance(interval_duration, timedelta) \
-            else timedelta(seconds=interval_duration)  # [timedelta] Duration of this market's time intervals
-        self._intervals_to_clear = int(intervals_to_clear)  # [int] Market intervals to be cleared by this market object
-        self._market_clearing_interval = market_clearing_interval if isinstance(market_clearing_interval, timedelta) \
-            else timedelta(seconds=market_clearing_interval)  # [timedelta] Time between successive market clearings
-        self._market_lead_time = market_lead_time if isinstance(market_lead_time, timedelta) \
-            else timedelta(seconds=market_lead_time)  # [timedelta] Time in market state "MarketLead"
-        self.market_order = int(market_order)  # [pos. integer] Ordering of sequential markets  (Unused)
-        self.market_series_name = str(name)  # Name of this class object. Replaces use of a market series
-        #                                                  name to bind markets
-        self.market_type = market_type if isinstance(market_type, MarketTypes) \
-            else MarketTypes[market_type]  # [MarketTypes] enumeration
-        if isinstance(method, Method):  # Solution method {1: subgradient, 2: interpolation}
-            self.method = method
-        elif isinstance(method, int):
-            self.method = Method(method)
-        else:
-            self.method = Method[method]
-        self.negotiation_lead_time = negotiation_lead_time if isinstance(negotiation_lead_time, timedelta) \
-            else timedelta(seconds=negotiation_lead_time)  # [timedelta] Time in market state "Negotiation"
+        self.duration: MarketDurations = MarketDurations.new(duration_active, duration_negotiation,
+                                                             duration_market_lead, duration_delivery_lead,
+                                                             duration_reconciliation, interval_duration,
+                                                             intervals_to_clear, market_clearing_interval,
+                                                             delivery_anchor_time)
+        self.markets = SortedList(key=lambda mkt: mkt.market_order)
 
-        # TODO: Does isNewestMarket need a setting for instantiation of some markets at startup?
-        # 240206DJH: ANSWER: This is best handled by configuration of the initial market and its treatment by method
-        #            spawn(). The "newest market" flag is held by the market that determines whether new markets must be
-        #            spawned, based on comparison of a calculated activation time and the current time.
-        #            A corrected assignment of isNewestMarket must always be checked as new markets are spawned.
-        self.price_model: HourlyAveragePriceModel = HourlyAveragePriceModel(forgetting_factor=14,
-                                                                            default_price=self.default_price)
-        self.market_class: type = market_class  # %%% I think we need this pointer to the market class of this series.
-        # 240222DJH: The intention here is to create a "sacrificial" market having the right market class. This is
-        #           "sacrificial" because its market clearing time is assigned so that it will immediately prompt the
-        #           spawning of a new and future markets using the market state machine. The sacrificial market
-        #           is probably not meaningful because it will not have properly cleared. It might be within its
-        #           delivery period, however.
-        #           It appears that no market clearing time should be sent so that the market constructor will find an
-        #           acceptable first market clearing time.
-        initial_market: Market = self.market_class(
-            activation_lead_time=self.activation_lead_time,
-            commitment=self.commitment,
-            default_price=self.default_price,
-            delivery_anchor_time=self.delivery_anchor_time,
-            delivery_lead_time=self.delivery_lead_time,
-            duality_gap_threshold=self.duality_gap_threshold,
-            future_horizon=self.future_horizon,
-            initial_market_state=self.initial_market_state,
-            interval_duration=self.interval_duration,
-            intervals_to_clear=self.intervals_to_clear,
-            market_clearing_interval=self.market_clearing_interval,
-            market_lead_time=self.market_lead_time,
-            market_order=self.market_order,
-            market_series_name=self.market_series_name,
-            market_type=self.market_type,
-            method=self.method,
-            negotiation_lead_time=self.negotiation_lead_time,
-            transactive_node=self.tn,
-            market_series=self,
-            market_clearing_time=None
-        )
-        # 240221DJH: The market series, not myTransactiveNode, should keep track of its own active markets. We
-        #            might have to manage BOTH places until this new architecture is proven and stable.
-        self.active_markets = [initial_market]
+        self.commitment: bool = validate_bool(commitment, 'commitment')
+        self.default_price: float = float(default_price)
+        self.duality_gap_threshold: float = float(duality_gap_threshold)
+        self.future_horizon: timedelta = (future_horizon if isinstance(future_horizon, timedelta)
+                                          else timedelta(seconds=future_horizon))
+        # TODO: Is initial_market_state still used? Will it always be the same for one series?
+        self.initial_market_state: MarketState = (
+            initial_market_state if isinstance(initial_market_state, MarketState)
+            else MarketState(initial_market_state) if isinstance(initial_market_state, int)
+            else MarketState[initial_market_state])
+        if not issubclass(market_class, Market):
+            raise ValueError(f'MarketSeries {self.name} received {market_class}, which is not a valid Market class.')
+        self.market_class: Type[Market] = market_class
+        self.market_order: int = int(market_order)
+        self.market_type: MarketTypes = self.market_class.MARKET_TYPE
+        self.method: Method = (method if isinstance(method, Method)
+                               else Method(method) if isinstance(method, int)
+                               else Method[method.title()])
+        self.price_model_spec: dict | None = {'default_price': self.default_price
+                                              }.update(price_model) if price_model else None
+        ref_series: MarketSeries = (self.tn.get_market_series_by_attribute('name', refined_series)
+                      if isinstance(refined_series, str) else refined_series)
+        self.refined_series: Union[MarketSeries, None] = (
+            proxy(ref_series, safe_weak_proxy_callback(self, 'refined_market_series'))
+            if isinstance(ref_series, MarketSeries) else None)
 
-        # TODO: Investigate removing tn.markets (All references will go through MarketSeries.markets).
-        #  Alternately, have tn.markets be a WeakSet or WeakValueDict.
-        self.tn.markets.append(self)
-
-    @property
-    def activation_lead_time(self):
-        return self._activation_lead_time
-
-    @property
-    def delivery_lead_time(self):
-        return self._delivery_lead_time
-
-    @property
-    def interval_duration(self):
-        return self._interval_duration
+        # Instantiate the first market in the series.
+        self.next_clearing_time: datetime = self.duration.get_first_clearing_time()
+        self.spawn()
 
     @property
     def intervals_to_clear(self):
-        return self._intervals_to_clear
+        return self.duration.intervals_to_clear
 
     @property
-    def market_clearing_interval(self):
-        return self._market_clearing_interval
+    def newest_market(self):
+        return self.markets[-1] if self.markets else None
 
-    @property
-    def market_lead_time(self):
-        return self._market_lead_time
+    @newest_market.setter
+    def newest_market(self, new_market):
+        self.markets.append(new_market)
 
-    @property
-    def initial_market_state(self):
-        return self._initial_market_state
+    def get_refined_market(self, clearing_time: datetime) -> Market:
+        """Returns the market in the refined series with the last clearing time equal to or before "clearing_time"."""
+        return (self.refined_series.markets[self.refined_series.markets.bisect(clearing_time) - 1]
+                if self.refined_series else None)
+
+    def spawn(self):
+        """
+        This method is called when a test determines that a new market object may be needed. The base method creates the
+        new market object, as will be normal for systems having only one market. This method must be replaced or
+        extended if
+        (1) Still more markets should be instantiated, as may happen when market self is refined or corrected by another
+        market series. If this is the case, not only the next needed market in this series, but also one or more markets
+        in another market series must be instantiated.
+        (2) The markets in this series are instantiated by another market series. In this case, this method should be
+        replaced by a pass (no action).
+        # TODO: Revise this docstring once the new architecture is finalized.
+        :return: None
+        """
+        new_market = self.market_class(
+            transactive_node=self.tn,
+            market_series=self,
+            transition_times=self.duration.get_timings(self.next_clearing_time),
+            market_to_be_refined=self.get_refined_market(self.next_clearing_time),
+            prior_market_in_series=self.newest_market if self.newest_market else None,
+            price_model=deepcopy(self.newest_market.price_model) if self.newest_market else get_class_from_spec(
+                self.price_model_spec, 'HourlyAveragePriceModel', 'tent.markets.price_model')
+        )
+        self.next_clearing_time += self.duration.market_clearing_interval
+        self.newest_market = new_market
 
     @property
     def table_name(self):
@@ -169,18 +140,18 @@ class MarketSeries(Component):
             'duality_gap_threshold': self.duality_gap_threshold,
             'future_horizon': self.future_horizon,
             'initial_market_state': self.initial_market_state,
-            'market_clearing_interval': self.market_clearing_interval,
-            'interval_duration': self.interval_duration,
+            'market_clearing_interval': self.duration.market_clearing_interval,
+            'market_interval_duration': self.duration.market_interval,
             'number_of_intervals_to_clear': self.intervals_to_clear,
             'market_order': self.market_order,
             'method': self.method,
-            'delivery_anchor_time': self.delivery_anchor_time,
-            'active_duration': self.active_duration,
-            'negotiation_duration': self.negotiation_lead_time,
-            'market_lead_duration': self.market_lead_time,
-            'delivery_lead_duration': self.delivery_lead_time,
-            'delivery_duration': self.delivery_lead_time,
-            'reconciliation_duration': self.reconciliation_duration
+            'delivery_anchor_time': self.duration.delivery_anchor_time,
+            'active_duration': self.duration.active,
+            'negotiation_duration': self.duration.negotiation,
+            'market_lead_duration': self.duration.market_lead,
+            'delivery_lead_duration': self.duration.delivery_lead,
+            'delivery_duration': self.duration.delivery,
+            'reconciliation_duration': self.duration.reconciliation
         })
         return record
 
@@ -200,7 +171,7 @@ class MarketSeries(Component):
                     {"name": "future_horizon", "type": "DateTimeRangeType"},
                     {"name": "initial_market_state", "enumeration": "MarketState"},
                     {"name": "market_clearing_interval", "type": "DateTimeRangeType"},
-                    {"name": "interval_duration", "type": "DateTimeRangeType"},
+                    {"name": "market_interval_duration", "type": "DateTimeRangeType"},
                     {"name": "number_of_intervals_to_clear", "type": "Integer"},
                     {"name": "market_order", "type": "Integer"},
                     {"name": "method", "enumeration": "Method"},
