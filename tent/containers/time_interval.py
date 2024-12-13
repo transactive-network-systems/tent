@@ -42,6 +42,7 @@ under Contract DE-AC05-76RL01830
 """
 
 from datetime import datetime, timedelta
+from sortedcontainers import SortedDict
 from weakref import proxy
 
 from tent import Archivable
@@ -62,7 +63,8 @@ class TimeInterval(Archivable):
 
         # The TimeInterval name is used by the transactive record, and must be unique to its market.
         # TODO: Confirm that this change to naming is appropriate.
-        # TODO: Is even the old version actually unique? How about multiple markets in series with same start interval?
+        # TODO: Is either version actually unique?
+        #  How about multiple multi-interval markets in series with intervals starting @ same time?
         #self.name: str = str(self.market.market_series_name) + ":" + format_ts(self.start_time)
         self.name: str = f'{self.market.market_series_name}@{self.start_time.isoformat()}'
 
@@ -119,10 +121,7 @@ class IntervalSeries:
         self.number_of_intervals = number_of_intervals
         self.total_duration = duration * number_of_intervals
 
-        self._intervals: dict[datetime, TimeInterval] = {}  # Key is start_time.
-        # Note: self._intervals should not be directly manipulated. If setting or adding intervals becomes necessary,
-        #   then this should be accomplished by a method that insures the current sort order (by start_time).
-        #   This intrinsic sorting is a property of the order in which they are created (dicts are ordered since 3.7)
+        self._intervals: dict[datetime, TimeInterval] = SortedDict(lambda ti: ti.start_time)  # Sort key is start_time.
 
         for i in range(number_of_intervals):
             new_interval = TimeInterval(self.market, duration, first_start_time + duration * i)
@@ -135,7 +134,6 @@ class IntervalSeries:
 
     def __iter__(self):
         # Allows IntervalSeries to act as an iterator.
-        # Intervals should always be sorted by start time, so long as they were created using the constructor.
         return iter(self._intervals.values())
 
     @property
