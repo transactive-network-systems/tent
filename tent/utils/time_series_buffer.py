@@ -15,29 +15,31 @@
 
 from collections import deque, namedtuple
 from typing import Union, Iterable
-import pytz
-from datetime import datetime, timedelta, tzinfo
+
+from datetime import datetime, timedelta, timezone, tzinfo
+from zoneinfo import ZoneInfo
 
 from tent.utils.timer import Timer
 
 
 PointRecord = namedtuple('PointRecord', ['value', 'd_time'])
 
-
+# TODO: Upgrade to act like a priority queue using sortedlist or heapq instead of deque.
 # TODO: Test dt_class functionality with util.Timer.
 # TODO: Implement comparison methods (__lt__, __eq__, etc)
 class TimeSeriesBuffer(deque):
     def __init__(self, iterable: Iterable = (), maxlen: int = None, tz: Union[tzinfo, str] = 'UTC',
                  dt_class: Union[datetime, type(Timer)] = datetime, expiry: timedelta = None):
         super(TimeSeriesBuffer, self).__init__(iterable, maxlen)
-        self.tz = tz if isinstance(tz, tzinfo) else pytz.timezone(tz)
+        # TODO: Is self.tz necessary now that the Timer is aware?
+        self.tz = tz if isinstance(tz, tzinfo) else ZoneInfo(tz)
         self.last = PointRecord(None, None)
         self.dt_class = dt_class
         self.expiry = expiry
 
     def append(self, value, d_time=None):
         if not isinstance(value, PointRecord):
-            d_time = d_time if d_time else self.dt_class.now(pytz.utc).astimezone(self.tz)
+            d_time = d_time if d_time else self.dt_class.now(timezone.utc).astimezone(self.tz)
             value = PointRecord(value, d_time)
         self._prune_expired()
         if not self._expired(value):
@@ -46,7 +48,7 @@ class TimeSeriesBuffer(deque):
 
     def appendleft(self, value, d_time=None):
         if not isinstance(value, PointRecord):
-            d_time = d_time if d_time else self.dt_class.now(pytz.utc).astimezone(self.tz)
+            d_time = d_time if d_time else self.dt_class.now(timezone.utc).astimezone(self.tz)
             value = PointRecord(value, d_time)
         self._prune_expired()
         if not self._expired(value):
@@ -59,7 +61,7 @@ class TimeSeriesBuffer(deque):
             else:
                 raise ValueError('Values must be iterable and all elements must be compatible with PointRecord.')
         values.sort(key=lambda x: x[1])
-        values = list(filter(lambda x: x[1] + self.expiry > self.dt_class.now(pytz.utc).astimezone(self.tz), values))
+        values = list(filter(lambda x: x[1] + self.expiry > self.dt_class.now(timezone.utc).astimezone(self.tz), values))
         if len(values) > 0:
             self._prune_expired()
             self.last = values[-1]
@@ -72,7 +74,7 @@ class TimeSeriesBuffer(deque):
             else:
                 raise ValueError('Values must be iterable and all elements must be compatible with PointRecord.')
         values.sort(key=lambda x: x[1], reverse=True)
-        values = list(filter(lambda x: x[1] + self.expiry > self.dt_class.now(pytz.utc).astimezone(self.tz), values))
+        values = list(filter(lambda x: x[1] + self.expiry > self.dt_class.now(timezone.utc).astimezone(self.tz), values))
         if len(values) > 0:
             super(TimeSeriesBuffer, self).extendleft(values)
 
@@ -107,12 +109,12 @@ class TimeSeriesBuffer(deque):
     def _expired(self, element):
         if not self.expiry:
             return False
-        return True if element[1] + self.expiry <= self.dt_class.now(pytz.utc).astimezone(self.tz) else False
+        return True if element[1] + self.expiry <= self.dt_class.now(timezone.utc).astimezone(self.tz) else False
 
     def _prune_expired(self):
         if len(self) == 0 or not self.expiry:
             return
-        now = self.dt_class.now(pytz.utc).astimezone(self.tz)
+        now = self.dt_class.now(timezone.utc).astimezone(self.tz)
         while self[0][1] + self.expiry <= now:
             self.popleft()
         while self[-1][1] + self.expiry <= now:

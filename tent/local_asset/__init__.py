@@ -470,7 +470,7 @@ class LocalAsset(Entity):
         #  If we have intervals from multiple markets, how to compare these or convert from market ones to local ones?
         # The scheduling horizon is a distance into the future. The price horizon is initialized, then prices are found
         # from now until the end of the scheduling horizon.
-        end_of_calculated_horizon = Timer.get_cur_time()
+        end_of_calculated_horizon = Timer.now()
         end_of_scheduling_horizon = end_of_calculated_horizon + self.scheduling_horizon
         price_horizon = Measurement(self, MeasurementType.MarginalPrice, MeasurementUnit.Monetary)
 

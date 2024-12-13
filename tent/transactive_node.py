@@ -71,11 +71,11 @@ class TransactiveNode(Archivable):
         self.name = name                                        # [text]
         self.registry_id = None                                 # string: An out-of-band identifier from a node registry.
         self.simulation = False
-        self.simulation_start_time = Timer.get_cur_time()
+        self.simulation_start_time = Timer.now()
         self.simulation_one_hour_in_seconds = 3600
         self.status = status                                    # future: will be enumeration
         now = datetime.now(timezone.utc).astimezone()
-        self.tz = now.tzinfo.tzname(now)  # TODO: The Timer does not use aware date-times. This should be fixed.
+        self.tz = now.tzinfo.tzname(now)
 
         self._data_manager = None
 
@@ -136,10 +136,11 @@ class TransactiveNode(Archivable):
             self.simulation_start_time = parser.parse(config.get('simulation_start_time', self.simulation_start_time))
             self.simulation_one_hour_in_seconds = int(config.get('simulation_one_hour_in_seconds',
                                                                  self.simulation_one_hour_in_seconds))
-        Timer.created_time = Timer.get_cur_time()
+        Timer.created_time = Timer.now()
         Timer.simulation = self.simulation
         Timer.sim_start_time = self.simulation_start_time
         Timer.sim_one_hr_in_sec = self.simulation_one_hour_in_seconds
+        Timer.tz = self.tz
 
     def _setup_component_objects(self, config):
         # Configure TransactiveNode Component Classes

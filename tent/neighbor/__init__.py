@@ -247,7 +247,7 @@ class Neighbor(Entity):
         t_threshold = timedelta(minutes=5)
         for time_interval in market.time_intervals:
             # Capture the current datetime in the same format as for the TransactiveRecord messages.
-            dt = Timer.get_cur_time()
+            dt = Timer.now()
 
             # Initialize a flag true (converged) in this time interval until proven otherwise.
             flag = True
@@ -439,7 +439,7 @@ class Neighbor(Entity):
             self.demand_threshold = max([0.0, self.demand_threshold, mtr.current_measurement or 0.0])  # [avg.kW]
 
         # The demand threshold should be reset in a new month. First find the current month number mon.
-        mon = Timer.get_cur_time().month
+        mon = Timer.now().month
 
         if mon != self.demand_month:
             # This must be the start of a new month. The demand threshold must be reset. For now, "resetting" means

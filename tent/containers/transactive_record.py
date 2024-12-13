@@ -87,7 +87,7 @@ class TransactiveRecord(Archivable):
 
         # Finally, always append the timestamp that captures when the record is created.
         # TODO: Is this consistent with Timer() methods that are used with simulations?
-        self.timestamp = Timer.get_cur_time()
+        self.timestamp = Timer.now()
 
         # 210126DJH: Property "neighbor" is introduced to assist with data collection. If the name of the associated
         #            Neighbor object is not captured, a Transactive Record can not be traced to the correct Neighbor.

@@ -41,9 +41,7 @@ operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
 
-# TODO: Revisit the simulation features of class Timer that may have been lost by directly using datetime methods.
-
-from datetime import datetime
+from datetime import datetime, timezone, tzinfo
 
 
 class Timer(object):
@@ -51,41 +49,20 @@ class Timer(object):
     sim_one_hr_in_sec = 1200
     sim_start_time = None
     simulation = False
+    tz = timezone.utc
 
     @classmethod
-    def get_cur_time(cls):
+    def now(cls, tz: tzinfo = None):
         """
         Calculate current time based on the amount of time has passed since this object is created
         :return:
         """
-        cur_time = datetime.now()
+        tz = tz if tz else cls.tz
+        now = datetime.now(timezone.utc).astimezone(tz)
         if cls.simulation:
             ratio = 3600 / cls.sim_one_hr_in_sec
-            time_diff = cur_time - cls.created_time
+            time_diff = now - cls.created_time
             simulation_time_diff = time_diff * ratio
-            cur_time = cls.sim_start_time + simulation_time_diff
+            now = cls.sim_start_time + simulation_time_diff
 
-        return cur_time
-
-    @classmethod
-    def now(cls, tzinfo=None):
-        if tzinfo:
-            return tzinfo.localize(cls.get_cur_time())
-        else:
-            return cls.get_cur_time()
-
-
-if __name__ == '__main__':
-    from dateutil import parser
-
-    Timer.simulation = True
-    Timer.created_time = parser.parse("2018-07-18 16:01:00.000")
-
-    Timer.sim_start_time = parser.parse("2018-06-22 00:00:00.000")
-    print(Timer.get_cur_time())
-
-    Timer.sim_start_time = parser.parse("2018-07-22 00:00:00.000")
-    print(Timer.get_cur_time())
-
-    Timer.simulation = False
-    print(Timer.get_cur_time())
+        return now

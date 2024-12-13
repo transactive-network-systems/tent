@@ -119,7 +119,7 @@ class MeterPoint(Component):
         return self.buffer.last.value
 
     def set_meter_value(self, value, last_update=None):
-        last_update = last_update if last_update else Timer.get_cur_time()
+        last_update = last_update if last_update else Timer.now()
         new_measurement = self.scale_factor * value
         self.buffer.append(new_measurement, last_update)
         self.archive_reading(new_measurement, last_update)
