@@ -96,12 +96,13 @@ class TransactiveNode(Archivable):
             "status": self.status,
             "tz": self.tz,
 
-            # component Objects:
-            "meter_points": self.meter_points,
-            "information_service_models": self.information_service_models,
-            "local_assets": self.local_assets,
-            "markets": self.markets,
-            "neighbors": self.neighbors
+            # component Objects:  # TODO: Why is this in the default_config? Does this even work with mutable lists?
+            #                        Attempting to comment, as a test of whether it can be removed.
+            # "meter_points": self.meter_points,
+            # "information_service_models": self.information_service_models,
+            # "local_assets": self.local_assets,
+            # "market_series": self.market_series,
+            # "neighbors": self.neighbors
         }
         if self.simulation:
             self.default_config["simulation_start_time"] = self.simulation_start_time.isoformat()
