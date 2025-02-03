@@ -11,8 +11,8 @@ from sqlalchemy.orm import registry
 
 
 class DataManager:
-    def __init__(self, transactive_node, archival_buffer_length: int = 100, *args, **kwargs):
-        self.tn = transactive_node
+    def __init__(self, parent, archival_buffer_length: int = 100, *args, **kwargs):
+        self.parent = parent
 
         # State Variables:
         self.archive_ready = False
@@ -25,6 +25,7 @@ class DataManager:
     def add_table(self, key: str, definitions: list[dict]):
         definition = next(filter(lambda d: d['name'] == key, definitions))
         if key not in self.tables:
+            self.definitions[key] = definition
             table = self._parse_table_definition(definition)
             self.tables[key] = table
         if key not in self.orm:
