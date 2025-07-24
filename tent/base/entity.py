@@ -24,7 +24,7 @@ class Entity(Component):
         self.minimum_power = float(minimum_power)  # [avg.kW, signed] Asset's physical "hard" constraint
 
         # Setup Vertices for Default Supply/Demand Curve
-        default_vertices = default_vertices if default_vertices else [Vertex(price=float("inf"), cost=0.0, quantity=1)]
+        default_vertices = default_vertices if default_vertices else [Vertex(price=float("inf"), cost=0.0, quantity=1.0)]
         if len(default_vertices) == 1:
             default_vertices[0].price = float('inf')
         self.default_vertices: list[Vertex] = default_vertices

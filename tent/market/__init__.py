@@ -49,12 +49,11 @@ from collections import defaultdict
 from warnings import warn
 from weakref import proxy
 
-from tent import Component
-from tent.containers import IntervalSeries, IntervalValue, MarketTimings, Measurement, Vertex
+from tent.base import Component
+from tent.containers import IntervalSeries, MarketTimings, Measurement, Vertex
 from tent.enumerations import MarketState, MarketTypes, MeasurementType, MeasurementUnit, Method
 from tent.market.price_models import HourlyAveragePriceModel
-from tent.utils.helpers import (find_objs_by_ti, order_vertices, production,
-                                prod_cost_from_vertices, safe_weak_proxy_callback)
+from tent.utils.helpers import safe_weak_proxy_callback
 from tent.utils.log import setup_logging
 from tent.utils.timer import Timer
 
@@ -578,32 +577,32 @@ class Market(Component):
         # Append data for active market vertices:
         for x in range(len(self.active_vertices)):
             data.append([self.name,
-                         self.active_vertices[x].time_interval.name,
-                         self.active_vertices[x].value.marginal_price,
-                         self.active_vertices[x].value.power])
+                         self.active_vertices[x].interval.name,
+                         self.active_vertices[x].value.price,
+                         self.active_vertices[x].value.quantity])
 
         # Append data for local assets:
         for local_asset in self.tn.local_assets:
             vertices = [y for y in local_asset.active_vertices
-                        if y.time_interval.market == self]
+                        if y.interval.market == self]
 
             for vertex in vertices:
                 datum = [local_asset.name,
-                         vertex.time_interval.name,
-                         vertex.value.marginal_price,
-                         vertex.value.power]
+                         vertex.interval.name,
+                         vertex.value.price,
+                         vertex.value.quantity]
                 data.append(datum)
 
         # Append data for neighbor data:
         for neighbor in self.tn.neighbors:
             vertices = [y for y in neighbor.active_vertices
-                        if y.time_interval.market == self]
+                        if y.interval.market == self]
 
             for vertex in vertices:
                 datum = [neighbor.name,
-                         vertex.time_interval.name,
-                         vertex.value.marginal_price,
-                         vertex.value.power]
+                         vertex.interval.name,
+                         vertex.value.price,
+                         vertex.value.quantity]
                 data.append(datum)
 
         # Write the vertex data into a csv file based on the current working directory.
@@ -664,7 +663,7 @@ class Market(Component):
         for time_interval in self.time_intervals:
             # Find and delete existing aggregate active vertices in the indexed time interval. They will be recreated.
             self.active_vertices = [x for x in self.active_vertices
-                                    if x.time_interval.start_time != time_interval.start_time]
+                                    if x.interval.start_time != time_interval.start_time]
 
             # Call the utility sum_vertices to recreate the aggregate vertices in the indexed time interval. (This
             # method is separated out because it will be used by other methods.)
@@ -695,7 +694,7 @@ class Market(Component):
         # TODO: Consider having the balance method solve for both marginal price AND quantity.
         if self.series.method == Method.Interpolation:
             self.assign_system_vertices()
-            av = [(x.time_interval.name, x.value.marginal_price, x.value.power) for x in self.active_vertices]
+            av = [(x.interval.name, x.value.price, x.value.quantity) for x in self.active_vertices]
             _log.debug("{} market active vertices are: {}".format(self.name, av))
 
         # Index through active time intervals.
@@ -720,7 +719,7 @@ class Market(Component):
             elif self.series.method == Method.Interpolation:
                 # Get the indexed active system vertices.
                 active_vertices = [x.value for x in self.active_vertices
-                                   if x.time_interval.start_time == time_interval.start_time]
+                                   if x.interval.start_time == time_interval.start_time]
 
                 # Order the system vertices in the indexed time interval by price and power.
                 active_vertices = order_vertices(active_vertices)
@@ -728,7 +727,7 @@ class Market(Component):
                 err_msg = ''
                 try:
                     # Find the vertex that bookcases the balance point from the lower side.
-                    lower_active_vertex = [x for x in active_vertices if x.power < 0]
+                    lower_active_vertex = [x for x in active_vertices if x.quantity < 0]
                     if len(lower_active_vertex) == 0:
                         _log.warning(f'No load demand cases were found in {time_interval.name}')
                         err_msg = f"At {time_interval.name}, there is no point having power < 0"
@@ -736,7 +735,7 @@ class Market(Component):
                         lower_active_vertex = lower_active_vertex[-1]
 
                     # Find the vertex that bookcases the balance point from the upper side.
-                    upper_active_vertex = [x for x in active_vertices if x.power >= 0]
+                    upper_active_vertex = [x for x in active_vertices if x.quantity >= 0]
                     if len(upper_active_vertex) == 0:
                         _log.warning(f'No supply power cases were found in {time_interval.name}')
                         err_msg = f"At {time_interval.name}, there is no point having power >= 0 "
@@ -867,7 +866,7 @@ class Market(Component):
     #
     #         if self.method == 2:
     #             self.assign_system_vertices(mtn)
-    #             # av = [(x.timeInterval.name, x.value.marginalPrice, x.value.power) for x in self.activeVertices]
+    #             # av = [(x.interval.name, x.value.marginalPrice, x.value.power) for x in self.activeVertices]
     #             # _log.debug("{} market active vertices are: {}".format(self.name, av))
     #
     #         # Index through active time intervals.
@@ -891,7 +890,7 @@ class Market(Component):
     #
     #             elif self.method == 2:
     #                 # Get the indexed active system vertices
-    #                 av = [x.value for x in self.active_vertices if x.timeInterval.start_time == ti.start_time]
+    #                 av = [x.value for x in self.active_vertices if x.interval.start_time == ti.start_time]
     #                 err_msg = ''
     #
     #                 # Order the system vertices in the indexed time interval
@@ -1055,6 +1054,7 @@ class Market(Component):
         for neighbor in self.tn.neighbors:
             neighbor.schedule(self)
 
+    # TODO: Assuming in other places that this will return an SDCurve, not list[Vetex]. Update those if it does not change this way.
     def sum_vertices(self, time_interval, object_to_exclude=None):
         """
         Create system vertices with system information for a single time interval. An optional argument allows the
@@ -1089,7 +1089,7 @@ class Market(Component):
 
                 else:
                     # There are multiple vertices. Use the marginal price values from the vertices themselves.
-                    marginal_prices = [x.marginal_price for x in vertices]  # [$/kWh]
+                    marginal_prices = [x.price for x in vertices]  # [$/kWh]
 
                 marginal_price_list.extend(marginal_prices)  # marginal prices [$/kWh]
 
@@ -1115,7 +1115,7 @@ class Market(Component):
 
                 else:
                     # There are multiple vertices. Use the marginal price values from the vertices themselves.
-                    marginal_prices = [x.marginal_price for x in vertices]  # marginal prices [$/kWh]
+                    marginal_prices = [x.price for x in vertices]  # marginal prices [$/kWh]
 
                 marginal_price_list.extend(marginal_prices)  # [$/kWh]
 
@@ -1175,16 +1175,16 @@ class Market(Component):
 
                 # Calculate the indexed neighbor model's power at the indexed marginal price and time interval. NOTE:
                 # This must not corrupt the "scheduled power" at the converged system's marginal price.
-                neighbors_power = production(neighbor, marginal_price_list[i], time_interval)  # [avg.kW]
+                neighbors_power = neighbor.production(marginal_price_list[i], time_interval)  # [avg.kW]
 
                 # Calculate the neighbor model's production cost at the indexed marginal price and time interval, and
                 # add it to the sum production cost pc. NOTE: This must not corrupt the "scheduled" production cost for
                 # this neighbor model.
-                vertex_production_cost = vertex_production_cost \
-                                         + prod_cost_from_vertices(neighbor, time_interval, neighbors_power)
+                neighbor_sd_curve = neighbor.active_vertices.get_by_interval(time_interval)
+                vertex_production_cost += neighbor_sd_curve.prod_cost_from_vertices(neighbors_power)
 
                 # Add the neighbor model's power to the sum net power at this vertex.
-                vertex_power = vertex_power + neighbors_power  # [avg.kW]
+                vertex_power += neighbors_power  # [avg.kW]
 
             # Include power and production costs from local asset models. Index through the local asset models.
             for asset in self.tn.local_assets:
@@ -1192,12 +1192,12 @@ class Market(Component):
                     continue
 
                 # Calculate the power for the indexed local asset model at the indexed marginal price and time interval.
-                assets_power = production(asset, marginal_price_list[i], time_interval)  # [avg.kW]
+                assets_power = asset.production(marginal_price_list[i], time_interval)  # [avg.kW]
 
                 # Find the indexed local asset model's production cost and add it to the sum of production cost pc for
                 # this vertex.
-                vertex_production_cost = vertex_production_cost \
-                                         + prod_cost_from_vertices(asset, time_interval, assets_power)  # [$]
+                asset_sd_curve = asset.active_vertices.get_by_interval(time_interval)
+                vertex_production_cost += asset_sd_curve.prod_cost_from_vertices(assets_power)  # [$]
 
                 # Add local asset power p to the sum net power pwr for this vertex.
                 vertex_power = vertex_power + assets_power  # [avg.kW]
@@ -1206,7 +1206,7 @@ class Market(Component):
             interval_value.cost = vertex_production_cost  # [$]
 
             # Save the net power pwr into the new vertex iv
-            interval_value.power = vertex_power  # [avg.kW]
+            interval_value.quantity = vertex_power  # [avg.kW]
 
             # Append Vertex iv to the list of vertices
             vertices.append(interval_value)
@@ -1339,10 +1339,10 @@ class Market(Component):
     #     negative_infinity = float('-Inf')
     #     price_extension = 0.1  # [$/kWh]
     #
-    #     if time_interval is None:
+    #     if interval is None:
     #         time_interval = self.time_intervals[0]
     #
-    #     vertices = [x.value for x in self.active_vertices if x.timeInterval == time_interval]
+    #     vertices = [x.value for x in self.active_vertices if x.time_interval == time_interval]
     #
     #     vertices = order_vertices(vertices)
     #

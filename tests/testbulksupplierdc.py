@@ -84,14 +84,14 @@ def test_update_vertices():
 
     assert len(test_neighbor.activeVertices) == 2, 'An unexpected number of active vertices were found: ' \
                                                    + str(len(test_neighbor.activeVertices))
-    assert test_neighbor.activeVertices[0].value.power in [0, 100], 'First active vertex power was not as expected.'
-    assert test_neighbor.activeVertices[1].value.power in [0, 100], 'Second active vertex power was not as expected.'
-    assert test_neighbor.activeVertices[0].value.marginal_price == 0.0366, \
+    assert test_neighbor.activeVertices[0].value.quantity in [0, 100], 'First active vertex power was not as expected.'
+    assert test_neighbor.activeVertices[1].value.quantity in [0, 100], 'Second active vertex power was not as expected.'
+    assert test_neighbor.activeVertices[0].value.price == 0.0366, \
         'First active vertex marginal price is not as expected: ' \
-        + str(test_neighbor.activeVertices[0].value.marginal_price)
-    assert test_neighbor.activeVertices[1].value.marginal_price == 0.0366, \
+        + str(test_neighbor.activeVertices[0].value.price)
+    assert test_neighbor.activeVertices[1].value.price == 0.0366, \
         'Second active vertex marginal price is not as expected: ' \
-        + str(test_neighbor.activeVertices[1].value.marginal_price)
+        + str(test_neighbor.activeVertices[1].value.price)
 
     print('Case 2: Same as Case 1, but let demand charges be in play. ')
     dt = datetime(2021, 3, 3, 13)
@@ -119,15 +119,15 @@ def test_update_vertices():
     # automate testing.
     assert len(test_neighbor.activeVertices) == 4, 'An unexpected number of active vertices were found: ' \
                                                    + str(len(test_neighbor.activeVertices))
-    assert test_neighbor.activeVertices[0].value.power == 0, 'First active vertex power was not as expected: ' \
-                                                             + str(test_neighbor.activeVertices[0].value.power)
-    assert test_neighbor.activeVertices[1].value.power == 50, 'Second active vertex power was not as expected: ' \
-                                                              + str(test_neighbor.activeVertices[1].value.power)
-    assert test_neighbor.activeVertices[2].value.power == 50, 'Third active vertex power was not as expected: '\
-                                                              + str(test_neighbor.activeVertices[2].value.power)
-    assert test_neighbor.activeVertices[3].value.power == 100, 'Fourth active vertex power was not as expected: '\
-                                                               + str(test_neighbor.activeVertices[3].value.power)
-    assert [test_neighbor.activeVertices[x].value.marginal_price for x in range(4)] == \
+    assert test_neighbor.activeVertices[0].value.quantity == 0, 'First active vertex power was not as expected: ' \
+                                                                + str(test_neighbor.activeVertices[0].value.quantity)
+    assert test_neighbor.activeVertices[1].value.quantity == 50, 'Second active vertex power was not as expected: ' \
+                                                                 + str(test_neighbor.activeVertices[1].value.quantity)
+    assert test_neighbor.activeVertices[2].value.quantity == 50, 'Third active vertex power was not as expected: ' \
+                                                                 + str(test_neighbor.activeVertices[2].value.quantity)
+    assert test_neighbor.activeVertices[3].value.quantity == 100, 'Fourth active vertex power was not as expected: ' \
+                                                                  + str(test_neighbor.activeVertices[3].value.quantity)
+    assert [test_neighbor.activeVertices[x].value.price for x in range(4)] == \
            [0.03641, 0.03641, 9.31641, 9.31641], 'Marginal prices were not as expected.'
 
     print('test_update_vertices() ran to completion.\n')

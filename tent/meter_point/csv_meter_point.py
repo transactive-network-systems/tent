@@ -95,8 +95,8 @@ class CSVMeterPoint(PullMeterPoint):
         for time_interval in market.time_intervals:
             start_time = time_interval.start_time
             end_time = start_time + time_interval.duration
-            # Attempt to get value based on timeInterval.
-            # If the timeInterval does not exist in the csv data, skip.
+            # Attempt to get value based on time_interval.
+            # If the time_interval does not exist in the csv data, skip.
             try:
                 start_value = meter_df["Metered_Energy"][start_time]
                 end_value = meter_df["Metered_Energy"][end_time]
@@ -104,8 +104,15 @@ class CSVMeterPoint(PullMeterPoint):
                 # TODO: This behavior no longer matches the functionality of the base class.
                 #  The MeterPoint class does not use TimeIntervals and IntervalValues for its data,
                 #  since metered data is more find-grained.
-                interval = IntervalValue(self, time_interval, market, MeasurementType.EnergyReal, interval_value)
-                self.meter_intervals.append(interval)
+                #   NOTE: This was updated to remove IntervalValue, but the behavior is the same, and will not work as expected.
+                #    It might be better to have something scheduling writes out of chunks of data or override
+                #    read methods to do this once the whole thing is loaded from CSV?
+                # <OLD_START>
+                # interval = IntervalValue(self, time_interval, market, MeasurementType.EnergyReal, interval_value)
+                # self.meter_intervals.append(interval)
+                # <OLD_END> / <NEW_START>
+                self.set_meter_value(interval_value, last_update=time_interval.start_time)
+                # <NEW_END>
             except KeyError:
                 pass
         return self.meter_intervals

@@ -55,8 +55,8 @@
 # from tent.containers import IntervalValue
 # from tent.enumerations import MeasurementType
 # from tent.meter_point.pull_meter_point import PullMeterPoint
-# from tent.utils import headers
-# from tent.utils.async_ import AsyncCall
+# from tent.utils import headers  # The headers file was removed in July 2024, but was only a copy from VOLTTRON.
+# from tent.utils.async_ import AsyncCall  # The async file was removed in July 2025, but was only a copy from VOLTTRON.
 #
 # from bacpypes.task import RecurringTask
 # import bacpypes.core
@@ -142,8 +142,8 @@
 #                 #  This appears to need to be a dictionary of points.
 #                 bacnet_data = self.bacnet_proxy.read_using_single_request(device_address,
 #                                                                           self.bacnet_config['description'])
-#             # Attempt to get value based on timeInterval.
-#             # If the timeInterval does not exist in the csv data, skip.
+#             # Attempt to get value based on time_interval.
+#             # If the time_interval does not exist in the csv data, skip.
 #             try:
 #                 value = bacnet_data
 #                 # TODO: This behavior no longer matches the functionality of the base class.

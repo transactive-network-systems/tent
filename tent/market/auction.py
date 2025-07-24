@@ -45,7 +45,6 @@ import logging
 
 from tent.enumerations import Direction, MarketTypes
 from tent.market import Market
-from tent.utils.helpers import production
 from tent.utils.log import setup_logging
 
 setup_logging()
@@ -265,7 +264,7 @@ class Auction(Market):
                 for time_interval in self.time_intervals:
                     price = self.marginal_prices.get_by_interval(time_interval).value
                     # Interpolate among the asset's active vertices to find power at the cleared market clearing price.
-                    power = production(local_asset, price, time_interval)
+                    power = local_asset.production(price, time_interval)
                     local_asset.scheduled_powers.update(time_interval, power)
 
             # For each downstream agent,

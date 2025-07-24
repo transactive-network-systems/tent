@@ -123,7 +123,7 @@ def test_calculate_reserve_margin():
         IntervalValue(test_model, ti, test_mkt, MeasurementType.Vertex, Vertex(0, 0, -10)),
         IntervalValue(test_model, ti, test_mkt, MeasurementType.Vertex, Vertex(0, 0, 10))
     ]
-    test_model.activeVertices = iv
+    test_model.active_vertices = iv
 
     print("  Case 2: test with maximum power greater than maximum vertex")
     test_model.maximum_power = 100
@@ -517,7 +517,7 @@ def test_update_production_costs():
     interval_values = [
         IntervalValue(test_model, time_interval, test_market, MeasurementType.ActiveVertex, vertices[0]),
         IntervalValue(test_model, time_interval, test_market, MeasurementType.ActiveVertex, vertices[1])]
-    test_model.activeVertices = interval_values
+    test_model.active_vertices = interval_values
 
     # TEST 1
     print('- Test 1: First calculation of a production cost')
@@ -588,7 +588,7 @@ def test_update_vertices():
     except RuntimeWarning as cause:
         print('  - the method encountered errors', cause)
 
-    assert len(test_model.activeVertices) == 1, 'There were an unexpected number of active vertices'
+    assert len(test_model.active_vertices) == 1, 'There were an unexpected number of active vertices'
 
     # Success.
     print('Method test_update_vertices ran to completion.\n')

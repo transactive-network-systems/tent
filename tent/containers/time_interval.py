@@ -45,7 +45,7 @@ from datetime import datetime, timedelta
 from sortedcontainers import SortedDict
 from weakref import proxy
 
-from tent import Archivable
+from tent.base import Archivable
 from tent.utils.helpers import safe_weak_proxy_callback
 
 

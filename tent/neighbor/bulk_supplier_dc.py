@@ -43,12 +43,11 @@ under Contract DE-AC05-76RL01830
 
 import logging
 
-from tent.containers import IntervalValue, Vertex
+from tent.containers import SDCurve, Vertex
 from tent.enumerations import MarketState, MeasurementType
 from tent.neighbor import Neighbor
 from tent.utils.const import bpa_demand_rate, bpa_energy_rate
-from tent.utils.data_manager import append_table
-from tent.utils.helpers import is_heavyloadhour, power_from_vertices
+from tent.utils.helpers import is_heavyloadhour
 from tent.utils.log import setup_logging
 
 setup_logging()
@@ -103,23 +102,10 @@ class BulkSupplierDC(Neighbor):
         # Initialize thresholds that will be used to apply demand charges.
         active_threshold = self.demand_threshold
 
-        # 210331DJH: This is an error for markets that have multiple market time intervals. If initialized here, each
-        #            successive time interval adds to the list of vertices, each having been potentially modified by the
-        #            prior calculations. This initialization belongs *INSIDE* teh time interval loop.
-        # Initialize the list of vertices that are to become the active vertices.
-        # vertices = []
-
-        # 210321DJH:
-        new_active_vertices = []
-
         # Index through active time intervals.
         for time_interval in market.time_intervals:
-            # 210331DJH: This initialization fixes a logic error for markets that have multiple market time intervals.
-            #            The initialization belongs *INSIDE* teh time interval loop.
-            #            BTW, the mistake was not found during unit testing because unit testing did not challenge the
-            #            method with multiple time periods.
-            # Initialize the list of vertices that are to become the active vertices.
-            vertices = []
+            # This initialization belongs inside the time interval loop because subsequent values may
+            #  be affected by prior ones when there are multiple market time intervals.
 
             # Find the month number for the indexed time interval start time. The month is needed for rate lookup
             # tables.
@@ -130,79 +116,51 @@ class BulkSupplierDC(Neighbor):
             else:
                 price = bpa_energy_rate[month_number - 1][1]  # bpa_energy_rate(month_number, 2)
 
-            vertices.append(Vertex(marginal_price=price,
-                                   power=minimum_power,
-                                   prod_cost=a0 + price * minimum_power
-                                   )
-                            )
-
-            vertices.append(Vertex(marginal_price=price,
-                                   power=maximum_power,
-                                   prod_cost=a0 + price * maximum_power
-                                   )
-                            )
+            # Initialize the SDCurve that is to become the active vertices for this interval.
+            sd_curve = SDCurve(
+                measurement=None,
+                interval=time_interval,
+                vertices=[
+                    Vertex(price=price, quantity=minimum_power, cost=a0 + price * minimum_power),
+                    Vertex(price=price, quantity=maximum_power, cost=a0 + price * maximum_power)
+                ])
 
             # At this point the two vertices capture the remote supplier's perspective.
 
             # Modify the vertices to include the impacts of marginal losses.
             if self.loss_factor != 0:
-                vertices = self.include_marginal_losses(vertices=vertices)
+                self.include_marginal_losses(vertices=sd_curve)
 
             # Modify the vertices to include the impacts of demand charges.
             # Make sure that the demand_rate is set to the current demand rate.
+            # TODO: Should this really be changing an object attribute in a loop?
             self.demand_rate = bpa_demand_rate[month_number - 1][0]
 
             # Demand Charges only apply to HLH hours.
-            # 211014DJH: This logic must be modified for auctions, which do not necessarily have valid scheduled powers.
-            #            On rethinking this, the currently scheduled power is irrelevant to the insertion of demand
-            #            charges, but the scheduled power is needed to update the active_threshold within a given series
-            #            of market time intervals. I'm moving the threshold update to after the inclusion of demand
-            #            charges.
             if is_heavyloadhour(time_interval.start_time) and self.demand_rate != 0:
-                # scheduled_power = [x.power for x in self.scheduledPowers if x.timeInterval == time_interval]
-                # if scheduled_power is not None and len(scheduled_power) != 0:
-                #     active_threshold = max(active_threshold, scheduled_power[0])
-                # vertices = self.include_demand_charges(vertices=vertices, threshold=active_threshold)
-                vertices = self.include_demand_charges(vertices=vertices, threshold=active_threshold)
+                self.include_demand_charges(vertices=sd_curve, threshold=active_threshold)
 
-                # Update the active threshold. This is easy if the current market interval has a corresponding
-                # scheduled power.
-                # 211014DJH: Another error is that this next line should find the *value* of the IntervalValue object.
+                # Update the active threshold. This is easy if the current interval has a corresponding scheduled power.
                 scheduled_power = self.scheduled_powers.get_by_interval(time_interval)
 
                 # However, if the power is not yet scheduled (price is not known), the power must be inferred:
                 if not scheduled_power:
                     predicted_market_price = market.price_model.get(time_interval.start_time)[0]
-                    scheduled_power = power_from_vertices(vertices, predicted_market_price)
+                    scheduled_power = sd_curve.power_from_vertices(predicted_market_price)
 
                 # Regardless how scheduled power was found, the temporary active threshold is updated within the series
                 # of time intervals in this market object.
                 active_threshold = max(active_threshold, scheduled_power)
 
-            # Find and delete active vertices in the indexed time interval. These vertices shall be re-created.
-            self.active_vertices = [x for x in self.active_vertices if x.time_interval != time_interval]
-
-            # Save the corrected vertices as active vertices interval values.
-            for v in range(len(vertices)):
-                # Pick out the indexed vertex.
-                vertex = vertices[v]
-
-                # Append the vertex to the neighbor's active vertices as interval values.
-                new_active_vertices.append(IntervalValue(calling_object=self,
-                                                         time_interval=time_interval,
-                                                         market=market,
-                                                         measurement_type=MeasurementType.ActiveVertex,
-                                                         value=vertex
-                                                         )
-                                           )
+            # Update active vertices for the indexed time interval.
+            self.active_vertices.update(time_interval, sd_curve)
 
         # 210331DJH: This modification using "new_active_vertices" allows the new active vertices to be captured easily
         #            as CSV records.
-        self.active_vertices.extend(new_active_vertices)
-        append_table(obj=new_active_vertices)
-
-        # 200929DJH: Trim any active vertices that lie in expired markets.
-        self.active_vertices = [x for x in self.active_vertices if x.market.market_state != MarketState.Expired]
+        #self.active_vertices.extend(new_active_vertices)  # Has now be updated in the loop.
+        # TODO: How and where to archive? See TODOs in Measurement.update(). There should probably be a call here,
+        #       like the append_table that updates all the vertices in the database at one time-stamp.
+        #append_table(obj=new_active_vertices)
 
     # def old_update_vertices(self, mkt):
     #     # 200804DJH: Replaced. Newer version should be consistent with Version 3 treatment of demand charges and losses.
@@ -255,7 +213,7 @@ class BulkSupplierDC(Neighbor):
     #     for interval_index, time_interval in enumerate(time_intervals):
     #
     #         # Find and delete active vertices in the indexed time interval. These vertices shall be recreated.
-    #         self.active_vertices = [x for x in self.active_vertices if x != time_interval]
+    #         self.active_vertices = [x for x in self.active_vertices if x != interval]
     #
     #         # Find the month number for the indexed time interval start time. The month is needed for rate lookup
     #         # tables.
@@ -308,7 +266,7 @@ class BulkSupplierDC(Neighbor):
     #             if len(scheduled_powers) == 0:
     #
     #                 # Powers have been scheduled, order the scheduled powers by their start time
-    #                 ordered_scheduled_powers = sorted(self.scheduled_powers, key=lambda x: x.time_interval.start_time)
+    #                 ordered_scheduled_powers = sorted(self.scheduled_powers, key=lambda x: x.interval.start_time)
     #                 ordered_scheduled_powers = ordered_scheduled_powers[:interval_index + 1]
     #
     #                 # The peak demand determinant is the greater of the monthly peak threshold or the prior scheduled
@@ -482,5 +440,5 @@ class BulkSupplierDC(Neighbor):
     #             # Append the active vertices to the list of active vertices
     #             # in the indexed time interval
     #             self.active_vertices.extend(interval_values)
-    #     av = [(x.time_interval.name, x.value.marginal_price, x.value.power) for x in self.active_vertices]
+    #     av = [(x.interval.name, x.value.marginal_price, x.value.power) for x in self.active_vertices]
 

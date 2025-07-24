@@ -114,7 +114,7 @@ def predict_2017(cls):
     predictor = OpenLoopLoadPredictor(forecaster)
     predictor.schedule_power(mkt)
 
-    powers = [(x.time_interval.start_time, x.value) for x in predictor.scheduled_powers]
+    powers = [(x.interval.start_time, x.value) for x in predictor.scheduled_powers]
     total_power = sum([s[1] for s in powers])
 
     print(powers)

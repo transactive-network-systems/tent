@@ -46,18 +46,14 @@ import logging
 from datetime import timedelta
 from typing import Union
 
-from tent import Entity
-from tent.containers import IntervalValue, Measurement, TimeInterval, Vertex
-from tent.enumerations import MarketState, MeasurementType, MeasurementUnit
-from tent.utils.helpers import find_objs_by_ti, prod_cost_from_vertices
+from tent.base import Entity
+from tent.containers import Measurement, SDMeasurement, TimeInterval, Vertex
+from tent.enumerations import MeasurementType, MeasurementUnit
 from tent.utils.log import setup_logging
 from tent.utils.timer import Timer
 
 setup_logging()
 _log = logging.getLogger(__name__)
-
-# 191218DJH: This class originally inherited from class Model. Model is being deleted. Its properties and methods are
-# being moved into this class.
 
 
 class LocalAsset(Entity):
@@ -92,8 +88,8 @@ class LocalAsset(Entity):
                  minimum_power=0.0,
                  meter_points=None,
                  name='',
-                 scheduling_horizon: Union[timedelta, float, int] = timedelta(hours=24),
-                 subclass=None):
+                 scheduling_horizon: Union[timedelta, float, int] = timedelta(hours=24)
+                 ):
         super(LocalAsset, self).__init__(cost_parameters, default_vertices, description, information_services, location,
                                          maximum_power, meter_points, minimum_power, name, transactive_node)
 
@@ -102,18 +98,10 @@ class LocalAsset(Entity):
         self.engagement_costs = [float(ec) for ec in engagement_costs]  # {engagement, [$]; hold, [$]; disengagement, [$]} Transition costs
         self.scheduling_horizon = scheduling_horizon if isinstance(scheduling_horizon, timedelta)\
             else timedelta(seconds=scheduling_horizon) # [time duration] Future that price and energy shift are relevant
-        self.subclass = subclass                    # Future, unused
 
         # These following properties are dynamically managed and should not normally be manually configured:
-        self.activeVertices = []                    # [IntervalValue] Values are [Vertex]: Demand/Supply curves
-        self.dual_costs = Measurement(self, MeasurementType.DualCost, MeasurementUnit.Monetary)
         self.engagement_schedule = Measurement(self, MeasurementType.EngagementSchedule, MeasurementUnit.Boolean)  # True = engaged
-        self.production_costs = Measurement(self, MeasurementType.ProductionCost, MeasurementUnit.Monetary)
-        self.reserve_margins = Measurement(self, MeasurementType.ReserveMargin, MeasurementUnit.kW) # [avg.kW, signed]
         self.schedule_calculated = False            # Flag set True after asset has scheduled power
-        self.scheduled_powers = Measurement(self, MeasurementType.ScheduledPower, MeasurementUnit.kW)  # [avg.kW, signed]
-        self.total_dual_cost = 0.0                    # [$] Sum of dual costs in forward time intervals
-        self.total_production_cost = 0.0              # [$, non-negative] Sum of production costs in forward intervals
         self.transition_costs = Measurement(self, MeasurementType.TransitionCost, MeasurementUnit.Monetary)
 
     def cost(self, power=0):
@@ -151,7 +139,7 @@ class LocalAsset(Entity):
         # Log if possible
         """
         if self.mtn is not None and self.power_topic != '':
-            sp = [(x.timeInterval.name, x.value) for x in self.scheduledPowers]
+            sp = [(x.interval.name, x.value) for x in self.scheduledPowers]
             self.mtn.vip.pubsub.publish(peer='pubsub',
                                         topic=self.power_topic,
                                         message={'power': sp})
@@ -224,54 +212,6 @@ class LocalAsset(Entity):
             engagement_flag = True  # Asset is committed or engaged
             self.engagement_schedule.update(time_interval, engagement_flag)
 
-    def calculate_reserve_margin(self, market):
-        # Estimate available (spinning) reserve margin for this asset.
-        #
-        # NOTES:
-        #   This method works with the simplest base classes that have constant power and therefore provide no spinning
-        #   reserve. This method may be redefined by subclasses of the local asset model to add new features or
-        #   capabilities.
-        #   This calculation will be more meaningful and useful after resource commitments and uncertainty estimates
-        #   become implemented. Until then, reserve margins may be tracked, even if they are not used.
-        #
-        # PRESUMPTIONS:
-        # - Active time intervals exist and have been updated
-        # - The asset's maximum power is a meaningful and accurate estimate of the maximum power level that can be
-        #   achieved on short notice, i.e., spinning reserve.
-        #
-        # INPUTS:
-        # market - Market object
-        #
-        # OUTPUTS:
-        # Modifies self.reserveMargins - an array of estimated (spinning) reserve margins in active time intervals
-
-        # Index through active time intervals ti
-        for time_interval in market.time_intervals:
-            # Calculate the reserve margin for the indexed interval. This is the non-negative difference between the
-            # maximum asset power and the scheduled power. In principle, generation may be increased or demand decreased
-            # by this quantity to act as spinning reserve.
-
-            # Find the scheduled power in the indexed time interval
-            scheduled_power = self.scheduled_powers.get_by_interval(time_interval)
-
-            # Calculate the reserve margin in the indexed time interval. The reserve margin is the difference between
-            #  the maximum operational power value in the interval and the scheduled power. The operational maximum
-            #  should be less than the object's hard physical power constraint, so a check is in order. Start with the
-            #  hard physical constraint (self.maximum_power).
-            # Calculate the operational maximum constraint, which is the highest point on the supply/demand curve (i.e.,
-            #  the vertex) that represents the residual flexibility of the asset in the time interval. If there are no
-            #  active vertices, use the hard physical constraint (maximum power).
-            operational_constraint = max(find_objs_by_ti(self.activeVertices, time_interval),
-                                         key=lambda av: av.value.power, default=self.maximum_power)  # [avg.kW]
-
-            # The upper operational power constraint must be less than or equal to the object's hard physical constraint.
-            soft_maximum = min(self.maximum_power, operational_constraint)  # [avg.kW]
-
-            # And finally calculate the reserve margin.
-            reserve_margin = max(0, soft_maximum - scheduled_power.value)  # [avg. kW]
-
-            self.reserve_margins.update(time_interval, reserve_margin)
-
     def engagement_cost(self, dif):
         # Assigns engagement cost based on difference in engagement status in the current minus prior time intervals.
         #
@@ -291,7 +231,7 @@ class LocalAsset(Entity):
 
         # Check that dif is a feasible difference between two logical values
         if dif not in [-1, 0, 1]:
-            print('Input value must be in the set {-1,0,1}.')
+            _log.warning(f'Input value to engagement_cost (difference) must be in the set {{-1,0,1}}. Received: {dif}')
             cost = None
             return cost
 
@@ -340,104 +280,28 @@ class LocalAsset(Entity):
             transition_cost = self.engagement_cost(dif)
             self.transition_costs.update(time_interval, transition_cost)
 
-    def update_dual_costs(self, market):
-        # Update the dual cost for all active time intervals
-        # (NOTE: Choosing not to separate this def from the base class because cost might need to be handled differently
-        # and redefined in subclasses.)
-
-        # Index through the time intervals.
-        # NOTE 1911DJH: The range in this for-loop has been corrected and now passes unit testing. I believe the code
-        # had been modified to avoid revising the schedule for the first hour in Version 2. This is corrected by the
-        # market state transition model in Version 3, which should be configured to NOT allow negotiation of prices and
-        # quantities after the respective market has cleared or entered its delivery period.
-        for time_interval in market.time_intervals:
-
-            # Find the marginal price, scheduled power, and production cost for the indexed time interval.
-            marginal_price = market.marginal_prices.get_by_interval(time_interval)  # a marginal price [$/kWh]
-            scheduled_power = self.scheduled_powers.get_by_interval(time_interval) # [avg.kW]
-            production_cost = self.production_costs.get_by_interval(time_interval) # [$]
-
-            # Dual cost in the time interval is calculated as production cost, minus the product of marginal price,
-            # scheduled power, and the duration of the time interval.
-            duration = time_interval.duration.total_seconds() / 3600
-            dual_cost = production_cost - (marginal_price * scheduled_power * duration)  # [$]
-
-            self.dual_costs.update(time_interval, dual_cost)
-
-        # Sum the total dual cost and save the value.
-        # 200929DJH: This is corrected to sum only the dual costs in the current market
-        # TODO: If there are two markets operating simultaneously, won't the second assignment clobber the first?
-        self.total_dual_cost = self.dual_costs.total(market)
-
-        _log.debug(f"{self.name} asset model dual costs are: {self.dual_costs.log_report}")
-
-    def update_production_costs(self, market):
-        # Calculate the costs of generated energies.
-        # (NOTE: Cost might need to be handled differently and redefined in subclasses.)
-
-        # Index through the active time intervals.
-        for time_interval in market.time_intervals:
-            # Get the scheduled power in the indexed time interval.
-            scheduled_power = self.scheduled_powers.get_by_interval(time_interval)  # [avg.kW]
-
-            # Call on def that calculates production cost pc based on the vertices of the supply or demand curve
-            production_cost = prod_cost_from_vertices(self, time_interval, scheduled_power.value)  # [$]
-
+    def _get_production_costs(self, time_interval):
+            production_cost = super(LocalAsset, self)._get_production_costs(time_interval)
             # Check for a transition cost in the indexed time interval.
             # (NOTE: this differs from neighbor models, which do not possess the concept of commitment and engagement.)
             transition_cost = self.transition_costs.get_by_interval(time_interval)
             transition_cost = 0.0 if transition_cost is None else transition_cost.value  # [$]
-
             # Add the transition cost to the production cost
-            production_cost = production_cost + transition_cost
-
-            self.production_costs.update(time_interval, production_cost)
-
-        # Sum the total production cost.
-        # 200929DJH: In Version 3, this sum must be made only within the current market object.
-        # TODO: If there are two markets operating simultaneously, won't the second assignment clobber the first?
-        self.total_production_cost = self.production_costs.total(market)  # [$]
-
-        _log.debug(f"{self.name} asset model production costs are: {self.production_costs.log_report}")
+            return production_cost + transition_cost
 
     def update_vertices(self, market):
         # Create vertices to represent the asset's flexibility
         #
         # For the base local asset model, a single, inelastic power is needed. There is no flexibility. The constant
-        # power may be represented by a single (price, power) point (See struct Vertex).
+        # power may be represented by a single (price, power) point (See Vertex container).
 
-        # Index through active time intervals.
         for time_interval in market.time_intervals:
-
-            # Find the scheduled power for the indexed time interval. Extract the scheduled power value.
-            # TODO: Make this next line tolerant upon finding scheduled_power = None.
+            # Find the scheduled power for the indexed time interval.
             scheduled_power = self.scheduled_powers.get_by_interval(time_interval)  # avg. kW
-
             # Create the vertex that can represent this (lack of) flexibility
-            value = Vertex(float("inf"), 0.0, scheduled_power.value, True)
+            self.active_vertices.update(time_interval, Vertex(float("inf"), 0.0, scheduled_power.value, True))
 
-            # TODO: Update this block once SDCurve is integrated.
-            ##### BEGIN BLOCK
-            # Check to see if the active vertex already exists for this indexed time interval.
-            interval_value = find_objs_by_ti(self.activeVertices, time_interval)[0]
-            # If the active vertex does not exist, a new interval value must be created and stored.
-            if interval_value is None:
-                # Create the interval value and place the active vertex in it
-                interval_value = IntervalValue(self, time_interval, market, MeasurementType.ActiveVertex, value)
-                # Append the interval value to the list of active vertices.
-                self.activeVertices.append(interval_value)
-            else:
-                # Otherwise, simply reassign the active vertex value to the existing listed interval value.
-                # NOTE that this base local asset model unnecessarily reassigns constant values, but the reassignment
-                # is allowed because it teaches how a more dynamic assignment may be maintained.
-                interval_value.value = value
-
-        # 200929DJH: Trim the list of active vertices so that it will not grow indefinitely.
-        self.activeVertices = [x for x in self.activeVertices if x.market.market_state != MarketState.Expired]
-
-        av = [(x.time_interval.name, x.value.marginal_price, x.value.power) for x in self.activeVertices]
-        _log.debug(f"{self.name} asset model active vertices are: {av}")
-        ##### END BLOCK
+        _log.debug(f"{self.name} asset model active vertices are: {self.active_vertices.log_report}")
 
     def get_extended_prices(self, market):
         """
@@ -568,17 +432,6 @@ class LocalAsset(Entity):
         """
         pass
 
-    def get_dict(self):
-        scheduled_powers = [(k.start_time.isoformat(), v.value) for k, v in self.scheduled_powers.all]
-        vertices = [(x.time_interval.start_time.isoformat(), x.value.marginal_price, x.value.power) for x in
-                    self.activeVertices]
-        local_asset_dict = {
-            "name": self.name,
-            "scheduled_power": scheduled_powers,
-            "vertices": vertices
-        }
-        return local_asset_dict
-
     @property
     def table_name(self):
         return 'local_asset'
@@ -592,8 +445,7 @@ class LocalAsset(Entity):
             'engagement_cost_2': self.engagement_costs[2],
             # 'holding_cost': self.holding_cost, TODO: Did this come from old schema?
             # 'disengagement_cost': self.disengagement_cost, TODO: Did this come from old schema?
-            'scheduling_horizon': self.scheduling_horizon,
-            'subclass': self.subclass
+            'scheduling_horizon': self.scheduling_horizon
         })
         return record
 
@@ -612,8 +464,7 @@ class LocalAsset(Entity):
                     {"name": "engagement_cost_2", "type": "Float"},
                     #{"name": "holding_cost", "type": "Float"},
                     #{"name": "disengagement_cost", "type": "Float"},
-                    {"name": "scheduling_horizon", "type": "DateTimeRangeType"},
-                    {"name": "subclass", "type": "String", "type_args": [255]}
+                    {"name": "scheduling_horizon", "type": "DateTimeRangeType"}
                 ]
             }
         ])

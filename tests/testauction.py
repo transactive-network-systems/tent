@@ -194,7 +194,7 @@ def test_while_in_delivery_lead():
                                          test_vertex3)
     test_neighbor.default_vertices = [test_vertex1, test_vertex2]
     test_neighbor.active_vertices = []
-    test_asset.activeVertices = [test_interval_value3]
+    test_asset.active_vertices = [test_interval_value3]
     test_neighbor.demand_rate = 0
     test_neighbor.loss_factor = 0
 
@@ -264,7 +264,7 @@ def test_while_in_delivery_lead():
                                                       neighbor_name=test_neighbor.name,
                                                       direction='received',
                                                       market_name=test_auction.name)]
-    test_asset.activeVertices = [test_interval_value3]
+    test_asset.active_vertices = [test_interval_value3]
 
     assert len(test_auction.marginal_prices) == 0, 'The test should start with the auction having no marginal prices'
     assert len(test_neighbor.scheduled_powers) == 0, 'The upstream neighbor should initially have no scheduled powers.'

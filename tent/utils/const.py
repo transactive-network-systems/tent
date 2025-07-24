@@ -41,7 +41,7 @@ operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
 
-
+# TODO: These should probably be provided configuration files for the BulkSupplierDC, rather than constants.
 # BPA_RATE: BPA 2018-19 energy and demand rate tables
 # BPA establishes load-following energy and demand rates for two-year
 # periods. Use this class to simply refer to the appropriate table and its

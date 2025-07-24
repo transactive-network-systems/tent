@@ -108,7 +108,7 @@ class TestCSVMeterPoint(unittest.TestCase):
                 # Verify that all values are IntervalValues
                 assert isinstance(self.test_csv_meter.meter_intervals[x], IntervalValue)
                 # Verify that timestamps match csv
-                self.assertEqual(self.test_csv_meter.meter_intervals[x].time_interval.start_time,
+                self.assertEqual(self.test_csv_meter.meter_intervals[x].interval.start_time,
                                  self.test_df["Timestamp"][x])
                 # Verify that values match csv value intervals
                 self.assertEqual(self.test_csv_meter.meter_intervals[x].value,
@@ -116,7 +116,7 @@ class TestCSVMeterPoint(unittest.TestCase):
 
     def test_case2(self):
         """
-        Read data from csv when the timeInterval does not line up with all values from csv.
+        Read data from csv when the time_interval does not line up with all values from csv.
         """
         print("\nCASE 2: Read from CSV with unequal timestamps")
         # Verify nothing is stored in meter_intervals
@@ -136,7 +136,7 @@ class TestCSVMeterPoint(unittest.TestCase):
 
                 assert isinstance(self.test_csv_meter.meter_intervals[x], IntervalValue)
                 # Verify that timestamps match csv
-                self.assertEqual(self.test_csv_meter.meter_intervals[x].time_interval.start_time,
+                self.assertEqual(self.test_csv_meter.meter_intervals[x].interval.start_time,
                                  self.test_df["Timestamp"][x])
                 # Verify that values match csv value intervals
                 self.assertEqual(self.test_csv_meter.meter_intervals[x].value,

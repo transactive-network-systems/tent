@@ -4,7 +4,7 @@ from sortedcontainers import SortedList
 from typing import Type, Union
 from weakref import proxy
 
-from tent import Component
+from tent.base import Component
 from tent.containers import MarketDurations
 from tent.enumerations import MarketState, MarketTypes, Method
 from tent.market import Market
@@ -52,7 +52,7 @@ class MarketSeries(Component):
                                                              duration_reconciliation, interval_duration,
                                                              intervals_to_clear, market_clearing_interval,
                                                              delivery_anchor_time)
-        self.markets = SortedList(key=lambda mkt: mkt.market_order)
+        self.markets = SortedList(key=lambda mkt: mkt.market_order)  # TODO: Is market_order really the right key here? That is an attribute of the series, not the market....
 
         self.commitment: bool = validate_bool(commitment, 'commitment')
         self.default_price: float = float(default_price)

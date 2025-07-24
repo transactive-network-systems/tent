@@ -51,7 +51,7 @@ from math import ceil
 from statistics import mean
 from typing import Union
 
-from tent import Component
+from tent.base import Component
 from tent.enumerations import MeasurementType, MeasurementUnit
 from tent.utils.time_series_buffer import TimeSeriesBuffer
 from tent.utils.timer import Timer

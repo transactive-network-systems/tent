@@ -142,7 +142,7 @@ def test_production():
     ti = TimeInterval(mkt, dur, st)
 
     # Assign activeVertices, which are IntervalValues
-    test_object.activeVertices = [
+    test_object.active_vertices = [
         IntervalValue(test_object, ti, test_market, MeasurementType.ActiveVertex, av[0]),
         IntervalValue(test_object, ti, test_market, MeasurementType.ActiveVertex, av[1]),
         IntervalValue(test_object, ti, test_market, MeasurementType.ActiveVertex, av[2])]
@@ -171,7 +171,7 @@ def test_production():
         print('- the production cost was correctly calculated')
 
     # CASE: One vertex (inelastic case, a constant)
-    test_object.activeVertices = [IntervalValue(test_object, ti, test_market, MeasurementType.ActiveVertex, av[2])]
+    test_object.active_vertices = [IntervalValue(test_object, ti, test_market, MeasurementType.ActiveVertex, av[2])]
 
     for i in range(5):
         p[i] = production(test_object, test_prices[i], ti)
@@ -184,7 +184,7 @@ def test_production():
         print('- the correct power was assigned when there is one vertex')
 
     # CASE: No active vertices (error case):
-    test_object.activeVertices = []
+    test_object.active_vertices = []
 
     try:
         p = production(test_object, test_prices[4], ti)
@@ -242,7 +242,7 @@ def test_prod_cost_from_formula():
     #   Run the test
     pc = [0] * 3
     for i in range(3):
-        pc[i] = prod_cost_from_formula(test_object, ti[i])
+        pc[i] = test_object.prod_cost_from_formula(ti[i])
 
     # pc(1) = 4 + 3 * 100 + 0.5 * 2 * 100^2 = 10304
     # pc(2) = 4 + 3 * 200 + 0.5 * 2 * 200^2 = 40604
@@ -335,7 +335,8 @@ def test_prod_cost_from_vertices():
     # pc[i] = prod_cost_from_vertices(test_object, ti, test_powers[i])
     pc = []
     for p in test_powers:
-        pc.append(prod_cost_from_vertices(test_object, ti, p))
+        sd_curve = test_object.active_vertices.get_by_interval(ti)
+        pc.append(sd_curve.prod_cost_from_vertices(p))
 
     expected = [0.0, 5.0, 5.0, 5.0, 5.0]
     # if ~all(pc == [0.0, 5.0, 5.0, 5.0, 5.0])

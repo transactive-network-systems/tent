@@ -67,7 +67,7 @@ LOCAL_ASSET1 = LocalAsset(
 # DEMAND_ORDER[0]: Continuous demand market order: *********************************************************************
 DEMAND_ORDER = [Order(
     market=MARKET,
-    time_interval=TIME_INTERVAL,
+    interval=TIME_INTERVAL,
     actor=NEIGHBOR1,
     expire_by=EXPIRATION_TIME,
     supply_or_demand=SupplyOrDemand.DEMAND
@@ -78,9 +78,9 @@ DEMAND_ORDER[-1].description = "Continuous demand market order"  # This means th
 DEMAND_ORDER[-1].vertices = [
     Vertex(
         price=INF,
-        order_id=DEMAND_ORDER[0].id,
+        curve_id=DEMAND_ORDER[0].id,
         quantity=-100.0,
-        timestamp=DEMAND_ORDER[0].timeStamp,
+        timestamp=DEMAND_ORDER[0].time_stamp,
         continuity=True
     )
 ]
@@ -89,7 +89,7 @@ DEMAND_ORDER[-1].vertices = [
 DEMAND_ORDER.append(
     Order(
         market=MARKET,
-        time_interval=TIME_INTERVAL,
+        interval=TIME_INTERVAL,
         actor=NEIGHBOR1,
         expire_by=EXPIRATION_TIME,
         supply_or_demand=SupplyOrDemand.DEMAND
@@ -100,9 +100,9 @@ DEMAND_ORDER[-1].description = "Discontinuous demand market order"  # This means
 DEMAND_ORDER[-1].vertices = [
     Vertex(
         price=INF,
-        order_id=DEMAND_ORDER[-1].id,
+        curve_id=DEMAND_ORDER[-1].id,
         quantity=-100.0,
-        timestamp=DEMAND_ORDER[-1].timeStamp,
+        timestamp=DEMAND_ORDER[-1].time_stamp,
         continuity=False
     )
 ]
@@ -111,7 +111,7 @@ DEMAND_ORDER[-1].vertices = [
 DEMAND_ORDER.append(
     Order(
         market=MARKET,
-        time_interval=TIME_INTERVAL,
+        interval=TIME_INTERVAL,
         actor=NEIGHBOR1,
         expire_by=EXPIRATION_TIME,
         supply_or_demand=SupplyOrDemand.DEMAND
@@ -122,16 +122,16 @@ DEMAND_ORDER[-1].description = "Continuous demand limit order"  # This means tha
 DEMAND_ORDER[-1].vertices = [
     Vertex(
         price=0.1,
-        order_id=DEMAND_ORDER[-1].id,
+        curve_id=DEMAND_ORDER[-1].id,
         quantity=0.0,
-        timestamp=DEMAND_ORDER[-1].timeStamp,
+        timestamp=DEMAND_ORDER[-1].time_stamp,
         continuity=False
     ),
     Vertex(
         price=0.1,
-        order_id=DEMAND_ORDER[-1].id,
+        curve_id=DEMAND_ORDER[-1].id,
         quantity=-100.0,
-        timestamp=DEMAND_ORDER[-1].timeStamp,
+        timestamp=DEMAND_ORDER[-1].time_stamp,
         continuity=True
     )
 ]
@@ -140,7 +140,7 @@ DEMAND_ORDER[-1].vertices = [
 DEMAND_ORDER.append(
     Order(
         market=MARKET,
-        time_interval=TIME_INTERVAL,
+        interval=TIME_INTERVAL,
         actor=NEIGHBOR1,
         expire_by=EXPIRATION_TIME,
         supply_or_demand=SupplyOrDemand.DEMAND
@@ -151,16 +151,16 @@ DEMAND_ORDER[-1].description = "Discontinuous demand limit order"  # This means 
 DEMAND_ORDER[-1].vertices = [
     Vertex(
         price=0.1,
-        order_id=DEMAND_ORDER[-1].id,
+        curve_id=DEMAND_ORDER[-1].id,
         quantity=0.0,
-        timestamp=DEMAND_ORDER[-1].timeStamp,
+        timestamp=DEMAND_ORDER[-1].time_stamp,
         continuity=False
     ),
     Vertex(
         price=0.1,
-        order_id=DEMAND_ORDER[-1].id,
+        curve_id=DEMAND_ORDER[-1].id,
         quantity=-100.0,
-        timestamp=DEMAND_ORDER[-1].timeStamp,
+        timestamp=DEMAND_ORDER[-1].time_stamp,
         continuity=False
     )
 ]
@@ -169,7 +169,7 @@ DEMAND_ORDER[-1].vertices = [
 DEMAND_ORDER.append(
     Order(
         market=MARKET,
-        time_interval=TIME_INTERVAL,
+        interval=TIME_INTERVAL,
         actor=NEIGHBOR1,
         expire_by=EXPIRATION_TIME,
         supply_or_demand=SupplyOrDemand.DEMAND
@@ -180,16 +180,16 @@ DEMAND_ORDER[-1].description = "Continuous piece-wise linear demand order"  # Th
 DEMAND_ORDER[-1].vertices = [
     Vertex(
         price=0.25,
-        order_id=DEMAND_ORDER[-1].id,
+        curve_id=DEMAND_ORDER[-1].id,
         quantity=0.0,
-        timestamp=DEMAND_ORDER[-1].timeStamp,
+        timestamp=DEMAND_ORDER[-1].time_stamp,
         continuity=False
     ),
     Vertex(
         price=0.15,
-        order_id=DEMAND_ORDER[-1].id,
+        curve_id=DEMAND_ORDER[-1].id,
         quantity=-100.0,
-        timestamp=DEMAND_ORDER[-1].timeStamp,
+        timestamp=DEMAND_ORDER[-1].time_stamp,
         continuity=True
     )
 ]
@@ -198,7 +198,7 @@ DEMAND_ORDER[-1].vertices = [
 DEMAND_ORDER.append(
     Order(
         market=MARKET,
-        time_interval=TIME_INTERVAL,
+        interval=TIME_INTERVAL,
         actor=NEIGHBOR1,
         expire_by=EXPIRATION_TIME,
         supply_or_demand=SupplyOrDemand.DEMAND
@@ -209,16 +209,16 @@ DEMAND_ORDER[-1].description = "Discontinuous piece-wise demand order"  # This m
 DEMAND_ORDER[-1].vertices = [
     Vertex(
         price=0.25,
-        order_id=DEMAND_ORDER[-1].id,
+        curve_id=DEMAND_ORDER[-1].id,
         quantity=0.0,
-        timestamp=DEMAND_ORDER[-1].timeStamp,
+        timestamp=DEMAND_ORDER[-1].time_stamp,
         continuity=False
     ),
     Vertex(
         price=0.15,
-        order_id=DEMAND_ORDER[-1].id,
+        curve_id=DEMAND_ORDER[-1].id,
         quantity=-100.0,
-        timestamp=DEMAND_ORDER[-1].timeStamp,
+        timestamp=DEMAND_ORDER[-1].time_stamp,
         continuity=False
     )
 ]
@@ -227,7 +227,7 @@ DEMAND_ORDER[-1].vertices = [
 # SUPPLY_ORDER[0]: Continuous supply market order: ***************
 SUPPLY_ORDER = [Order(
     market=MARKET,
-    time_interval=TIME_INTERVAL,
+    interval=TIME_INTERVAL,
     actor=NEIGHBOR1,
     expire_by=EXPIRATION_TIME,
     supply_or_demand=SupplyOrDemand.SUPPLY
@@ -238,9 +238,9 @@ SUPPLY_ORDER[-1].description = "Continuous supply market order"  # This means th
 SUPPLY_ORDER[-1].vertices = [
     Vertex(
         price=-INF,
-        order_id=SUPPLY_ORDER[-1].id,
+        curve_id=SUPPLY_ORDER[-1].id,
         quantity=100.0,
-        timestamp=SUPPLY_ORDER[-1].timeStamp,
+        timestamp=SUPPLY_ORDER[-1].time_stamp,
         continuity=True
     )
 ]
@@ -249,7 +249,7 @@ SUPPLY_ORDER[-1].vertices = [
 SUPPLY_ORDER.append(
     Order(
         market=MARKET,
-        time_interval=TIME_INTERVAL,
+        interval=TIME_INTERVAL,
         actor=NEIGHBOR1,
         expire_by=EXPIRATION_TIME,
         supply_or_demand=SupplyOrDemand.SUPPLY
@@ -260,9 +260,9 @@ SUPPLY_ORDER[-1].description = "Discontinuous supply market order"  # This means
 SUPPLY_ORDER[-1].vertices = [
     Vertex(
         price=INF,
-        order_id=SUPPLY_ORDER[-1].id,
+        curve_id=SUPPLY_ORDER[-1].id,
         quantity=100.0,
-        timestamp=SUPPLY_ORDER[-1].timeStamp,
+        timestamp=SUPPLY_ORDER[-1].time_stamp,
         continuity=False
     )
 ]
@@ -271,7 +271,7 @@ SUPPLY_ORDER[-1].vertices = [
 SUPPLY_ORDER.append(
     Order(
         market=MARKET,
-        time_interval=TIME_INTERVAL,
+        interval=TIME_INTERVAL,
         actor=NEIGHBOR1,
         expire_by=EXPIRATION_TIME,
         supply_or_demand=SupplyOrDemand.SUPPLY
@@ -282,16 +282,16 @@ SUPPLY_ORDER[-1].description = "Continuous supply limit order"  # This means tha
 SUPPLY_ORDER[-1].vertices = [
     Vertex(
         price=0.1,
-        order_id=SUPPLY_ORDER[-1].id,
+        curve_id=SUPPLY_ORDER[-1].id,
         quantity=0.0,
-        timestamp=SUPPLY_ORDER[-1].timeStamp,
+        timestamp=SUPPLY_ORDER[-1].time_stamp,
         continuity=False
     ),
     Vertex(
         price=0.1,
-        order_id=SUPPLY_ORDER[-1].id,
+        curve_id=SUPPLY_ORDER[-1].id,
         quantity=100.0,
-        timestamp=SUPPLY_ORDER[-1].timeStamp,
+        timestamp=SUPPLY_ORDER[-1].time_stamp,
         continuity=True
     )
 ]
@@ -300,7 +300,7 @@ SUPPLY_ORDER[-1].vertices = [
 SUPPLY_ORDER.append(
     Order(
         market=MARKET,
-        time_interval=TIME_INTERVAL,
+        interval=TIME_INTERVAL,
         actor=NEIGHBOR1,
         expire_by=EXPIRATION_TIME,
         supply_or_demand=SupplyOrDemand.SUPPLY
@@ -311,16 +311,16 @@ SUPPLY_ORDER[-1].description = "Discontinuous supply limit order"  # This means 
 SUPPLY_ORDER[-1].vertices = [
     Vertex(
         price=0.1,
-        order_id=SUPPLY_ORDER[-1].id,
+        curve_id=SUPPLY_ORDER[-1].id,
         quantity=0.0,
-        timestamp=SUPPLY_ORDER[-1].timeStamp,
+        timestamp=SUPPLY_ORDER[-1].time_stamp,
         continuity=False
     ),
     Vertex(
         price=0.1,
-        order_id=SUPPLY_ORDER[-1].id,
+        curve_id=SUPPLY_ORDER[-1].id,
         quantity=100.0,
-        timestamp=SUPPLY_ORDER[-1].timeStamp,
+        timestamp=SUPPLY_ORDER[-1].time_stamp,
         continuity=False
     )
 ]
@@ -329,7 +329,7 @@ SUPPLY_ORDER[-1].vertices = [
 SUPPLY_ORDER.append(
     Order(
         market=MARKET,
-        time_interval=TIME_INTERVAL,
+        interval=TIME_INTERVAL,
         actor=NEIGHBOR1,
         expire_by=EXPIRATION_TIME,
         supply_or_demand=SupplyOrDemand.SUPPLY
@@ -340,16 +340,16 @@ SUPPLY_ORDER[-1].description = "Continuous piece-wise linear supply order"  # Th
 SUPPLY_ORDER[-1].vertices = [
     Vertex(
         price=0.15,
-        order_id=SUPPLY_ORDER[-1].id,
+        curve_id=SUPPLY_ORDER[-1].id,
         quantity=0.0,
-        timestamp=SUPPLY_ORDER[-1].timeStamp,
+        timestamp=SUPPLY_ORDER[-1].time_stamp,
         continuity=False
     ),
     Vertex(
         price=0.25,
-        order_id=SUPPLY_ORDER[-1].id,
+        curve_id=SUPPLY_ORDER[-1].id,
         quantity=100.0,
-        timestamp=SUPPLY_ORDER[-1].timeStamp,
+        timestamp=SUPPLY_ORDER[-1].time_stamp,
         continuity=True
     )
 ]
@@ -357,7 +357,7 @@ SUPPLY_ORDER[-1].vertices = [
 # SUPPLY_ORDER[5]: Discontinuous piece-wise supply order: ***************
 SUPPLY_ORDER.append(
     Order(market=MARKET,
-          time_interval=TIME_INTERVAL,
+          interval=TIME_INTERVAL,
           actor=NEIGHBOR1,
           expire_by=EXPIRATION_TIME,
           supply_or_demand=SupplyOrDemand.SUPPLY
@@ -368,16 +368,16 @@ SUPPLY_ORDER[-1].description = "Discontinuous piece-wise supply order"  # This m
 SUPPLY_ORDER[-1].vertices = [
     Vertex(
         price=0.15,
-        order_id=SUPPLY_ORDER[-1].id,
+        curve_id=SUPPLY_ORDER[-1].id,
         quantity=0.0,
-        timestamp=SUPPLY_ORDER[-1].timeStamp,
+        timestamp=SUPPLY_ORDER[-1].time_stamp,
         continuity=False
     ),
     Vertex(
         price=0.25,
-        order_id=SUPPLY_ORDER[-1].id,
+        curve_id=SUPPLY_ORDER[-1].id,
         quantity=100.0,
-        timestamp=SUPPLY_ORDER[-1].timeStamp,
+        timestamp=SUPPLY_ORDER[-1].time_stamp,
         continuity=False
     )
 ]
@@ -397,50 +397,50 @@ class test_match:
         self.test_market.orderList.append(copy(DEMAND_ORDER[0]))
         self.test_market.orderList[0].description = "Demand, Market order, Continuous, -100 kW, TS"
         self.test_market.orderList[0].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[0].timeStamp = ACTIVATION_TIME
+        self.test_market.orderList[0].time_stamp = ACTIVATION_TIME
 
         # ((INF, -100 ), d, 0)
         self.test_market.orderList.append(copy(DEMAND_ORDER[1]))
         self.test_market.orderList[1].description = "Demand, Market order, Discontinuous, -100 kW, TS"
         self.test_market.orderList[1].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[1].timeStamp = ACTIVATION_TIME
+        self.test_market.orderList[1].time_stamp = ACTIVATION_TIME
 
         # (((0.1, 0), (0.1, -100)), c, 0)
         self.test_market.orderList.append(copy(DEMAND_ORDER[2]))
         self.test_market.orderList[2].description = "Demand, Limit order, Continuous, -100 kW, TS"
         self.test_market.orderList[2].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[2].timeStamp = ACTIVATION_TIME
+        self.test_market.orderList[2].time_stamp = ACTIVATION_TIME
 
         # ( (0.1 ,0 ), (0.1 ,-100), d, 0)
         self.test_market.orderList.append(copy(DEMAND_ORDER[3]))
         self.test_market.orderList[3].description = "Demand, Limit order, Discontinuous, -100 kW, TS"
         self.test_market.orderList[3].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[3].timeStamp = ACTIVATION_TIME
+        self.test_market.orderList[3].time_stamp = ACTIVATION_TIME
 
         # ((( 0.25, 0), ( 0.15, -100)), c, 0)
         self.test_market.orderList.append(copy(DEMAND_ORDER[4]))
         self.test_market.orderList[4].description = "Demand, PWL, Continuous, -100 kW, TS"
         self.test_market.orderList[4].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[4].timeStamp = ACTIVATION_TIME
+        self.test_market.orderList[4].time_stamp = ACTIVATION_TIME
 
         # ((( 0.25, 0), ( 0.15, -100)), d, 0)
         self.test_market.orderList.append(copy(DEMAND_ORDER[5]))
         self.test_market.orderList[5].description = "Demand, PWL, Discontinuous, -100 kW, TS"
         self.test_market.orderList[5].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[5].timeStamp = ACTIVATION_TIME
+        self.test_market.orderList[5].time_stamp = ACTIVATION_TIME
 
         # (( INF, -50), c, 0)
         self.test_market.orderList.append(copy(DEMAND_ORDER[0]))
         self.test_market.orderList[6].description = "Demand, Market order, Continuous, -50 kW, TS"
         self.test_market.orderList[6].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[6].timeStamp = ACTIVATION_TIME
+        self.test_market.orderList[6].time_stamp = ACTIVATION_TIME
         self.test_market.orderList[6].vertices[0].quantity = -50.0
 
         # (( INF, -50), d, 0)
         self.test_market.orderList.append(copy(DEMAND_ORDER[1]))
         self.test_market.orderList[7].description = "Demand, Market order, Discontinuous, -50 kW, TS"
         self.test_market.orderList[7].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[7].timeStamp = ACTIVATION_TIME
+        self.test_market.orderList[7].time_stamp = ACTIVATION_TIME
         self.test_market.orderList[7].vertices[0].quantity = -50.0
         self.test_market.orderList[7].vertices[0].quantity = -50.0
 
@@ -448,106 +448,106 @@ class test_match:
         self.test_market.orderList.append(copy(DEMAND_ORDER[2]))
         self.test_market.orderList[8].description = "Demand, Limit order, Continuous, -50 kW, TS"
         self.test_market.orderList[8].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[8].timeStamp = ACTIVATION_TIME
+        self.test_market.orderList[8].time_stamp = ACTIVATION_TIME
         self.test_market.orderList[8].vertices[1].quantity = -50.0
 
         # ( (0.1 ,0 ), (0.1 ,-50), d, 0)
         self.test_market.orderList.append(copy(DEMAND_ORDER[3]))
         self.test_market.orderList[9].description = "Demand, Limit order, Discontinuous, -50 kW, TS"
         self.test_market.orderList[9].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[9].timeStamp = ACTIVATION_TIME
+        self.test_market.orderList[9].time_stamp = ACTIVATION_TIME
         self.test_market.orderList[9].vertices[1].quantity = -50.0
 
         # ((( 0.25, 0), ( 0.15, -50)), c, 0)
         self.test_market.orderList.append(copy(DEMAND_ORDER[4]))
         self.test_market.orderList[10].description = "Demand, PWL, Continuous, -50 kW, TS"
         self.test_market.orderList[10].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[10].timeStamp = ACTIVATION_TIME
+        self.test_market.orderList[10].time_stamp = ACTIVATION_TIME
         self.test_market.orderList[10].vertices[1].quantity = -50.0
 
         # ((( 0.25, 0), ( 0.15, -50)), d, 0)
         self.test_market.orderList.append(copy(DEMAND_ORDER[5]))
         self.test_market.orderList[11].description = "Demand, PWL, Discontinuous, -50 kW, TS"
         self.test_market.orderList[11].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[11].timeStamp = ACTIVATION_TIME
+        self.test_market.orderList[11].time_stamp = ACTIVATION_TIME
         self.test_market.orderList[11].vertices[1].quantity = -50.0
 
         # ((INF, -100), c, -1m)
         self.test_market.orderList.append(copy(DEMAND_ORDER[0]))
         self.test_market.orderList[12].description = "Demand, Market order, Continuous, -100 kW, TS-"
         self.test_market.orderList[12].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[12].timeStamp = ACTIVATION_TIME - timedelta(minutes=1)
+        self.test_market.orderList[12].time_stamp = ACTIVATION_TIME - timedelta(minutes=1)
 
         # (( INF, -100), d, -1m)
         self.test_market.orderList.append(copy(DEMAND_ORDER[1]))
         self.test_market.orderList[13].description = "Demand, Market order, Discontinuous, -100 kW, TS-"
         self.test_market.orderList[13].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[13].timeStamp = ACTIVATION_TIME - timedelta(minutes=1)
+        self.test_market.orderList[13].time_stamp = ACTIVATION_TIME - timedelta(minutes=1)
 
         # ((( 0.1, 0), ( 0.1, -100)), c, -1m)
         self.test_market.orderList.append(copy(DEMAND_ORDER[2]))
         self.test_market.orderList[14].description = "Demand, Limit order, Continuous, -100 kW, TS-"
         self.test_market.orderList[14].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[14].timeStamp = ACTIVATION_TIME - timedelta(minutes=1)
+        self.test_market.orderList[14].time_stamp = ACTIVATION_TIME - timedelta(minutes=1)
 
         # ( (0.1 ,0 ), (0.1 ,-100), d, -1m)
         self.test_market.orderList.append(copy(DEMAND_ORDER[3]))
         self.test_market.orderList[15].description = "Demand, Limit order, Discontinuous, -100 kW, TS-"
         self.test_market.orderList[15].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[15].timeStamp = ACTIVATION_TIME - timedelta(minutes=1)
+        self.test_market.orderList[15].time_stamp = ACTIVATION_TIME - timedelta(minutes=1)
 
         # ((( 0.25, 0), ( 0.15, -100)), c, -1m)
         self.test_market.orderList.append(copy(DEMAND_ORDER[4]))
         self.test_market.orderList[16].description = "Demand, PWL, Continuous, -100 kW, TS-"
         self.test_market.orderList[16].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[16].timeStamp = ACTIVATION_TIME - timedelta(minutes=1)
+        self.test_market.orderList[16].time_stamp = ACTIVATION_TIME - timedelta(minutes=1)
 
         # ((( 0.25, 0), ( 0.15, -100)), d, -1m)
         self.test_market.orderList.append(copy(DEMAND_ORDER[5]))
         self.test_market.orderList[17].description = "Demand, PWL, Discontinuous, -100 kW, TS-"
         self.test_market.orderList[17].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[17].timeStamp = ACTIVATION_TIME - timedelta(minutes=1)
+        self.test_market.orderList[17].time_stamp = ACTIVATION_TIME - timedelta(minutes=1)
 
         # ((INF, -50), c, -1m)
         self.test_market.orderList.append(copy(DEMAND_ORDER[0]))
         self.test_market.orderList[18].description = "Demand, Market order, Continuous, -50 kW, TS-"
         self.test_market.orderList[18].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[18].timeStamp = ACTIVATION_TIME - timedelta(minutes=1)
+        self.test_market.orderList[18].time_stamp = ACTIVATION_TIME - timedelta(minutes=1)
         self.test_market.orderList[18].vertices[0].quantity = -50.0
 
         # (( INF, -50), d, -1m)
         self.test_market.orderList.append(copy(DEMAND_ORDER[1]))
         self.test_market.orderList[19].description = "Demand, Market order, Discontinuous, -50 kW, TS-"
         self.test_market.orderList[19].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[19].timeStamp = ACTIVATION_TIME - timedelta(minutes=1)
+        self.test_market.orderList[19].time_stamp = ACTIVATION_TIME - timedelta(minutes=1)
         self.test_market.orderList[19].vertices[0].quantity = -50.0
 
         # ((( 0.1, 0), ( 0.1, -50)), c, -1m)
         self.test_market.orderList.append(copy(DEMAND_ORDER[2]))
         self.test_market.orderList[20].description = "Demand, Limit order, Continuous, -50 kW, TS-"
         self.test_market.orderList[20].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[20].timeStamp = ACTIVATION_TIME - timedelta(minutes=1)
+        self.test_market.orderList[20].time_stamp = ACTIVATION_TIME - timedelta(minutes=1)
         self.test_market.orderList[20].vertices[1].quantity = -50.0
 
         # ( (0.1 ,0 ), (0.1 ,-50), d, -1m)
         self.test_market.orderList.append(copy(DEMAND_ORDER[3]))
         self.test_market.orderList[21].description = "Demand, Limit order, Discontinuous, -50 kW, TS-"
         self.test_market.orderList[21].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[21].timeStamp = ACTIVATION_TIME - timedelta(minutes=1)
+        self.test_market.orderList[21].time_stamp = ACTIVATION_TIME - timedelta(minutes=1)
         self.test_market.orderList[21].vertices[1].quantity = -50.0
 
         # ((( 0.25, 0), ( 0.15, -50)), c, -1m)
         self.test_market.orderList.append(copy(DEMAND_ORDER[4]))
         self.test_market.orderList[22].description = "Demand, PWL, Continuous, -50 kW, TS-"
         self.test_market.orderList[22].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[22].timeStamp = ACTIVATION_TIME - timedelta(minutes=1)
+        self.test_market.orderList[22].time_stamp = ACTIVATION_TIME - timedelta(minutes=1)
         self.test_market.orderList[22].vertices[1].quantity = -50.0
 
         # ((( 0.25, 0), ( 0.15, -50)), d, -1m)
         self.test_market.orderList.append(copy(DEMAND_ORDER[5]))
         self.test_market.orderList[23].description = "Demand, PWL, Discontinuous, -50 kW, TS-"
         self.test_market.orderList[23].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[23].timeStamp = ACTIVATION_TIME - timedelta(minutes=1)
+        self.test_market.orderList[23].time_stamp = ACTIVATION_TIME - timedelta(minutes=1)
         self.test_market.orderList[23].vertices[1].quantity = -50.0
 
         # STANDING SUPPLY ORDERS ****************************************************************************
@@ -555,43 +555,43 @@ class test_match:
         self.test_market.orderList.append(copy(SUPPLY_ORDER[0]))
         self.test_market.orderList[24].description = "Supply, Market order, Continuous, 100 kW, TS"
         self.test_market.orderList[24].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[24].timeStamp = ACTIVATION_TIME
+        self.test_market.orderList[24].time_stamp = ACTIVATION_TIME
 
         # (( -INF, 100), d, 0)
         self.test_market.orderList.append(copy(SUPPLY_ORDER[1]))
         self.test_market.orderList[25].description = "Supply, Market order, Discontinuous, 100 kW, TS"
         self.test_market.orderList[25].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[25].timeStamp = ACTIVATION_TIME
+        self.test_market.orderList[25].time_stamp = ACTIVATION_TIME
 
         # ((( 0.1, 0), (0.1, 100)), c, 0)
         self.test_market.orderList.append(copy(SUPPLY_ORDER[2]))
         self.test_market.orderList[26].description = "Supply, Limit order, Continuous, 100 kW, TS"
         self.test_market.orderList[26].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[26].timeStamp = ACTIVATION_TIME
+        self.test_market.orderList[26].time_stamp = ACTIVATION_TIME
 
         # ((( 0.1, 0), (0.1, 100)), d, 0)
         self.test_market.orderList.append(copy(SUPPLY_ORDER[3]))
         self.test_market.orderList[27].description = "Supply, Limit order, Discontinuous, 100 kW, TS"
         self.test_market.orderList[27].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[27].timeStamp = ACTIVATION_TIME
+        self.test_market.orderList[27].time_stamp = ACTIVATION_TIME
 
         # ((( 0.15, 0), (0.25, 100)), c, 0)
         self.test_market.orderList.append(copy(SUPPLY_ORDER[4]))
         self.test_market.orderList[28].description = "Supply, PWL, Continuous, 100 kW, TS"
         self.test_market.orderList[28].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[28].timeStamp = ACTIVATION_TIME
+        self.test_market.orderList[28].time_stamp = ACTIVATION_TIME
 
         # ((( 0.15, 0), (0.25, 100)), d, 0)
         self.test_market.orderList.append(copy(SUPPLY_ORDER[5]))
         self.test_market.orderList[29].description = "Supply, PWL, Discontinuous, 100 kW, TS"
         self.test_market.orderList[29].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[29].timeStamp = ACTIVATION_TIME
+        self.test_market.orderList[29].time_stamp = ACTIVATION_TIME
 
         # (( -INF, 50), c, 0)
         self.test_market.orderList.append(copy(SUPPLY_ORDER[0]))
         self.test_market.orderList[30].description = "Supply, Market order, Continuous, 50 kW, TS"
         self.test_market.orderList[30].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[30].timeStamp = ACTIVATION_TIME
+        self.test_market.orderList[30].time_stamp = ACTIVATION_TIME
         self.test_market.orderList[30].vertices[0].quantity = 50.0
         self.test_market.orderList[30].vertices[0].continuity = True
 
@@ -599,7 +599,7 @@ class test_match:
         self.test_market.orderList.append(copy(SUPPLY_ORDER[1]))
         self.test_market.orderList[31].description = "Supply, Market order, Discontinuous, 50 kW, TS"
         self.test_market.orderList[31].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[31].timeStamp = ACTIVATION_TIME
+        self.test_market.orderList[31].time_stamp = ACTIVATION_TIME
         self.test_market.orderList[31].vertices[0].quantity = 50.0
         assert self.test_market.orderList[31].vertices[0].continuity is False, "PROBLEM!!"
 
@@ -607,7 +607,7 @@ class test_match:
         self.test_market.orderList.append(copy(SUPPLY_ORDER[2]))
         self.test_market.orderList[32].description = "Supply, Limit order, Continuous, 50 kW, TS"
         self.test_market.orderList[32].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[32].timeStamp = ACTIVATION_TIME
+        self.test_market.orderList[32].time_stamp = ACTIVATION_TIME
         self.test_market.orderList[32].vertices[1].quantity = 50.0
         assert self.test_market.orderList[32].vertices[1].continuity is True, "PROBLEM!!"
 
@@ -615,7 +615,7 @@ class test_match:
         self.test_market.orderList.append(copy(SUPPLY_ORDER[3]))
         self.test_market.orderList[33].description = "Supply, Limit order, Discontinuous, 50 kW, TS"
         self.test_market.orderList[33].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[33].timeStamp = ACTIVATION_TIME
+        self.test_market.orderList[33].time_stamp = ACTIVATION_TIME
         self.test_market.orderList[33].vertices[1].quantity = 50.0
         assert self.test_market.orderList[33].vertices[1].continuity is False, "PROBLEM!!"
 
@@ -623,7 +623,7 @@ class test_match:
         self.test_market.orderList.append(copy(SUPPLY_ORDER[4]))
         self.test_market.orderList[34].description = "Supply, PWL, Continuous, 50 kW, TS"
         self.test_market.orderList[34].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[34].timeStamp = ACTIVATION_TIME
+        self.test_market.orderList[34].time_stamp = ACTIVATION_TIME
         self.test_market.orderList[34].vertices[1].quantity = 50.0
         assert self.test_market.orderList[34].vertices[1].continuity is True, "PROBLEM!!"
 
@@ -631,7 +631,7 @@ class test_match:
         self.test_market.orderList.append(copy(SUPPLY_ORDER[5]))
         self.test_market.orderList[35].description = "Supply, PWL, Discontinuous, 50 kW, TS"
         self.test_market.orderList[35].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[35].timeStamp = ACTIVATION_TIME
+        self.test_market.orderList[35].time_stamp = ACTIVATION_TIME
         self.test_market.orderList[35].vertices[1].quantity = 50.0
         assert self.test_market.orderList[35].vertices[1].continuity is False, "PROBLEM!!"
 
@@ -639,49 +639,49 @@ class test_match:
         self.test_market.orderList.append(copy(SUPPLY_ORDER[0]))
         self.test_market.orderList[36].description = "Supply, Market order, Continuous, 100 kW, TS-"
         self.test_market.orderList[36].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[36].timeStamp = ACTIVATION_TIME - timedelta(minutes=1)
+        self.test_market.orderList[36].time_stamp = ACTIVATION_TIME - timedelta(minutes=1)
         self.test_market.orderList[36].vertices[0].continuity = True
 
         # (( -INF, 100), d, -1m)
         self.test_market.orderList.append(copy(SUPPLY_ORDER[1]))
         self.test_market.orderList[37].description = "Supply, Market order, Discontinuous, 100 kW, TS-"
         self.test_market.orderList[37].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[37].timeStamp = ACTIVATION_TIME - timedelta(minutes=1)
+        self.test_market.orderList[37].time_stamp = ACTIVATION_TIME - timedelta(minutes=1)
         assert self.test_market.orderList[37].vertices[0].continuity is False, "PROBLEM!!"
 
         # ((( 0.1, 0), (0.1, 100)), c, -1m)
         self.test_market.orderList.append(copy(SUPPLY_ORDER[2]))
         self.test_market.orderList[38].description = "Supply, Limit order, Continuous, 100 kW, TS-"
         self.test_market.orderList[38].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[38].timeStamp = ACTIVATION_TIME - timedelta(minutes=1)
+        self.test_market.orderList[38].time_stamp = ACTIVATION_TIME - timedelta(minutes=1)
         assert self.test_market.orderList[38].vertices[1].continuity is True, "PROBLEM!!"
 
         # ((( 0.1, 0), (0.1, 100)), d, -1m)
         self.test_market.orderList.append(copy(SUPPLY_ORDER[3]))
         self.test_market.orderList[39].description = "Supply, Limit order, Discontinuous, 100 kW, TS-"
         self.test_market.orderList[39].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[39].timeStamp = ACTIVATION_TIME - timedelta(minutes=1)
+        self.test_market.orderList[39].time_stamp = ACTIVATION_TIME - timedelta(minutes=1)
         assert self.test_market.orderList[39].vertices[1].continuity is False, "PROBLEM!!"
 
         # ((( 0.15, 0), (0.25, 100)), c, -1m)
         self.test_market.orderList.append(copy(SUPPLY_ORDER[4]))
         self.test_market.orderList[40].description = "Supply, PWL, Continuous, 100 kW, TS-"
         self.test_market.orderList[40].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[40].timeStamp = ACTIVATION_TIME - timedelta(minutes=1)
+        self.test_market.orderList[40].time_stamp = ACTIVATION_TIME - timedelta(minutes=1)
         assert self.test_market.orderList[40].vertices[1].continuity is True, "PROBLEM!!"
 
         # ((( 0.15, 0), (0.25, 100)), d, -1m)
         self.test_market.orderList.append(copy(SUPPLY_ORDER[5]))
         self.test_market.orderList[41].description = "Supply, PWL, Discontinuous, 100 kW, TS-"
         self.test_market.orderList[41].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[41].timeStamp = ACTIVATION_TIME - timedelta(minutes=1)
+        self.test_market.orderList[41].time_stamp = ACTIVATION_TIME - timedelta(minutes=1)
         assert self.test_market.orderList[41].vertices[1].continuity is False, "PROBLEM!!"
 
         # (( -INF, 50), c, -1m)
         self.test_market.orderList.append(copy(SUPPLY_ORDER[0]))
         self.test_market.orderList[42].description = "Supply, Market order, Continuous, 50 kW, TS-"
         self.test_market.orderList[42].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[42].timeStamp = ACTIVATION_TIME - timedelta(minutes=1)
+        self.test_market.orderList[42].time_stamp = ACTIVATION_TIME - timedelta(minutes=1)
         self.test_market.orderList[42].vertices[0].quantity = 50.0
         self.test_market.orderList[42].vertices[0].continuity = True
 
@@ -689,7 +689,7 @@ class test_match:
         self.test_market.orderList.append(copy(SUPPLY_ORDER[1]))
         self.test_market.orderList[43].description = "Supply, Market order, Discontinuous, 50 kW, TS-"
         self.test_market.orderList[43].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[43].timeStamp = ACTIVATION_TIME - timedelta(minutes=1)
+        self.test_market.orderList[43].time_stamp = ACTIVATION_TIME - timedelta(minutes=1)
         self.test_market.orderList[43].vertices[0].quantity = 50.0
         assert self.test_market.orderList[43].vertices[0].continuity is False, "PROBLEM!!"
 
@@ -697,7 +697,7 @@ class test_match:
         self.test_market.orderList.append(copy(SUPPLY_ORDER[2]))
         self.test_market.orderList[44].description = "Supply, Limit order, Continuous, 50 kW, TS-"
         self.test_market.orderList[44].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[44].timeStamp = ACTIVATION_TIME - timedelta(minutes=1)
+        self.test_market.orderList[44].time_stamp = ACTIVATION_TIME - timedelta(minutes=1)
         self.test_market.orderList[44].vertices[1].quantity = 50.0
         assert self.test_market.orderList[44].vertices[1].continuity is True, "PROBLEM!!"
 
@@ -705,7 +705,7 @@ class test_match:
         self.test_market.orderList.append(copy(SUPPLY_ORDER[3]))
         self.test_market.orderList[45].description = "Supply, Limit order, Discontinuous, 50 kW, TS-"
         self.test_market.orderList[45].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[45].timeStamp = ACTIVATION_TIME - timedelta(minutes=1)
+        self.test_market.orderList[45].time_stamp = ACTIVATION_TIME - timedelta(minutes=1)
         self.test_market.orderList[45].vertices[1].quantity = 50.0
         assert self.test_market.orderList[45].vertices[1].continuity is False, "PROBLEM!!"
 
@@ -713,7 +713,7 @@ class test_match:
         self.test_market.orderList.append(copy(SUPPLY_ORDER[4]))
         self.test_market.orderList[46].description = "Supply, PWL, Continuous, 50 kW, TS-"
         self.test_market.orderList[46].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[46].timeStamp = ACTIVATION_TIME - timedelta(minutes=1)
+        self.test_market.orderList[46].time_stamp = ACTIVATION_TIME - timedelta(minutes=1)
         self.test_market.orderList[46].vertices[1].quantity = 50.0
         assert self.test_market.orderList[46].vertices[1].continuity is True, "PROBLEM!!"
 
@@ -721,7 +721,7 @@ class test_match:
         self.test_market.orderList.append(copy(SUPPLY_ORDER[5]))
         self.test_market.orderList[47].description = "Supply, PWL, Discontinuous, 50 kW, TS-"
         self.test_market.orderList[47].status = OrderStatus.STANDING_ORDER
-        self.test_market.orderList[47].timeStamp = ACTIVATION_TIME - timedelta(minutes=1)
+        self.test_market.orderList[47].time_stamp = ACTIVATION_TIME - timedelta(minutes=1)
         self.test_market.orderList[47].vertices[1].quantity = 50.0
         assert self.test_market.orderList[47].vertices[1].continuity is False, "PROBLEM!!"
 
@@ -779,7 +779,7 @@ class test_match:
         self.test_market.orderList[0].status = OrderStatus.STANDING_ORDER
         original_so_id = self.test_market.orderList[0].id
         new_order: Order = copy(SUPPLY_ORDER[0])
-        new_order.supplyOrDemand = SupplyOrDemand.DEMAND
+        new_order.supply_or_demand = SupplyOrDemand.DEMAND
         new_order.vertices[0].quantity = - SUPPLY_ORDER[0].vertices[0].quantity
         new_order = new_order.check_demand_order()
         assert len(self.test_market.orderList) == 1, \
@@ -804,11 +804,11 @@ class test_match:
             "Both the matches should have had quantity magnitude 110.0."
         )
         tc.assertTrue(
-            any([x.parentOrderId == new_order.id for x in self.test_market.matchList]),
+            any([x.parent_order_id == new_order.id for x in self.test_market.matchList]),
             "Parentage can be traced to the aggressive order ID."
         )
         tc.assertTrue(
-            any([x.parentOrderId == original_so_id for x in self.test_market.matchList]),
+            any([x.parent_order_id == original_so_id for x in self.test_market.matchList]),
             "Parentage can be traced to the original standing order ID."
         )
         self.tearDown()
@@ -821,7 +821,7 @@ class test_match:
         self.test_market.orderList[0].status = OrderStatus.STANDING_ORDER
         original_so_id = self.test_market.orderList[0].id
         new_order: Order = copy(SUPPLY_ORDER[0])
-        new_order.supplyOrDemand = SupplyOrDemand.DEMAND
+        new_order.supply_or_demand = SupplyOrDemand.DEMAND
         new_order.vertices[0].quantity = - 2.0 * SUPPLY_ORDER[0].vertices[0].quantity
         new_order = new_order.check_demand_order()
         assert len(self.test_market.orderList) == 1, \
@@ -835,7 +835,7 @@ class test_match:
             "One order should remain in the order book."
         )
         tc.assertEqual(
-            self.test_market.orderList[0].supplyOrDemand,
+            self.test_market.orderList[0].supply_or_demand,
             SupplyOrDemand.DEMAND,
             "The lone order on the order book should be a demand order."
         )
@@ -858,11 +858,11 @@ class test_match:
             "Both the matches should have had quantity magnitude 110.0."
         )
         tc.assertTrue(
-            new_order.id in [x.parentOrderId for x in self.test_market.matchList],
+            new_order.id in [x.parent_order_id for x in self.test_market.matchList],
             "Parentage can be traced to the aggressive order ID."
         )
         tc.assertTrue(
-            any([x.parentOrderId == original_so_id for x in self.test_market.matchList]),
+            any([x.parent_order_id == original_so_id for x in self.test_market.matchList]),
             "Parentage can be traced to the original standing order ID."
         )
         self.tearDown()
@@ -875,7 +875,7 @@ class test_match:
         self.test_market.orderList[0].status = OrderStatus.STANDING_ORDER
         original_so_id = self.test_market.orderList[0].id
         new_order: Order = copy(SUPPLY_ORDER[0])
-        new_order.supplyOrDemand = SupplyOrDemand.DEMAND
+        new_order.supply_or_demand = SupplyOrDemand.DEMAND
         new_order.vertices[0].quantity = - 0.5 * SUPPLY_ORDER[0].vertices[0].quantity
         new_order = new_order.check_demand_order()
         assert len(self.test_market.orderList) == 1, \
@@ -889,7 +889,7 @@ class test_match:
             "Both the original standing order and new aggressive order should be in the order book."
         )
         tc.assertEqual(
-            self.test_market.orderList[0].supplyOrDemand,
+            self.test_market.orderList[0].supply_or_demand,
             SupplyOrDemand.SUPPLY,
             "The lone order on the order book should be a supply order."
         )
@@ -908,11 +908,11 @@ class test_match:
             "Both the matches should have had quantity magnitude 55.0."
         )
         tc.assertTrue(
-            new_order.id in [x.parentOrderId for x in self.test_market.matchList],
+            new_order.id in [x.parent_order_id for x in self.test_market.matchList],
             "Parentage can be traced to the aggressive order ID."
         )
         tc.assertTrue(
-            any([x.parentOrderId == original_so_id for x in self.test_market.matchList]),
+            any([x.parent_order_id == original_so_id for x in self.test_market.matchList]),
             "Parentage can be traced to the original standing order ID."
         )
         self.tearDown()
@@ -925,7 +925,7 @@ class test_match:
         self.test_market.orderList[0].status = OrderStatus.STANDING_ORDER
         original_so_id = self.test_market.orderList[0].id
         new_order: Order = copy(SUPPLY_ORDER[0])
-        new_order.supplyOrDemand = SupplyOrDemand.DEMAND
+        new_order.supply_or_demand = SupplyOrDemand.DEMAND
         new_order.vertices[0].quantity = - 2.0 * SUPPLY_ORDER[0].vertices[0].quantity
         new_order = new_order.check_demand_order()
         new_order.vertices[0].continuity = False
@@ -940,7 +940,7 @@ class test_match:
             "One original standing order and new order should be in the order book."
         )
         tc.assertSetEqual(
-            set([x.supplyOrDemand for x in self.test_market.orderList]),
+            set([x.supply_or_demand for x in self.test_market.orderList]),
             {SupplyOrDemand.SUPPLY, SupplyOrDemand.DEMAND},
             "There should be one supply order and one demand order in the order book."
         )
@@ -972,7 +972,7 @@ class test_match:
         self.test_market.orderList[0].status = OrderStatus.STANDING_ORDER
         self.test_market.orderList[0].vertices[0].continuity = False
         new_order: Order = copy(SUPPLY_ORDER[0])
-        new_order.supplyOrDemand = SupplyOrDemand.DEMAND
+        new_order.supply_or_demand = SupplyOrDemand.DEMAND
         new_order.vertices[0].quantity = - 0.5 * SUPPLY_ORDER[0].vertices[0].quantity
         new_order = new_order.check_demand_order()
         assert len(self.test_market.orderList) == 1, \
@@ -986,7 +986,7 @@ class test_match:
             "Both the original standing order and new order should be in the order book."
         )
         tc.assertListEqual(
-            [x.supplyOrDemand for x in self.test_market.orderList],
+            [x.supply_or_demand for x in self.test_market.orderList],
             [SupplyOrDemand.SUPPLY, SupplyOrDemand.DEMAND],
             "The order book should have one supply and one demand order."
         )
@@ -1474,7 +1474,7 @@ class test_get_counteroffers:
         print("Case 1: No counteroffers for aggressive demand bid.")
         self.setUp()
         self.test_market.orderList = [x for x in self.test_market.orderList
-                                      if x.supplyOrDemand == SupplyOrDemand.DEMAND]
+                                      if x.supply_or_demand == SupplyOrDemand.DEMAND]
         result = self.test_market.get_counteroffers(supply_or_demand=SupplyOrDemand.SUPPLY)
         tc.assertEqual(len(self.test_market.orderList), 2,
                        "There should have been 2 demand orders in the order book.")
@@ -1486,7 +1486,7 @@ class test_get_counteroffers:
         print("Case 2: No counteroffers for aggressive supply offer.")
         self.setUp()
         self.test_market.orderList = [x for x in self.test_market.orderList
-                                      if x.supplyOrDemand == SupplyOrDemand.SUPPLY]
+                                      if x.supply_or_demand == SupplyOrDemand.SUPPLY]
         result = self.test_market.get_counteroffers(supply_or_demand=SupplyOrDemand.DEMAND)
         tc.assertEqual(len(self.test_market.orderList), 3,
                        "There should have been 3 supply orders in the order book.")

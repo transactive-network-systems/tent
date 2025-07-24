@@ -41,10 +41,117 @@ operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
 
-from tent import Archivable
-from tent.containers.time_interval import TimeInterval
+from tent.base import Archivable
+from tent.containers import SDCurve, SDMeasurement, TimeInterval, Vertex
 from tent.utils.timer import Timer
 
+class TransactiveSignal(Archivable):  # TODO: Should this just subclass SDMeasurement?
+    PROTOCOL_VERSION = 1.0
+
+    def __init__(self, market, neighbor, direction):
+        super(TransactiveSignal, self).__init__()
+        self.market = market
+        self.neighbor = neighbor
+        self.direction = direction
+        self.__sd: SDMeasurement = SDMeasurement(neighbor)
+
+
+    def update(self, time_interval,
+               value: SDCurve | list[Vertex] | list[list[float]] | list[dict],
+               archive: bool = False):
+        self.__sd.update(time_interval, value, archive)
+
+    @property
+    def empty(self):
+        return self.__sd.empty
+
+    def generate_signal(self):
+        return {
+            'market': self.market.name,
+            'neighbor': self.neighbor.name,
+            'protocol_version': self.PROTOCOL_VERSION,
+            'curves': {
+                ti.start_time.isoformat(): {
+                    i: {
+                        'marginal_price': v.marginal_price,
+                        'quantity': v.quantity,
+                        'cost': v.cost
+                    }
+                } for ti, sd in self.__sd.all for i, v in enumerate(sd.curves)
+            }
+        }
+
+    def parse_signal(self, signal: dict):
+        # TODO: This function is AI generated. It needs to be altered a lot.
+        """Parse a transactive signal dictionary and update the SDMeasurement."""
+        if not isinstance(signal, dict):
+            raise ValueError("Signal must be a dictionary.")
+
+        if 'market' not in signal or 'neighbor' not in signal:
+            raise KeyError("Signal must contain 'market' and 'neighbor' keys.")
+
+        self.market = signal['market']
+        self.neighbor = signal['neighbor']
+
+        for ti_start, curves in signal.get('curves', {}).items():
+            time_interval = TimeInterval.from_start_time(ti_start)
+            for i, curve_data in curves.items():
+                marginal_price = curve_data.get('marginal_price', 0.0)
+                quantity = curve_data.get('quantity', 0.0)
+                cost = curve_data.get('cost', 0.0)
+                vertex = Vertex(price=marginal_price, quantity=quantity, cost=cost)
+                self.update(time_interval, [vertex], archive=True)
+
+    @property
+    def data_manager(self):
+        return self.neighbor.tn.data_manager
+
+    @property
+    def table_name(self):
+        return 'transactive_signal'
+
+    # TODO: If there is nothing in the __sd, then there is probably nothing to archive.
+    # TODO: Archiving this object should call archive on the SDMeasurement object as well.
+    def archive(self, records: list[dict] = None):
+        super(TransactiveSignal, self).archive(records)
+
+    def get_record(self) -> dict:
+        # TODO: Need get_record implemented.
+        raise NotImplementedError
+
+    @classmethod
+    def get_archive_definitions(cls) -> list[dict]:
+        definitions = super(TransactiveSignal, cls).get_archive_definitions()
+        definitions.extend([
+            {  # TODO: Update this to be just the TransactiveSignal attributes. This is still from TransactiveRecord.
+                "name": "transactive_record",
+                "columns": [
+                    {"name": "time_stamp", "type": "DateTime"},
+                    {"name": "id", "type": "Uuid", "identity": True, "kwargs": {"primary_key": True}},
+                    {"name": "neighbor_id", "foreign_key": "neighbor.id"},
+                    {"name": "node_id", "foreign_key": "transactive_node.id"},
+                    {"name": "direction", "enumeration": "Direction"},
+                    {"name": "time_interval_id", "foreign_key": "time_interval.id"},
+                    {"name": "record_number", "type": "Integer"},
+                    {"name": "price", "type": "Float"},
+                    {"name": "real_power", "type": "Float"},
+                    {"name": "real_power_uncertainty", "type": "Float"},
+                    {"name": "cost", "type": "Float"},
+                    {"name": "reactive_power", "type": "Float"},
+                    {"name": "reactive_power_uncertainty", "type": "Float"},
+                    {"name": "voltage", "type": "Float"},
+                    {"name": "voltage_uncertainty", "type": "Float"}
+                ]
+            }
+        ])
+        return definitions
+
+
+# TODO: This is what will be used in the neighbor.
+from weakref import WeakKeyDictionary
+from tent.market import Market
+
+my_signals: WeakKeyDictionary[Market, TransactiveSignal] = WeakKeyDictionary()
 
 class TransactiveRecord(Archivable):
     def __init__(self,
@@ -105,7 +212,7 @@ class TransactiveRecord(Archivable):
 
     def get_dict(self):
         transactive_record_dict = {
-            "timeInterval": self.time_interval,
+            "time_interval": self.time_interval,
             "marginalPrice": self.marginal_price,
             "power": self.power
         }

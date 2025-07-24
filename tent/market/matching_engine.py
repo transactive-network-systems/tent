@@ -43,7 +43,7 @@ NEGOTIATION_LEAD_TIME: timedelta = timedelta(hours=24.0)  # time prior to the de
 DELIVERY_LEAD_TIME: timedelta = timedelta(minutes=15.0)  # time prior to deliver that orders become disallowed
 INTERVAL_DURATION: timedelta = timedelta(hours=1.0)  # duration of delivery period
 
-
+# TODO: Make sure that IDs can work as UUID, instead of int.
 class MatchingEngine(Market):
     """
     A MatchingEngine is a Market child class that facilitates a price discovery process much like that used for stock
@@ -171,25 +171,25 @@ class MatchingEngine(Market):
             return None
 
         # Get eligible standing orders from the order book.
-        if new_order.supplyOrDemand == SupplyOrDemand.SUPPLY:
+        if new_order.supply_or_demand == SupplyOrDemand.SUPPLY:
             standing_orders: list = self.get_counteroffers(supply_or_demand=SupplyOrDemand.DEMAND)
-        elif new_order.supplyOrDemand == SupplyOrDemand.DEMAND:
+        elif new_order.supply_or_demand == SupplyOrDemand.DEMAND:
             standing_orders: list = self.get_counteroffers(supply_or_demand=SupplyOrDemand.SUPPLY)
         else:
             raise RuntimeError("There should be no case where the new order is neither supply nor demand.")
 
         # Get Vertex prices
-        prices: list = Order.get_prices_from_orders(
+        prices: list = Order.get_prices_from_curves(
             order_list=standing_orders + [new_order]
         )
 
         # Make sure price is a unique list that includes either -INF or INF, but not both
-        if new_order.supplyOrDemand == SupplyOrDemand.SUPPLY:
+        if new_order.supply_or_demand == SupplyOrDemand.SUPPLY:
             prices.append(INF)
             prices = [x for x in prices if x != -INF]
             prices = list(set(prices))
             prices.sort(reverse=True)
-        elif new_order.supplyOrDemand == SupplyOrDemand.DEMAND:
+        elif new_order.supply_or_demand == SupplyOrDemand.DEMAND:
             prices.append(-INF)
             prices = [x for x in prices if x != INF]
             prices = list(set(prices))
@@ -223,14 +223,14 @@ class MatchingEngine(Market):
             #  <LIMIT ORDER SO CASE> *********************************************************************************
 
             #  Get limit order quantities at this price
-            if new_order and new_order.supplyOrDemand == SupplyOrDemand.DEMAND:
+            if new_order and new_order.supply_or_demand == SupplyOrDemand.DEMAND:
                 limit_orders: list = self.get_counteroffer_vertices(
                     price=price,
                     supply_or_demand=SupplyOrDemand.SUPPLY,
                     vertex_type=VTypes.LIMIT_ORDER
                 )
 
-            elif new_order and new_order.supplyOrDemand == SupplyOrDemand.SUPPLY:
+            elif new_order and new_order.supply_or_demand == SupplyOrDemand.SUPPLY:
                 limit_orders: list = self.get_counteroffer_vertices(
                     price=price,
                     supply_or_demand=SupplyOrDemand.DEMAND,
@@ -274,7 +274,7 @@ class MatchingEngine(Market):
                     for so in limit_orders:
 
                         # Find the standing order for this limit order Vertex.
-                        so_order: Order = self.get_order_by_id(an_id=so.orderId)
+                        so_order: Order = self.get_order_by_id(an_id=so.order_id)
 
                         # Create and matched and unmatched orders for so quantity at indexed price.
                         matched_order, unmatched_order = so_order.match(
@@ -337,7 +337,7 @@ class MatchingEngine(Market):
                     #  CASE: Matching priority is age
                     elif mp == MatchingStrategy.ORDER_AGE:
                         # Sort active so limit order quantities by age.
-                        limit_orders.sort(key=lambda x: (x.timeStamp, x.continuity, -abs(x.quantity)))
+                        limit_orders.sort(key=lambda x: (x.time_stamp, x.continuity, -abs(x.quantity)))
 
                         # Insert <Code Logic Block A>
                         new_order = self.limit_order_code_block(
@@ -350,7 +350,7 @@ class MatchingEngine(Market):
                     elif mp == MatchingStrategy.ORDER_VOLUME:
 
                         # Sort active so limit order quantities by volume
-                        limit_orders.sort(key=lambda x: (-abs(x.quantity), x.continuity, x.timeStamp))
+                        limit_orders.sort(key=lambda x: (-abs(x.quantity), x.continuity, x.time_stamp))
 
                         # Insert <Code Logic Block A>
                         new_order = self.limit_order_code_block(
@@ -470,7 +470,7 @@ class MatchingEngine(Market):
 
         Returns: (list) of Order objects or None
         """
-        return [x for x in self.orderList if x.supplyOrDemand == supply_or_demand and x.status in
+        return [x for x in self.orderList if x.supply_or_demand == supply_or_demand and x.status in
                 [OrderStatus.STANDING_ORDER, OrderStatus.REVISED_STANDING_ORDER]]
 
     def get_counteroffer_vertices(self, price: float, supply_or_demand: SupplyOrDemand or bool or None = None,
@@ -568,7 +568,7 @@ class MatchingEngine(Market):
 
             # Retrieve the standing order from this Vertex.
             standing_order: Order = self.get_order_by_id(
-                an_id=so.orderId
+                an_id=so.order_id
             )
 
             # CASE: ao remainder quantity < so quantity
@@ -642,7 +642,7 @@ class MatchingEngine(Market):
             # Index through the tentative revised orders
             for tro in tentative_revised_orders:
                 self.orderList.append(tro)
-                self.orderList = [x for x in self.orderList if x.id != tro.parentOrderId]
+                self.orderList = [x for x in self.orderList if x.id != tro.parent_order_id]
 
             #  Create and record match order for matched so quantity
             # if matched_quantity != 0.0:

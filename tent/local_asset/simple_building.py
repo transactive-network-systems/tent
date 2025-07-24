@@ -41,30 +41,21 @@ operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
 
-from tent.containers import IntervalValue, Vertex
-from tent.enumerations import MarketState, MeasurementType
+from tent.containers import Vertex
 from tent.local_asset import LocalAsset
-
-
-off_peak_vertex = Vertex(marginal_price=float('Inf'),
-                         power=-10,
-                         prod_cost=0)
-on_peak_vertex0 = Vertex(marginal_price=0.03,
-                         power=-12,
-                         prod_cost=0)
-on_peak_vertex1 = Vertex(marginal_price=0.05,
-                         power=-8,
-                         prod_cost=0)
 
 
 class SimpleBuilding(LocalAsset):
 
     def __init__(self, *args, **kwargs):
-        super(SimpleBuilding, self).__init__(*args, **kwargs)  # Inherit from any parent class
-        self.defaultVertices = [off_peak_vertex,
-                                on_peak_vertex0,
-                                on_peak_vertex1
-                                ]
+        self.off_peak_vertex = Vertex(price=float('Inf'), quantity=-10, cost=0)
+        self.on_peak_vertex0 = Vertex(price=0.03, quantity=-12, cost=0)
+        self.on_peak_vertex1 = Vertex(price=0.05, quantity=-8, cost=0)
+        # TODO: Does it actually make sense for these to be default vertices?
+        #  That would imply they are a single SDCurve, no? They don't appear to be....
+        super(SimpleBuilding, self).__init__(
+            default_vertices=[self.off_peak_vertex, self.on_peak_vertex0, self.on_peak_vertex1],
+            *args, **kwargs)
 
     def schedule(self, market):
         self.schedule_power(market)
@@ -72,36 +63,19 @@ class SimpleBuilding(LocalAsset):
         self.schedule_calculated = True
 
     def schedule_power(self, market):
+        # TODO: Why are we always scheduling the power of a default vertex? What is this supposed to achieve?
+        #  Shouldn't this do the same as update_vertices, and base this on the hour of the day?
         for time_interval in market.time_intervals:
-            # TODO: This is putting a vertex in scheduled_powers. Shouldn't it just be the power of the vertex?
-            self.scheduled_powers.update(time_interval, self.defaultVertices[0])
+            # TODO: This previously put a vertex in scheduled_powers.
+            #  Changed to put the quantity (power) of the vertex.
+            #  Check this works as expected now?
+            self.scheduled_powers.update(time_interval, self.off_peak_vertex.quantity)
 
     def update_vertices(self, market):
         for time_interval in market.time_intervals:
             if time_interval.start_time.hour in [0, 1, 2, 3, 4, 17, 18, 19, 20, 21, 22, 23]:
-                iv = IntervalValue(calling_object=self,
-                                   time_interval=time_interval,
-                                   market=market,
-                                   measurement_type=MeasurementType.ActiveVertex,
-                                   value=self.defaultVertices[0]
-                                   )
-                self.activeVertices.append(iv)
+                self.active_vertices.update(time_interval, self.off_peak_vertex)
             elif time_interval.start_time.hour in [5, 6, 7, 8, 9, 10, 11, 12, 13, 14]:
-                iv = IntervalValue(calling_object=self,
-                                   time_interval=time_interval,
-                                   market=market,
-                                   measurement_type=MeasurementType.ActiveVertex,
-                                   value=self.defaultVertices[1]
-                                   )
-                self.activeVertices.append(iv)
-                iv = IntervalValue(calling_object=self,
-                                   time_interval=time_interval,
-                                   market=market,
-                                   measurement_type=MeasurementType.ActiveVertex,
-                                   value=self.defaultVertices[2]
-                                   )
-                self.activeVertices.append(iv)
+                self.active_vertices.update(time_interval, [self.on_peak_vertex0, self.on_peak_vertex1])
             else:
                 raise RuntimeError('Undefined hour of day.')
-
-        self.activeVertices = [x for x in self.activeVertices if x.market.market_state != MarketState.Expired]

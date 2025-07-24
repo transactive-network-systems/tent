@@ -45,7 +45,7 @@ import abc
 from datetime import datetime, timedelta
 from typing import Union
 
-from tent import Component
+from tent.base import Component
 from tent.containers import Measurement
 from tent.enumerations import MeasurementType, MeasurementUnit
 

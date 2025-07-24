@@ -2,7 +2,9 @@ from vertex import *
 
 
 class TestCheckRationality:
-
+    # TODO: check_rationality has been moved from Vertex to SDCurve and made an instance method instead of static.
+    #  Replace check_rationality(test_object) with test_object.check_rationality
+    #  --- Assuming test_object becomes an SDCurve.
     def __init__(self):
         self.test_vertices = None
 
@@ -32,7 +34,7 @@ class TestCheckRationality:
     def case2(self):
         print('\n  Case 2: Count one irrational vertex.')
         self.setup()
-        self.test_vertices[1].power = self.test_vertices[0].power-1   # making one vertex power irrational
+        self.test_vertices[1].quantity = self.test_vertices[0].quantity - 1   # making one vertex power irrational
         test_object = self.test_vertices
         output_vertices = []
         count = None
@@ -47,7 +49,7 @@ class TestCheckRationality:
     def case3(self):
         print('\n  Case 3: Use fix_up action to fix one irrational vertex.')
         self.setup()
-        self.test_vertices[1].power = self.test_vertices[0].power - 1  # making one vertex power irrational
+        self.test_vertices[1].quantity = self.test_vertices[0].quantity - 1  # making one vertex power irrational
         test_object = self.test_vertices
         output_vertices = []
         count = None
@@ -59,13 +61,13 @@ class TestCheckRationality:
             print('  - ERRORS WERE ENCOUNTERED: ', err)
         assert test_object == output_vertices, "An output vertex object identities should remain the same."
         assert len(output_vertices) == len(test_object), "The count of vertices should not have changed."
-        assert output_vertices[1].power == output_vertices[0].power, "The irrational power was not corrected properly"
+        assert output_vertices[1].quantity == output_vertices[0].quantity, "The irrational power was not corrected properly"
         assert count == 1, "The count of irrational vertices was not 1 as expected."
 
     def case4(self):
         print('\n  Case 4: Use delete_up action to fix one irrational vertex.')
         self.setup()
-        self.test_vertices[1].power = self.test_vertices[0].power - 1  # making one vertex power irrational
+        self.test_vertices[1].quantity = self.test_vertices[0].quantity - 1  # making one vertex power irrational
         test_object = self.test_vertices
         output_vertices = []
         count = None
@@ -82,7 +84,7 @@ class TestCheckRationality:
     def case5(self):
         print('\n  Case 5: Use fix_down action to fix one irrational vertex.')
         self.setup()
-        self.test_vertices[1].power = self.test_vertices[0].power - 1  # making one vertex power irrational
+        self.test_vertices[1].quantity = self.test_vertices[0].quantity - 1  # making one vertex power irrational
         test_object = self.test_vertices
         output_vertices = []
         count = None
@@ -94,13 +96,13 @@ class TestCheckRationality:
             print('  - ERRORS WERE ENCOUNTERED: ', err)
         assert test_object == output_vertices, "An output vertex object identities should remain the same."
         assert len(output_vertices) == len(test_object), "The count of vertices should not have changed."
-        assert output_vertices[0].power == output_vertices[1].power, "The irrational power was not corrected properly"
+        assert output_vertices[0].quantity == output_vertices[1].quantity, "The irrational power was not corrected properly"
         assert count == 1, "The count of irrational vertices was not 1 as expected."
 
     def case6(self):
         print('\n  Case 6: Use delete_down action to fix one irrational vertex.')
         self.setup()
-        self.test_vertices[1].power = self.test_vertices[0].power - 1  # making one vertex power irrational
+        self.test_vertices[1].quantity = self.test_vertices[0].quantity - 1  # making one vertex power irrational
         test_object = self.test_vertices
         output_vertices = []
         count = None

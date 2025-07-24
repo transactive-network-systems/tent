@@ -44,13 +44,13 @@ from copy import deepcopy
 from datetime import datetime
 from weakref import proxy, WeakKeyDictionary
 
-from tent import Archivable, Component
+from tent.base import Archivable, Component
 from tent.containers.time_interval import TimeInterval
 from tent.enumerations import MeasurementType, MeasurementUnit
 from tent.utils.helpers import safe_weak_proxy_callback
 from tent.utils.timer import Timer
 
-
+# TODO: Consider renaming Measurement to DataCollection, MeasurementValue to Measurement.
 class MeasurementValue(Archivable):
     def __init__(self, measurement, interval, value):
         super(MeasurementValue, self).__init__()
@@ -138,6 +138,7 @@ class Measurement(Archivable):
     """
     A Measurement instance is used to keep track of a value (measurement, quality, etc.).
     """
+    DATA_TYPE: type = MeasurementValue
     def __init__(self,
                  source: Component,
                  measurement_type: MeasurementType = MeasurementType.Unknown,
@@ -151,7 +152,7 @@ class Measurement(Archivable):
         self.unit: MeasurementUnit = measurement_unit
 
         # TODO: Tests are needed to be sure that garbage collection works to remove these.
-        self._data: WeakKeyDictionary[TimeInterval, MeasurementValue] = WeakKeyDictionary()
+        self._data: WeakKeyDictionary[TimeInterval, Measurement.DATA_TYPE] = WeakKeyDictionary()
 
         self.archive()
 
@@ -173,23 +174,23 @@ class Measurement(Archivable):
 
     @property
     def start_times(self):
-        return (ti.start_time for ti, mv in self.all)
+        return (ti.start_time for ti, _ in self.all)
 
     @property
     def values(self):
-        return (mv.value for ti, mv in self.all)
+        return (mv.value for _, mv in self.all)
 
     def copy(self):
         return deepcopy(self)
 
-    def get_by_interval(self, time_interval: TimeInterval) -> MeasurementValue | None:
+    def get_by_interval(self, time_interval: TimeInterval) -> DATA_TYPE | None:
         return self._data.get(time_interval)
 
-    def get_prior_by_interval(self, time_interval: TimeInterval) -> MeasurementValue | None:
+    def get_prior_by_interval(self, time_interval: TimeInterval) -> DATA_TYPE | None:
         prior_start_time = time_interval.start_time - time_interval.duration
         return self.get_by_start_time(prior_start_time)
 
-    def get_by_start_time(self, start_time: datetime) -> MeasurementValue | None:
+    def get_by_start_time(self, start_time: datetime) -> DATA_TYPE | None:
         return next(filter(lambda ti: ti.start_time == start_time, self._data.keys()), None)
 
     def total(self, market=None):
@@ -197,10 +198,14 @@ class Measurement(Archivable):
 
     def update(self, time_interval: TimeInterval, value: any, archive: bool = True):
         if time_interval in self._data:
+            # Receiving datatype, here, must handle all its own transformations from allowed input types.
             self._data[time_interval].update(value)
         else:
-            self._data[time_interval] = MeasurementValue(self, time_interval, value)
+            self._data[time_interval] = self.DATA_TYPE(self, time_interval, value)
         if archive:
+            # TODO: This would just be updating the collection table, not the value objects.
+            # TODO: How to properly handle archival of sets of values at once? Archive values?
+            # TODO: Does the update to the value/vertex call archive on those?  Should it?
             self.archive()
 
     def __bool__(self):

@@ -125,7 +125,7 @@ def test_schedule():
 
     assert len(test_mdl.scheduled_powers) == 1, '  - the method did not store a scheduled power'
 #    assert len(test_mdl.reserveMargins) == 1, '  - the method did not store a reserve margin'
-    assert len(test_mdl.activeVertices) == 1, '  - the method did not store an active vertex'
+    assert len(test_mdl.active_vertices) == 1, '  - the method did not store an active vertex'
 
     # Success
     print('test_schedule() ran to completion.\n')
@@ -193,8 +193,8 @@ def test_update_costs():
     test_mdl.maximum_power = 100
 
     test_mdl.scheduled_powers = [IntervalValue(test_mdl, ti, test_mkt, MeasurementType.ScheduledPower, 100)]
-    test_mdl.activeVertices = [IntervalValue(test_mdl, ti, test_mkt,
-                                             MeasurementType.ActiveVertex, Vertex(0.05, 0, 100))]
+    test_mdl.active_vertices = [IntervalValue(test_mdl, ti, test_mkt,
+                                              MeasurementType.ActiveVertex, Vertex(0.05, 0, 100))]
 
     print('- running test with a LocalAsset:')
 

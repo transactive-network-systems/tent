@@ -114,7 +114,7 @@ class ConsensusMarket(Market):
             # TimeIntervals
             if self.series.method == Method.Interpolation:  # == 2
                 self.assign_system_vertices()
-                # av = [(x.timeInterval.name, x.value.marginalPrice, x.value.power) for x in self.activeVertices]
+                # av = [(x.interval.name, x.value.marginalPrice, x.value.power) for x in self.activeVertices]
                 # _log.debug("{} market active vertices are: {}".format(self.name, av))
 
             # Index through active time intervals.
@@ -136,7 +136,7 @@ class ConsensusMarket(Market):
                 elif self.series.method == Method.Interpolation:  # === 2
                     # Get the indexed active system vertices
                     active_vertices = [x.value for x in self.active_vertices
-                                       if x.time_interval.start_time == time_interval.start_time]
+                                       if x.interval.start_time == time_interval.start_time]
 
                     # Order the system vertices in the indexed time interval
                     active_vertices = order_vertices(active_vertices)
@@ -144,14 +144,14 @@ class ConsensusMarket(Market):
                     try:
                         # Find the vertex that bookcases the balance point from the lower side.
                         # Fix a case where all intersection points are on X-axis by using < instead of <=
-                        lower_vertex = [x for x in active_vertices if x.power < 0]
+                        lower_vertex = [x for x in active_vertices if x.quantity < 0]
                         if len(lower_vertex) == 0:
                             err_msg = "At {}, there is no point having power < 0".format(time_interval.name)
                         else:
                             lower_vertex = lower_vertex[-1]
 
                         # Find the vertex that bookcases the balance point from the upper side.
-                        upper_vertex = [x for x in active_vertices if x.power >= 0]
+                        upper_vertex = [x for x in active_vertices if x.quantity >= 0]
                         if len(upper_vertex) == 0:
                             err_msg = "At {}, there is no point having power >= 0".format(time_interval.name)
                         else:

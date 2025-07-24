@@ -1,144 +1,25 @@
+from copy import copy
 from datetime import datetime, timedelta
 from json import dumps, load
-from tent.containers.time_interval import TimeInterval
-from tent.neighbor import Neighbor
-from enum import Enum
-from tent.containers.vertex import Vertex as originalVertex  # Original Vertex class is extended here with same name.
-from tent.local_asset import LocalAsset
 from warnings import warn
-from copy import copy
+
+from tent.containers import SDCurve, TimeInterval, Vertex
+from tent.enumerations import OrderStatus, SupplyOrDemand, VTypes
+from tent.local_asset import LocalAsset
+from tent.neighbor import Neighbor
+from tent.utils.timer import Timer
 
 
-INF = float('inf')
-EPS = 2.220446049250313e-16  # Floating point precision for 64-bit computation
 OFFER_DURATION = timedelta(hours=24)  # Default time after which an Order object will expire if not otherwise specified
 
 
-class Vertex(originalVertex):
-    """
-    Class Vertex is being extended here. This extended version makes it easier to initialize objects, and it is more
-    useful for use with matching engine markets.
-
-    Parameters:
-        continuity (bool): Set True to indicate that quantity is defined between this Vertex and another nearest
-            Vertex of the same Order object having less quantity magnitude. Defaults to True.
-        price (float): [$/kWh] Price at which an inflection occurs in a piecewise linear supply or demand curve.
-        cost (float): [$] Needed for historical inheritance from class Vertex. Defaults to 0.0 $.
-        order_id (int or None): Should be set to the ID of the Order object to which this Vertex belongs.
-            Defaults to None.
-        quantity (float): [Avg. kW] The average power that, together with its price, defines an inflection in a
-            supply of demand curve. Defaults to 0.0 avg. kW.
-        timestamp (datetime): This should be updated by the market agent to reflect the time that the Vertex is
-            received by the market agent. Defaults to datetime.datetime.now().
-
-    Properties:
-        continuity (bool): Assigned value of parameter "continuity."
-        cost (float): [$] Assigned value of parameter "cost."
-        marginalPrice (float): [$/kWh] Same as property "price."
-        orderId (int or None): Assigned value of property "order_id."
-        power (float): [kW] Same as property "quantity."
-        powerUncertainty (float): See class Vertex.
-        record (int): See class Vertex.
-        timeStamp (datetime): Assigned value of parameter timestamp.
-
-    Notes:
-        Property "price" aliases the original Vertex property "marginalPrice."
-        Property "quantity" aliases the original Vertex property "power."
-        This redefined class may be invoked using this import statement "from order import Vertex".
-    """
-    def __init__(self, price: float, order_id: int or None = None, timestamp: datetime = datetime.now(),
-                 continuity: bool = True, quantity: float = 0.0, cost: float = 0.0):
-        self.marginalPrice = price
-        self.power: float = quantity
-        self.continuity: bool = continuity
-        self.orderId: int = order_id
-        self.timeStamp: datetime = timestamp
-        # This next line causes the Vertex to inherit from the original Vertex class. Several Vertex attributes are
-        # simplified or ignored.
-        super(Vertex, self).__init__(
-            marginal_price=self.price,
-            prod_cost=cost,
-            power=self.quantity,
-            continuity=self.continuity,
-            power_uncertainty=0.0,
-            record=0
-        )
-
-    @property
-    def price(self):
-        # This method allows alias property "price" to return the value of Vertex property "marginalPrice".
-        return self.marginalPrice
-
-    @price.setter
-    def price(self, inp):
-        # This method allows alias property "price" to set the value of Vertex property "marginalPrice".
-        self.marginalPrice = inp
-
-    @property
-    def quantity(self):
-        # This method allows alias property "quantity" to return the value of Vertex property "power".
-        return self.power
-
-    @quantity.setter
-    def quantity(self, inp):
-        # This method allows alias property "quantity" to set the value of Vertex property "power".
-        self.power = inp
-
-    def __copy__(self):
-        """
-        Returns a copy of this Vertex object.
-        This is a redefinition of method copy.copy() that will be evoked when a Vertex object is to be copied.
-
-        Parameters: None
-
-        Returns: (Vertex) A copy of this Vertex object.
-        """
-        return Vertex(
-            price=self.price,
-            order_id=self.orderId,
-            timestamp=self.timeStamp,
-            continuity=self.continuity,
-            quantity=self.quantity,
-            cost=self.cost
-        )
-
-
-def _assign_time_stamp():
-    return datetime.now()
-
-
-class OrderStatus(Enum):
-    # Enumeration of valid Order object statuses.
-    NEW = 0
-    NEW_REVISED = 1
-    STANDING_ORDER = 2          # One of two valid Order objects to be matched from a MatchingEngine object order book.
-    REVISED_STANDING_ORDER = 3  # One of two valid Order objects to be matched from a MatchingEngine object order book.
-    MATCHED = 4
-    REVISED_MATCHED = 5
-    CANCELLED = 6
-    EXPIRED = 7
-    SUPERSEDED = 8
-
-
-class SupplyOrDemand(Enum):
-    # Enumeration of Order object attribution as either supply or demand.
-    SUPPLY = 0
-    DEMAND = 1
-    BOTH = 2
-
-
-class VTypes(Enum):
-    NONE = 0
-    LIMIT_ORDER = 1
-    MARKET_ORDER = 1  # A market order while behave much like a special limit order for matching. Same enum.
-    LINEAR = 2
-    COMPLEX = 3
-
-
-class Order:
+# TODO: Search for all 'Vertex.curve_id's and:
+#  Change reads to Vertex.curve.id. (Make sure they work with UUID).
+#  Change writes to the curve, not its ID.
+class Order(SDCurve):
     """
     Aggregates Vertex objects into their supply or demand curve.
-    An Order object may be used instead of an IntervalValue object to store and organize Vertices.
+    Order extends SDCurve for use with matching engines.
 
     Parameters:
       actor
@@ -147,30 +28,27 @@ class Order:
       parent_order_id:
       vertices:
       supply_or_demand:
-      time_interval
+      interval
 
     Returns: (Order) object
 
     """
     def __init__(self,
                  market,  # PROTECTED. This should point to a valid MatchingEngine Market object
-                 time_interval: TimeInterval,  # PROTECTED
+                 interval: TimeInterval,  # PROTECTED
                  actor: Neighbor or LocalAsset,  # PROTECTED. Not using default because this association is critical for
                  #                                 an Order
-                 expire_by: datetime = datetime.now() + OFFER_DURATION,  # Protected
+                 expire_by: datetime = Timer.now() + OFFER_DURATION,  # Protected
                  parent_order_id: int or None = None,
                  vertices: list or None = None,
                  supply_or_demand: SupplyOrDemand or bool or None = None
                  ):
-        self.__timeInterval__: TimeInterval = time_interval
-        self.timeStamp: datetime = _assign_time_stamp()
-        if vertices:
-            self.vertices: list = list(vertices)
-        else:
-            self.vertices: list = [Vertex(price=0.0, quantity=0.0, continuity=False, order_id=self.id,
-                                          timestamp=self.timeStamp)]
-        self.__market__ = market
-        self.__marketSeries__: str = market.marketSeriesName
+        # TODO: Can we pass in a measurement here, for orders?
+        super(Order, self).__init__(interval=interval, vertices=vertices)
+        self.time_stamp: datetime = Timer.now()
+
+        self.__market__ = market # TODO: Shouldn't this refer to self.interval.market?
+        self.__marketSeries__: str = market.series.name
         if actor:
             self.__actor__: Neighbor or LocalAsset = actor
         else:
@@ -178,33 +56,33 @@ class Order:
         self.status: OrderStatus = OrderStatus.NEW
         # self.allowPartialMatch: bool = allow_partial_match
         if parent_order_id:
-            self.parentOrderId: int or None = parent_order_id
+            self.parent_order_id: int or None = parent_order_id
         else:
-            self.parentOrderId: int or None = None
-        self.childOrderIds: list = []
+            self.parent_order_id: int or None = None
+        self.child_order_ids: list = []
         self.__expireBy__: datetime = expire_by
-        self.supplyOrDemand: SupplyOrDemand = supply_or_demand
+        self.supply_or_demand: SupplyOrDemand = supply_or_demand
 
-        if self.supplyOrDemand is None:
+        if self.supply_or_demand is None:
             supply_order = Order(market=self.market,
-                                 time_interval=self.timeInterval,
+                                 interval=self.interval,
                                  actor=self.actor,
-                                 expire_by=self.expireBy,
+                                 expire_by=self.expire_by,
                                  parent_order_id=self.id,
                                  vertices=self.vertices,
                                  supply_or_demand=SupplyOrDemand.SUPPLY)
-            self.childOrderIds.append(supply_order.id)
+            self.child_order_ids.append(supply_order.id)
             supply_order = supply_order.check_supply_order()
             if supply_order and supply_order.order_or_none():
                 self.market.orderList.append(supply_order)
                 if any([x == self for x in self.market.orderList]):
                     self.market.orderList = [x for x in self.market.orderList if x != self]
 
-            demand_order = Order(market=self.market, time_interval=self.timeInterval, actor=self.actor,
-                                 expire_by=self.expireBy,
+            demand_order = Order(market=self.market, interval=self.interval, actor=self.actor,
+                                 expire_by=self.expire_by,
                                  parent_order_id=self.id, vertices=self.vertices,
                                  supply_or_demand=SupplyOrDemand.DEMAND)
-            self.childOrderIds.append(demand_order.id)
+            self.child_order_ids.append(demand_order.id)
             demand_order = demand_order.check_demand_order()
             if demand_order and demand_order.order_or_none():
                 self.market.orderList.append(demand_order)
@@ -219,59 +97,27 @@ class Order:
         self.assign_buyer_or_seller()
 
     @property
-    def id(self):
-        # The Order object ID is assigned automatically by a builtin function. It can be read, but it should not be
-        # changed.
-        return id(self)
-
-    @id.setter
-    def id(self, _):
-        # The Order object ID is assigned automatically by a builtin function. It can be read, but it should not be
-        # changed.
-        pass
-
-    @property
     def market(self):
         return self.__market__
 
-    @market.setter
-    def market(self, _):
-        pass
-
     @property
-    def marketSeries(self):
+    def market_series(self):
         return self.__marketSeries__
-
-    @marketSeries.setter
-    def marketSeries(self, _):
-        pass
 
     @property
     def actor(self):
         # TODO: David Raker suggested name actor may cause confusion. "owner"? "source"? The word "actor" is used in the
         #       SEPA TE Concept Model.
+        # TODO: SDCurve has a measurement.source attribute which should already be this.
+        #  Can this work for the MatchingEngine design? (i.e., are Orders contained in SDMeasurement?
         return self.__actor__
 
-    @actor.setter
-    def actor(self, _):
-        pass
-
     @property
-    def expireBy(self):
+    def expire_by(self):
         return self.__expireBy__
 
-    @expireBy.setter
-    def expireBy(self, _):
-        pass
-
-    @property
-    def timeInterval(self):
-        return self.__timeInterval__
-
-    @timeInterval.setter
-    def timeInterval(self, _):
-        pass
-
+    # TODO: create/load_json_message methods are not used, and may be partially or entirely superseded by get_record.
+    # TODO: Should we instead have an abstract serialization method in the TN that receives a dict?
     def create_json_message(self):
         """
         Convert an Order object into json message, which can be sent to another agent and loaded again into an
@@ -284,16 +130,16 @@ class Order:
         #
         # TODO: Review this method to make sure that recursion captures all the nested objects properly.
         return dumps({"actor": self.actor.name,
-                      "childOrderIds": self.childOrderIds,
-                      "duration [s]": self.timeInterval.duration.total_seconds(),
-                      "expireBy": self.expireBy.isoformat(),
+                      "childOrderIds": self.child_order_ids,
+                      "duration [s]": self.interval.duration.total_seconds(),
+                      "expire_by": self.expire_by.isoformat(),
                       "id": self.id,
-                      "parentOrderId": self.parentOrderId,
+                      "parentOrderId": self.parent_order_id,
                       "vertices": self.vertices,
-                      "startTime": self.timeInterval.startTime.isoformat(),
+                      "startTime": self.interval.start_time.isoformat(),
                       "status": self.status.name,
-                      "timeStamp": self.timeStamp.isoformat(),
-                      "supplyOrDemand": self.supplyOrDemand})
+                      "timeStamp": self.time_stamp.isoformat(),
+                      "supplyOrDemand": self.supply_or_demand})
 
     def load_json_message(self, filename: str or None = None):
         # Recreate an Order object from a json file, as may have been received from a Neighbor agent object.
@@ -336,10 +182,10 @@ class Order:
         - This method can now complete attribution to a counterparty when a match is completed. The counterparty
           should be of type Neighbor or LocalAsset.
         """
-        if self.supplyOrDemand == SupplyOrDemand.SUPPLY:
+        if self.supply_or_demand == SupplyOrDemand.SUPPLY:
             assert quantity >= 0.0, \
                 "Supply quantity is defined as a positive number."
-        elif self.supplyOrDemand == SupplyOrDemand.DEMAND:
+        elif self.supply_or_demand == SupplyOrDemand.DEMAND:
             assert quantity <= 0.0, \
                 "Demand quantity is defined as a negative number."
         else:
@@ -355,8 +201,8 @@ class Order:
                     price=pp.price,
                     quantity=remainder,
                     continuity=pp.continuity,
-                    order_id=self.id,
-                    timestamp=self.timeStamp
+                    curve_id=self.id,
+                    timestamp=self.time_stamp
                 )
             )
 
@@ -365,24 +211,24 @@ class Order:
         unmatched_order.status = OrderStatus.NEW
         unmatched_order.assign_buyer_or_seller()
 
-        if self.supplyOrDemand == SupplyOrDemand.SUPPLY:
+        if self.supply_or_demand == SupplyOrDemand.SUPPLY:
             unmatched_order = unmatched_order.check_supply_order()
-        elif self.supplyOrDemand == SupplyOrDemand.DEMAND:
+        elif self.supply_or_demand == SupplyOrDemand.DEMAND:
             unmatched_order = unmatched_order.check_demand_order()
         else:
             unmatched_order = None
 
         # [The match is a market order] (I.e., it must be represented by one Vertex having infinite magnitude.)
         # Create a matched order object based on quantity and match price.
-        if abs(match_price) == INF:
+        if abs(match_price) == float('inf'):
             matched_order: Order = copy(self)
             matched_order.vertices = [
                 Vertex(
                     price=match_price,
                     quantity=quantity,
                     continuity=False,
-                    order_id=self.id,
-                    timestamp=self.timeStamp
+                    curve_id=self.id,
+                    timestamp=self.time_stamp
                 )
             ]
             matched_order.status = OrderStatus.MATCHED
@@ -395,15 +241,15 @@ class Order:
                     price=match_price,
                     quantity=0.0,
                     continuity=False,
-                    order_id=self.id,
-                    timestamp=self.timeStamp
+                    curve_id=self.id,
+                    timestamp=self.time_stamp
                 ),
                 Vertex(
                     price=match_price,
                     quantity=quantity,
                     continuity=False,
-                    order_id=self.id,
-                    timestamp=self.timeStamp
+                    curve_id=self.id,
+                    timestamp=self.time_stamp
                 )
             ]
             matched_order.status = OrderStatus.MATCHED
@@ -443,10 +289,10 @@ class Order:
           sorted by decreasing price and decreasing quantity.
         - If it is unknown whether the order is a supply or demand order, a warning occurs and the method returns None.
         """
-        if self.supplyOrDemand == SupplyOrDemand.SUPPLY:
+        if self.supply_or_demand == SupplyOrDemand.SUPPLY:
             self.vertices.sort(key=lambda x: (x.price, x.quantity))
             return None
-        elif self.supplyOrDemand == SupplyOrDemand.DEMAND:
+        elif self.supply_or_demand == SupplyOrDemand.DEMAND:
             self.vertices.sort(key=lambda x: (-x.price, -x.quantity))
             return None
         else:
@@ -470,7 +316,7 @@ class Order:
         """
 
         # [This Order object is not demand.]
-        if self.supplyOrDemand is not SupplyOrDemand.DEMAND:
+        if self.supply_or_demand is not SupplyOrDemand.DEMAND:
             Warning("{Order.check_demand_order()} can only be supplied to orders with status 'DEMAND'.")
             return self.order_or_none()
 
@@ -486,8 +332,8 @@ class Order:
         # If all its quantities are less than or equal to 0.0. Return the original order.
         if all([x.quantity <= 0.0 for x in self.vertices]):
             if len(self.vertices) == 1:
-                if self.vertices[0].price != INF:
-                    self.vertices[0].price = INF
+                if self.vertices[0].price != float('inf'):
+                    self.vertices[0].price = float('inf')
                 if self.status == OrderStatus.NEW:
                     self.status = OrderStatus.NEW_REVISED
                 elif self.status == OrderStatus.STANDING_ORDER:
@@ -534,8 +380,8 @@ class Order:
                         price=price_at_q0,
                         quantity=0.0,
                         continuity=point.continuity,
-                        order_id=self.id,
-                        timestamp=self.timeStamp
+                        curve_id=self.id,
+                        timestamp=self.time_stamp
                     )
                     revised_vertices.append(
                         new_point
@@ -576,8 +422,8 @@ class Order:
                 price=test_price,
                 quantity=0.0,
                 continuity=False,
-                order_id=self.id,
-                timestamp=self.timeStamp
+                curve_id=self.id,
+                timestamp=self.time_stamp
             )
             qVertex.vType = VTypes.NONE
             return qVertex
@@ -590,8 +436,8 @@ class Order:
                 price=test_price,
                 quantity=self.vertices[0].quantity,
                 continuity=self.vertices[0].continuity,
-                order_id=self.id,
-                timestamp=self.timeStamp
+                curve_id=self.id,
+                timestamp=self.time_stamp
             )
             qVertex.vType = VTypes.MARKET_ORDER
             return qVertex
@@ -604,7 +450,7 @@ class Order:
         self.sort_order()
 
         # [This Order object is supply.]
-        if self.supplyOrDemand == SupplyOrDemand.SUPPLY:
+        if self.supply_or_demand == SupplyOrDemand.SUPPLY:
 
             # [The price is less than or equal to that of the first standing Vertex object.]
             # Return a Vertex object having the quantity and continuity of the first standing Vertex.
@@ -613,8 +459,8 @@ class Order:
                     price=test_price,
                     quantity=self.vertices[0].quantity,
                     continuity=self.vertices[0].continuity,
-                    order_id=self.id,
-                    timestamp=self.timeStamp
+                    curve_id=self.id,
+                    timestamp=self.time_stamp
                 )
                 qVertex.vType = VTypes.LIMIT_ORDER
                 return qVertex
@@ -626,8 +472,8 @@ class Order:
                     price=test_price,
                     quantity=self.vertices[-1].quantity,
                     continuity=self.vertices[-1].continuity,
-                    order_id=self.id,
-                    timestamp=self.timeStamp
+                    curve_id=self.id,
+                    timestamp=self.time_stamp
                 )
                 if len(self.vertices) == 2:
                     qVertex.vType = VTypes.LIMIT_ORDER
@@ -652,8 +498,8 @@ class Order:
                             price=test_price,
                             quantity=self.vertices[i + 1].quantity,
                             continuity=self.vertices[i + 1].continuity,
-                            order_id=self.id,
-                            timestamp=self.timeStamp
+                            curve_id=self.id,
+                            timestamp=self.time_stamp
                         )
                         if len(self.vertices) == 2:
                             qVertex.vType = VTypes.LIMIT_ORDER
@@ -679,8 +525,8 @@ class Order:
                             price=test_price,
                             quantity=q,
                             continuity=self.vertices[i + 1].continuity,
-                            order_id=self.id,
-                            timestamp=self.timeStamp
+                            curve_id=self.id,
+                            timestamp=self.time_stamp
                         )
                         if len(self.vertices) == 2:
                             qVertex.vType = VTypes.LINEAR
@@ -697,14 +543,14 @@ class Order:
                             price=test_price,
                             quantity=0.0,
                             continuity=False,
-                            order_id=self.id,
-                            timestamp=self.timeStamp
+                            curve_id=self.id,
+                            timestamp=self.time_stamp
                         )
                         qVertex.vType = VTypes.NONE
                         return qVertex
 
         # [This order is demand.]
-        if self.supplyOrDemand == SupplyOrDemand.DEMAND:
+        if self.supply_or_demand == SupplyOrDemand.DEMAND:
 
             # [The price is greater than that of the first standing Vertex.]
             # Return the quantity of the first standing Vertex.
@@ -713,8 +559,8 @@ class Order:
                     price=test_price,
                     quantity=self.vertices[0].quantity,
                     continuity=self.vertices[0].continuity,
-                    order_id=self.id,
-                    timestamp=self.timeStamp
+                    curve_id=self.id,
+                    timestamp=self.time_stamp
                 )
                 qVertex.vType = VTypes.MARKET_ORDER
                 return qVertex
@@ -726,8 +572,8 @@ class Order:
                     price=test_price,
                     quantity=self.vertices[-1].quantity,
                     continuity=self.vertices[-1].continuity,
-                    order_id=self.id,
-                    timestamp=self.timeStamp
+                    curve_id=self.id,
+                    timestamp=self.time_stamp
                 )
                 if len(self.vertices) == 2:
                     qVertex.vType = VTypes.LIMIT_ORDER
@@ -751,8 +597,8 @@ class Order:
                             price=test_price,
                             quantity=self.vertices[i + 1].quantity,
                             continuity=self.vertices[i + 1].continuity,
-                            order_id=self.id,
-                            timestamp=self.timeStamp
+                            curve_id=self.id,
+                            timestamp=self.time_stamp
                         )
                         if len(self.vertices) == 2:
                             qVertex.vType = VTypes.LIMIT_ORDER
@@ -777,8 +623,8 @@ class Order:
                             price=test_price,
                             quantity=q,
                             continuity=self.vertices[i + 1].continuity,
-                            order_id=self.id,
-                            timestamp=self.timeStamp
+                            curve_id=self.id,
+                            timestamp=self.time_stamp
                         )
                         if len(self.vertices) == 2:
                             qVertex.vType = VTypes.LINEAR
@@ -795,8 +641,8 @@ class Order:
                             price=test_price,
                             quantity=0.0,
                             continuity=False,
-                            order_id=self.id,
-                            timestamp=self.timeStamp
+                            curve_id=self.id,
+                            timestamp=self.time_stamp
                         )
                         qVertex.vType = VTypes.NONE
                         return qVertex
@@ -816,7 +662,7 @@ class Order:
         """
 
         # [This order is not supply.]
-        if self.supplyOrDemand is not SupplyOrDemand.SUPPLY:
+        if self.supply_or_demand is not SupplyOrDemand.SUPPLY:
             Warning("{Order.check_supply_order()} can only be supplied to orders with status 'SUPPLY'.")
             return self
 
@@ -836,8 +682,8 @@ class Order:
         # Return the original order.
         if all([x.quantity >= 0.0 for x in self.vertices]):
             if len(self.vertices) == 1:
-                if self.vertices[0].price != -INF:
-                    self.vertices[0].price = -INF
+                if self.vertices[0].price != -float('inf'):
+                    self.vertices[0].price = -float('inf')
                     if self.status == OrderStatus.NEW:
                         self.status = OrderStatus.NEW_REVISED
                     elif self.status == OrderStatus.STANDING_ORDER:
@@ -881,8 +727,8 @@ class Order:
                         price=price_at_q0,
                         quantity=0.0,
                         continuity=point.continuity,
-                        order_id=self.id,
-                        timestamp=self.timeStamp
+                        curve_id=self.id,
+                        timestamp=self.time_stamp
                     )
                     revised_vertices.append(
                         new_point
@@ -910,41 +756,6 @@ class Order:
             self.mark_as_revised()
 
             return self.order_or_none()
-
-    @staticmethod
-    def get_prices_from_orders(order_list: list):
-        """
-        Returns a simple list of the Vertex prices [$/kWh] from a list of Order objects.
-
-        Parameters:
-            order_list: list of Order objects
-
-        Returns: (list) of unique prices [$/kwh] found among order_list
-
-        Notes:
-        - Care is used to make sure a flat list of prices is returned.
-        """
-        vertex_lists = [x.vertices for x in order_list]
-        prices = []
-        for pp in vertex_lists:
-            prices.extend([x.price for x in pp])
-        return list(set(prices))
-
-    @staticmethod
-    def aggregate_orders(order_list: list):
-        """
-        Return a new Order object that has been aggregated from a list of Order objects.
-        Parameters:
-             order_list: list of Order objects
-        Returns: New Order object that has been aggregated from the provided list of Order objects.
-        """
-        # TODO: Finish this method.
-        # TODO: Perform unit testing on this method.
-        prices = Order.get_prices_from_orders(
-            order_list
-        )
-        prices = [x for x in prices if abs(x) != INF]
-        return prices
 
     def simplify_order(self):
         """
@@ -977,9 +788,9 @@ class Order:
             # Check and perhaps correct the price assignments of the existing Vertices.
             if vertices[0].quantity == vertices[1].quantity:
                 self.vertices = [vertices[0]]
-                self.vertices[0].price = INF
-                if self.supplyOrDemand == SupplyOrDemand.DEMAND:
-                    self.vertices[0].price = -INF
+                self.vertices[0].price = float('inf')
+                if self.supply_or_demand == SupplyOrDemand.DEMAND:
+                    self.vertices[0].price = -float('inf')
 
             # Return the Order object, corrected or not.
             return self.order_or_none()
@@ -1013,16 +824,16 @@ class Order:
                 new_pp.append(vertices[-1])
 
             # [More than one Vertex has been saved.]
-            # [The saved Vertex include quantity INF at least once.]
-            # Remove the Vertex having quantity INF.
-            if len(new_pp) > 1 and [x for x in new_pp if x.quantity == INF]:
-                new_pp = [x for x in new_pp if x.quantity != INF]
+            # [The saved Vertex include quantity float('inf') at least once.]
+            # Remove the Vertex having quantity float('inf').
+            if len(new_pp) > 1 and [x for x in new_pp if x.quantity == float('inf')]:
+                new_pp = [x for x in new_pp if x.quantity != float('inf')]
 
             # [More than one Vertex has been saved.]
-            # [The saved Vertices include quantity -INF at least once.]
-            # Remove the Vertices having quantity -INF.
-            if len(new_pp) > 1 and [x for x in new_pp if x.quantity == -INF]:
-                new_pp = [x for x in new_pp if x.quantity != -INF]
+            # [The saved Vertices include quantity -float('inf') at least once.]
+            # Remove the Vertices having quantity -float('inf').
+            if len(new_pp) > 1 and [x for x in new_pp if x.quantity == -float('inf')]:
+                new_pp = [x for x in new_pp if x.quantity != -float('inf')]
 
             # Replace the original Order object's Vertices with the new simplified set of Vertices.
             self.vertices = new_pp
@@ -1055,18 +866,18 @@ class Order:
         """
 
         copiedOrder = Order(market=self.market,
-                            time_interval=self.timeInterval,
+                            interval=self.interval,
                             actor=self.actor,
-                            expire_by=self.expireBy,
+                            expire_by=self.expire_by,
                             parent_order_id=self.id,  # This automatically points to copied Order object.
                             vertices=None,
-                            supply_or_demand=self.supplyOrDemand
+                            supply_or_demand=self.supply_or_demand
                             )
-        self.childOrderIds.append(copiedOrder.id)  # This identifies the copy as a child of the copied Order.
-        copiedOrder.timeStamp = self.timeStamp
+        self.child_order_ids.append(copiedOrder.id)  # This identifies the copy as a child of the copied Order.
+        copiedOrder.time_stamp = self.time_stamp
         copiedOrder.status = self.status
-        copiedOrder.childOrderIds = []
-        copiedOrder.marketSeries = self.marketSeries
+        copiedOrder.child_order_ids = []
+        copiedOrder.market_series = self.market_series
         copiedOrder.vertices = []
         copiedOrder.buyer = self.buyer
         copiedOrder.seller = self.seller
@@ -1084,10 +895,10 @@ class Order:
         Make (typically) initial assignment of actor as either the prospective seller or buyer in a transaction.
         Returns: None
         """
-        if self.supplyOrDemand == SupplyOrDemand.SUPPLY:
+        if self.supply_or_demand == SupplyOrDemand.SUPPLY:
             self.seller = self.actor
             self.buyer = None
-        elif self.supplyOrDemand == SupplyOrDemand.DEMAND:
+        elif self.supply_or_demand == SupplyOrDemand.DEMAND:
             self.buyer = self.actor
             self.seller = None
         else:
@@ -1095,6 +906,26 @@ class Order:
             self.seller = None
         return None
 
+    @property
+    def table_name(self):
+        return 'order'
 
-if __name__ == '__main__':
-    pass
+    def get_record(self) -> dict:
+        raise NotImplementedError
+
+    @classmethod
+    def get_archive_definitions(cls) -> list[dict]:
+        definitions = super(Order, cls).get_archive_definitions()
+        definitions.extend([
+            {
+                "name": "order",
+                "inherits": "sd_curve",
+                "columns": [
+                    {"name": "id", "foreign_key": "sd_curve.id", "kwargs": {"primary_key": True}},
+                    # {"name": "status", "enumeration": "enum"},
+                    # {"name": "supply_or_demand", "enumeration": "enum"},
+                    {"name": "expire_by", "type": "DateTime"}
+                ]
+            }
+        ])
+        return definitions

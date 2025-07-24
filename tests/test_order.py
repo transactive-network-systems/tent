@@ -20,15 +20,15 @@ class test_vertex:
         self.test_vertex = None
 
     def setUp(self):
-        self.test_vertex = Vertex(price=0.10, order_id=123)
+        self.test_vertex = Vertex(price=0.10, curve_id=123)
 
     def case1(self):
         print('Case 1: No arguments are provided to the class.')
         self.setUp()
         tc.assertEqual(self.test_vertex.price, 0.10, 'Vertex price is wrong.')
-        tc.assertEqual(self.test_vertex.orderId, 123, 'The order ID is wrong.')
+        tc.assertEqual(self.test_vertex.order_id, 123, 'The order ID is wrong.')
         tc.assertTrue(self.test_vertex.continuity is True, 'Continuity is wrong.')
-        tc.assertIsInstance(self.test_vertex.timeStamp, datetime)
+        tc.assertIsInstance(self.test_vertex.time_stamp, datetime)
 
     def case2(self):
         print('Case 2: Normal case.')
@@ -43,16 +43,16 @@ class test_vertex:
             Vertex,
             "The object should inherit from class Vertex."
         )
-        self.test_vertex.marginalPrice = 7.654321
+        self.test_vertex.price = 7.654321
         tc.assertEqual(
             self.test_vertex.price,
-            self.test_vertex.marginalPrice,
+            self.test_vertex.price,
             "The Vertex property price should be a pseudonym of Vertex property marginalPrice."
         )
-        self.test_vertex.power = 0.654321
+        self.test_vertex.quantity = 0.654321
         tc.assertEqual(
             self.test_vertex.quantity,
-            self.test_vertex.power,
+            self.test_vertex.quantity,
             "The Vertex property quantity should be a pseudonym of Vertex property power."
         )
 
@@ -99,11 +99,11 @@ class test_order:
         self.test_actor = Neighbor()  # Using default arguments.
         self.test_vertex = Vertex(
             price=0.10,
-            order_id=123
+            curve_id=123
         )
         self.test_order = Order(
             market=self.test_market,
-            time_interval=self.test_time_interval,
+            interval=self.test_time_interval,
             actor=self.test_actor
         )
         self.test_pp_d1 = copy(
@@ -194,7 +194,7 @@ class test_order:
         self.test_market.orderList = []  # Reset the market prior to creating a new Order object.
         order3 = Order(
             market=self.test_market,
-            time_interval=self.test_time_interval,
+            interval=self.test_time_interval,
             actor=self.test_actor,
             vertices=[
                 self.test_pp_s2,
@@ -233,13 +233,13 @@ class test_order:
             0,
             'The market should store only the original superseded order.'
         )
-        demand_order = [x for x in self.test_market.orderList if x.supplyOrDemand == SupplyOrDemand.DEMAND][0]
+        demand_order = [x for x in self.test_market.orderList if x.supply_or_demand == SupplyOrDemand.DEMAND][0]
         tc.assertEqual(
             [x.quantity for x in demand_order.vertices],
             [0.0, -10.0, -100.0],
             'The market demand order Vertex quantities are not as anticipated.'
         )
-        supply_order = [x for x in self.test_market.orderList if x.supplyOrDemand == SupplyOrDemand.SUPPLY][0]
+        supply_order = [x for x in self.test_market.orderList if x.supply_or_demand == SupplyOrDemand.SUPPLY][0]
         tc.assertEqual(
             [x.quantity for x in supply_order.vertices],
             [0.0, 11.0, 101.0],
@@ -256,7 +256,7 @@ class test_order:
         pp0.quantity = 0.0
         order4 = Order(
             market=self.test_market,
-            time_interval=self.test_time_interval,
+            interval=self.test_time_interval,
             actor=self.test_actor,
             vertices=[
                 pp0,
@@ -308,7 +308,7 @@ class test_order:
         pp0.quantity = 0.0
         order5 = Order(
             market=self.test_market,
-            time_interval=self.test_time_interval,
+            interval=self.test_time_interval,
             actor=self.test_actor,
             vertices=[self.test_pp_s1, pp0],
             supply_or_demand=SupplyOrDemand.SUPPLY
@@ -360,7 +360,7 @@ class test_order:
         pp0.price = self.test_pp_d1.price + 0.1
         order6 = Order(
             market=self.test_market,
-            time_interval=self.test_time_interval,
+            interval=self.test_time_interval,
             actor=self.test_actor,
             vertices=[self.test_pp_d1, pp0],
             supply_or_demand=SupplyOrDemand.DEMAND
@@ -429,7 +429,7 @@ class test_order:
         pp0.price = self.test_pp_s1.price - 0.1
         order7 = Order(
             market=self.test_market,
-            time_interval=self.test_time_interval,
+            interval=self.test_time_interval,
             actor=self.test_actor,
             vertices=[self.test_pp_s1, pp0],
             supply_or_demand=SupplyOrDemand.SUPPLY
@@ -493,7 +493,7 @@ class test_order:
         self.test_market.orderList = []  # Reset the market prior to creating a new Order object.
         test_order8a = Order(
             market=self.test_market,
-            time_interval=self.test_time_interval,
+            interval=self.test_time_interval,
             actor=self.test_actor,
             vertices=[],
             supply_or_demand=SupplyOrDemand.SUPPLY
@@ -508,7 +508,7 @@ class test_order:
         )
         test_order8b = Order(
             market=self.test_market,
-            time_interval=self.test_time_interval,
+            interval=self.test_time_interval,
             actor=self.test_actor,
             vertices=[self.test_pp_s1],
             supply_or_demand=SupplyOrDemand.SUPPLY
@@ -528,7 +528,7 @@ class test_order:
         )
         test_order8c = Order(
             market=self.test_market,
-            time_interval=self.test_time_interval,
+            interval=self.test_time_interval,
             actor=self.test_actor,
             vertices=[self.test_pp_d1],
             supply_or_demand=SupplyOrDemand.SUPPLY
@@ -549,7 +549,7 @@ class test_order:
         self.test_market.orderList = []  # Reset the market prior to creating a new Order object.
         test_order9a = Order(
             market=self.test_market,
-            time_interval=self.test_time_interval,
+            interval=self.test_time_interval,
             actor=self.test_actor,
             vertices=[],
             supply_or_demand=SupplyOrDemand.DEMAND
@@ -564,7 +564,7 @@ class test_order:
         )
         test_order9b = Order(
             market=self.test_market,
-            time_interval=self.test_time_interval,
+            interval=self.test_time_interval,
             actor=self.test_actor,
             vertices=[self.test_pp_d1],
             supply_or_demand=SupplyOrDemand.DEMAND
@@ -584,7 +584,7 @@ class test_order:
         )
         test_order9c = Order(
             market=self.test_market,
-            time_interval=self.test_time_interval,
+            interval=self.test_time_interval,
             actor=self.test_actor,
             vertices=[self.test_pp_s1],
             supply_or_demand=SupplyOrDemand.DEMAND
@@ -607,7 +607,7 @@ class test_order:
         pp0.quantity = 0.0
         demand_order = Order(
             market=self.test_market,
-            time_interval=self.test_time_interval,
+            interval=self.test_time_interval,
             actor=self.test_actor,
             vertices=[
                 pp0,

@@ -48,7 +48,7 @@ from dateutil import parser
 from itertools import chain
 from sortedcontainers import SortedList
 
-from tent import Archivable
+from tent.base import Archivable
 import tent.containers as containers
 from tent.market import Market
 from tent.utils.helpers import get_class_from_spec
@@ -270,27 +270,6 @@ class TransactiveNode(Archivable):
                 ],
                 "indices": [
                     {"name": "idx_tn_instance", "columns": ["registry_id", "name", "created"], "unique": True}
-                ]
-            },
-            {  # TODO: This doesn't belong here, but the SDCurve class isn't integrated yet.
-                "name": "sd_curve",
-                "columns": [
-                    {"name": "id", "type": "Uuid", "identity": True, "kwargs": {"primary_key": True}},
-                    {"name": "time_interval_id", "foreign_key": "time_interval.id"},
-                    {"name": "owner_id", "foreign_key": "component.id"},
-                    {"name": "parent_curve_id", "foreign_key": "sd_curve.id"},
-                    {"name": "timestamp", "type": "DateTime"},
-                    {"name": "is_default", "type": "Boolean"}
-                ]
-            },
-            {  # TODO: This doesn't belong here, but the Order class isn't integrated yet.
-                "name": "order",
-                "inherits": "sd_curve",
-                "columns": [
-                    {"name": "id", "foreign_key": "sd_curve.id", "kwargs": {"primary_key": True}},
-                    # {"name": "status", "enumeration": "enum"},
-                    # {"name": "supply_or_demand", "enumeration": "enum"},
-                    {"name": "expire_by", "type": "DateTime"}
                 ]
             }
         ])

@@ -85,13 +85,13 @@ def test_assign_system_vertices():
 
     vertex3 = Vertex(positive_infinity, 0, -4)
     interval_value3 = IntervalValue(test_market, test_interval, test_market, None, vertex3)
-    test_asset.activeVertices = [interval_value3]
+    test_asset.active_vertices = [interval_value3]
 
-    assert vertex1.power == 0, 'The first vertex was configured at 0 kW.'
-    assert vertex1.marginal_price == 0.02, 'The first vertex was configured at 0.02 $/kWh.'
-    assert vertex2.power == 10, 'The second vertex was configured at 10 kW.'
-    assert vertex2.marginal_price == 0.05, 'The second vertex was configured at 0.05 $/kWh.'
-    assert vertex3.power == -4, 'The third vertex was configured at -4 kW.'
+    assert vertex1.quantity == 0, 'The first vertex was configured at 0 kW.'
+    assert vertex1.price == 0.02, 'The first vertex was configured at 0.02 $/kWh.'
+    assert vertex2.quantity == 10, 'The second vertex was configured at 10 kW.'
+    assert vertex2.price == 0.05, 'The second vertex was configured at 0.05 $/kWh.'
+    assert vertex3.quantity == -4, 'The third vertex was configured at -4 kW.'
 
     try:
         test_market.assign_system_vertices(test_node)
@@ -101,10 +101,10 @@ def test_assign_system_vertices():
 
     assert len(test_market.active_vertices) == 2, \
                 ('Two vertices should have been assigned; ' + str(len(test_market.active_vertices)) + ' were assigned.')
-    assert test_market.active_vertices[0].value.power == -4, 'The first vertex should have been at -4 kW.'
-    assert test_market.active_vertices[1].value.power == 6, 'The second vertex should have been at 6 kW.'
-    assert test_market.active_vertices[0].value.marginal_price == 0.02, 'The first vertex should have been at 0.02 $/kWh.'
-    assert test_market.active_vertices[1].value.marginal_price == 0.05, 'The first vertex should have been at 0.05 $/kWh.'
+    assert test_market.active_vertices[0].value.quantity == -4, 'The first vertex should have been at -4 kW.'
+    assert test_market.active_vertices[1].value.quantity == 6, 'The second vertex should have been at 6 kW.'
+    assert test_market.active_vertices[0].value.price == 0.02, 'The first vertex should have been at 0.02 $/kWh.'
+    assert test_market.active_vertices[1].value.price == 0.05, 'The first vertex should have been at 0.05 $/kWh.'
 
     print('test_assign_system_vertices() ran to completion\n')
 
@@ -136,16 +136,16 @@ def test_balance():
 
     vertex3 = Vertex(positive_infinity, 0, -4)
     interval_value3 = IntervalValue(test_market, test_interval, test_market, None, vertex3)
-    test_asset.activeVertices = [interval_value3]
+    test_asset.active_vertices = [interval_value3]
 
     test_market.series.method = Method.Interpolation
     test_market.marginal_prices = [IntervalValue(test_market, test_interval, test_market, 'marginalPrice', 0.06)]
 
-    assert vertex1.power == 0, 'The first vertex was configured at 0 kW.'
-    assert vertex1.marginal_price == 0.02, 'The first vertex was configured at 0.02 $/kWh.'
-    assert vertex2.power == 10, 'The second vertex was configured at 10 kW.'
-    assert vertex2.marginal_price == 0.05, 'The second vertex was configured at 0.05 $/kWh.'
-    assert vertex3.power == -4, 'The third vertex was configured at -4 kW.'
+    assert vertex1.quantity == 0, 'The first vertex was configured at 0 kW.'
+    assert vertex1.price == 0.02, 'The first vertex was configured at 0.02 $/kWh.'
+    assert vertex2.quantity == 10, 'The second vertex was configured at 10 kW.'
+    assert vertex2.price == 0.05, 'The second vertex was configured at 0.05 $/kWh.'
+    assert vertex3.quantity == -4, 'The third vertex was configured at -4 kW.'
 
     try:
         test_market.balance(test_node)
@@ -155,10 +155,10 @@ def test_balance():
 
     assert len(test_market.active_vertices) == 2, \
                 ('Two vertices should have been assigned; ' + str(len(test_market.active_vertices)) + ' were assigned.')
-    assert test_market.active_vertices[0].value.power == -4, 'The first vertex should have been at -4 kW.'
-    assert test_market.active_vertices[1].value.power == 6, 'The second vertex should have been at 6 kW.'
-    assert test_market.active_vertices[0].value.marginal_price == 0.02, 'The first vertex should have been at 0.02 $/kWh.'
-    assert test_market.active_vertices[1].value.marginal_price == 0.05, 'The first vertex should have been at 0.05 $/kWh.'
+    assert test_market.active_vertices[0].value.quantity == -4, 'The first vertex should have been at -4 kW.'
+    assert test_market.active_vertices[1].value.quantity == 6, 'The second vertex should have been at 6 kW.'
+    assert test_market.active_vertices[0].value.price == 0.02, 'The first vertex should have been at 0.02 $/kWh.'
+    assert test_market.active_vertices[1].value.price == 0.05, 'The first vertex should have been at 0.05 $/kWh.'
     assert len(test_market.marginal_prices) == 1, 'Only one marginal price should have been assigned.'
     assert test_market.marginal_prices[0].value == 0.032, 'The calculated marginal price should have been 0.032 $/kWh.'
 
@@ -1397,7 +1397,7 @@ def test_sum_vertices():
         IntervalValue(test_node, time_interval, test_market, MeasurementType.ActiveVertex, test_vertex[0]),
         IntervalValue(test_node, time_interval, test_market, MeasurementType.ActiveVertex, test_vertex[1])
     ]
-    test_asset_model.activeVertices = [interval_values[0], interval_values[1]]  # interval_value(1:2)
+    test_asset_model.active_vertices = [interval_values[0], interval_values[1]]  # interval_value(1:2)
 
     # Create test Neighbor and Neighbor objects.
     test_neighbor_model = Neighbor()
@@ -1429,14 +1429,14 @@ def test_sum_vertices():
     else:
         print('  - the expected number of vertices was returned')
 
-    powers = [x.power for x in vertices]
+    powers = [x.quantity for x in vertices]
 
     if len([x for x in powers if round(x, 4) not in [-110.0000, -10.0000, 10.0000, 110.0000]]) > 0:
         print('  - the vertex powers were not as expected')
     else:
         print('  - the vertex powers were as expected')
 
-    marginal_prices = [round(x.marginal_price, 4) for x in vertices]
+    marginal_prices = [round(x.price, 4) for x in vertices]
 
     if len([x for x in marginal_prices if round(x, 4) not in [0.1000, 0.2000, 0.3000]]) > 0:
         print('  - the vertex powers were not as expected')
@@ -1463,14 +1463,14 @@ def test_sum_vertices():
     else:
         print('  - the expected number of vertices was returned')
 
-    powers = [round(x.power, 4) for x in vertices]
+    powers = [round(x.quantity, 4) for x in vertices]
 
     if len([x for x in powers if x not in [-110.0000, -90.0000]]) > 0:
         print('  - the vertex powers were not as expected')
     else:
         print('  - the vertex powers were as expected')
 
-    marginal_prices = [x.marginal_price for x in vertices]
+    marginal_prices = [x.price for x in vertices]
 
     if len([x for x in marginal_prices if round(x, 4) not in [0.2000]]) > 0:
         print('  - the vertex powers were not as expected')
@@ -1483,7 +1483,7 @@ def test_sum_vertices():
     # Change the test asset to NOT have any flexibility. A constant should
     # not introduce a net vertex at a constant's marginal price. Marginal
     # price is NOT meaningful for an inelastic device.
-    test_asset_model.activeVertices = [interval_values[0]]
+    test_asset_model.active_vertices = [interval_values[0]]
 
     # Run the test.
     try:
@@ -1501,14 +1501,14 @@ def test_sum_vertices():
     else:
         print('  - the expected number of vertices was returned')
 
-    powers = [x.power for x in vertices]
+    powers = [x.quantity for x in vertices]
 
     if len([x for x in powers if round(x, 4) not in [-110.0000, 90]]) > 0:
         print('  - the vertex powers were not as expected')
     else:
         print('  - the vertex powers were as expected')
 
-    marginal_prices = [x.marginal_price for x in vertices]
+    marginal_prices = [x.price for x in vertices]
 
     if len([x for x in marginal_prices if round(x, 4) not in [0.1000, 0.3000, float("inf")]]) > 0:
         print('  - the vertex powers were not as expected')
@@ -1528,7 +1528,7 @@ def test_sum_vertices():
         IntervalValue(test_node, time_interval, test_market, MeasurementType.ActiveVertex, test_vertex[0]),
         IntervalValue(test_node, time_interval, test_market, MeasurementType.ActiveVertex, test_vertex[1])
     ]
-    test_asset_model.activeVertices = [interval_values[0], interval_values[1]]  # interval_value(1:2)
+    test_asset_model.active_vertices = [interval_values[0], interval_values[1]]  # interval_value(1:2)
 
     # Run the test.
     try:
@@ -1543,14 +1543,14 @@ def test_sum_vertices():
     else:
         print('  - the expected number of vertices was returned')
 
-    powers = [x.power for x in vertices]
+    powers = [x.quantity for x in vertices]
 
     if len([x for x in powers if round(x, 4) not in [-110.0000, -90.0000, 110.0000]]) > 0:
         print('  - the vertex powers were not as expected')
     else:
         print('  - the vertex powers were as expected')
 
-    marginal_prices = [x.marginal_price for x in vertices]
+    marginal_prices = [x.price for x in vertices]
 
     if len([x for x in marginal_prices if round(x, 4) not in [0.1000, 0.3000]]) > 0:
         print('  - the vertex powers were not as expected')
