@@ -118,9 +118,9 @@ def append_interval_value_table(method=METHOD, objects=None):
         else:
             MARKET_CLEARING_DATE = ''
             MARKET_CLEARING_TIME = ''
-        if obj.time_interval.start_time:
+        if obj.interval.start_time:
             INTERVAL_STARTING_DATE = obj.time_interval.start_time.strftime(DATE_FORMAT)
-            INTERVAL_STARTING_TIME = obj.time_interval.start_time.strftime(TIME_FORMAT)
+            INTERVAL_STARTING_TIME = obj.interval.start_time.strftime(TIME_FORMAT)
         else:
             INTERVAL_STARTING_DATE = ''
             INTERVAL_STARTING_TIME = ''
@@ -131,8 +131,8 @@ def append_interval_value_table(method=METHOD, objects=None):
             VALUE_2 = ''
             VALUE_3 = ''
         else:
-            VALUE_1 = obj.value.marginal_price
-            VALUE_2 = obj.value.power
+            VALUE_1 = obj.value.price
+            VALUE_2 = obj.value.quantity
             VALUE_3 = obj.value.record
         record = [TIMESTAMP, SOURCE_TYPE, SOURCE_NAME, MARKET_SERIES, MARKET_CLEARING_DATE, MARKET_CLEARING_TIME,
                   INTERVAL_STARTING_DATE, INTERVAL_STARTING_TIME, MEASUREMENT_TYPE, VALUE_1, VALUE_2, VALUE_3]
