@@ -14,8 +14,8 @@ _log = logging.getLogger(__name__)
 
 
 class LocalDataManager(DataManager):
-    def __init__(self, transactive_node, db_params: dict, *args, **kwargs):
-        super(LocalDataManager, self).__init__(transactive_node, *args, **kwargs)
+    def __init__(self, parent, db_params: dict, *args, **kwargs):
+        super(LocalDataManager, self).__init__(parent, *args, **kwargs)
         # TODO: Should this just be checking for a db_type of local? Is this the same code for postgres or others?
         self.db_params = db_params if db_params else {}
         database_url = self.db_params.get('url', 'sqlite:///tent_db.sqlite')
