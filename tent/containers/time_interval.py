@@ -148,5 +148,13 @@ class IntervalSeries:
     def start_times(self):
         return iter(self._intervals.keys())
 
+    def get_by_start_time(self, start_time: datetime) -> TimeInterval:
+        """Get the TimeInterval by its start time."""
+        if isinstance(start_time, str):
+            start_time = datetime.fromisoformat(start_time)
+        if not isinstance(start_time, datetime):
+            raise TypeError("start_time must be a datetime or an ISO format string.")
+        return self._intervals.get(start_time, None)
+
     def destroy(self):
         self._intervals = {}
