@@ -1,6 +1,7 @@
 import logging
 
 from sortedcontainers import SortedSet
+from typing import Self
 from weakref import proxy
 
 from tent.base import Archivable, Component
@@ -19,6 +20,12 @@ class SDCurve(Archivable):
     Aggregates Vertex objects into their supply or demand curve.
     """
 
+    # TODO: If there is only one vertex, should we:
+    #  - overwrite the vertex price with inf on read?
+    #  - Alternately, should we add check for single vertex to check_rationality(), update() or elsewhere?
+    #       - The former would avoid storing a vertex with a price of inf, in case more vertices were added later.
+    #  - A key question is, do we __always__ need to have a price of inf for a single vertex?
+    #  - There are currently (at least) checks (which overwrite the value) in entity and in neighbor.update_vertices()
     def __init__(self,
                  measurement,
                  interval: TimeInterval,
@@ -49,6 +56,41 @@ class SDCurve(Archivable):
     def measurement(self):
         return self.__measurement
 
+    @property
+    def costs(self):
+        """Returns a list of the costs in the SDCurve."""
+        return [v.cost for v in self.vertices]
+
+    @property
+    def prices(self):
+        """Returns a list of the prices in the SDCurve."""
+        return [v.price for v in self.vertices]
+
+    @property
+    def quantities(self):
+        """Returns a list of the quantities in the SDCurve."""
+        return [v.quantity for v in self.vertices]
+
+    @property
+    def max_price(self):
+        """Returns the maximum price in the SDCurve."""
+        return max(self.prices, default=None)
+
+    @property
+    def min_price(self):
+        """Returns the minimum price in the SDCurve."""
+        return min(self.prices, default=None)
+
+    @property
+    def max_price_vertex(self):
+        """Returns the vertex with the maximum price in the SDCurve."""
+        return max(self.vertices, key=lambda v: v.price, default=None)
+
+    @property
+    def min_price_vertex(self):
+        """Returns the vertex with the minimum price in the SDCurve."""
+        return min(self.vertices, key=lambda v: v.price, default=None)
+
     # TODO: Min an max quantity methods are attempting to compare floats and vertices.
     #  These really need to work with one or the other.  There can be a second function that works with the other.
     def max_quantity(self, limit: float = None) -> float:
@@ -68,6 +110,9 @@ class SDCurve(Archivable):
 
     def has_vertex_at_quantity(self, quantity: float) -> bool:
         return bool(next(filter(lambda v: v.quantity == quantity, self.vertices), False))
+
+    def get_vertices_at_quantity(self, quantity: float) -> Self:
+        return SDCurve(None, self.interval, [v.quantity for v in  self.vertices if v.quantity == quantity])
 
     @staticmethod
     def _parse_vertices(vertices):
@@ -157,8 +202,8 @@ class SDCurve(Archivable):
                         irrational_vertices.append(lower)
 
         v_temp.difference_update(irrational_vertices)   # Remove remaining irrational vertices from the SDCurve.
-        # TODO: Should this update the SDCurve or return a new one (as here)?
-        #  If so, perhaps rename to "rationalize" and have it only return the irrational vertex count?
+        # TODO: Should this update the SDCurve or return a new one? (This seems to do both).
+        #  Perhaps make explicitly in-place, rename to "rationalize" and only return the irrational vertex count?
         # Return rationalized curve (without the extra infinite vertices) and the nuber of irrational vertices found.
         return SDCurve(self.measurement, self.interval, v_temp[1:-1]), ivf
 
@@ -299,16 +344,14 @@ class SDCurve(Archivable):
 
         # # The marginal power lies among the active vertices.
         for lower, upper in zip(self.vertices, self.vertices[1:]):
-            if lower.quantity <= power < upper.quantity:
-                # The power lies on a segment between two defined vertices.
-                if lower.quantity == upper.quantity:
-                    # The segment is horizontal. Marginal price is indefinite. Return the second vertex price and warn.
-                    _log.warning('Indeterminate price due to horizontal segment of SDCurve. Returning second price.')
-                    return upper.price
-                else:
-                    # The segment is not horizontal. Interpolate on the segment.
-                    slope = (upper.price - lower.price) / (upper.quantity - lower.quantity)  # [$/kWh/kW]
-                    return lower.price + (power - lower.quantity) * slope  # [$/kWh]
+            if lower.quantity == power == upper.quantity:
+                # The segment is horizontal. Marginal price is indefinite. Return the second vertex price and warn.
+                _log.warning('Indeterminate price due to horizontal segment of SDCurve. Returning second price.')
+                return upper.price
+            elif lower.quantity <= power < upper.quantity:
+                # The segment is not horizontal. Interpolate on the segment.
+                slope = (upper.price - lower.price) / (upper.quantity - lower.quantity)  # [$/kWh/kW]
+                return lower.price + (power - lower.quantity) * slope  # [$/kWh]
 
     @staticmethod
     def get_prices_from_curves(curves: list) -> list[float]:
@@ -361,7 +404,15 @@ class SDCurve(Archivable):
         return 'sd_curve'
 
     def get_record(self) -> dict:
-        raise NotImplementedError
+        record = super(SDCurve, self).get_record()
+        record.update({
+            "measurement_id": self.measurement.id if self.measurement else None,
+            "owner_id": self.measurement.source.id if self.measurement else None,
+            # "parent_curve_id": self.parent.id if self.measurement else None,
+            "time_interval_id": self.interval.id if self.interval else None,
+            "timestamp": self.interval.start_time if self.interval else None
+        })
+        return record
 
     @classmethod
     def get_archive_definitions(cls) -> list[dict]:
@@ -371,11 +422,11 @@ class SDCurve(Archivable):
                 "name": "sd_curve",
                 "columns": [
                     {"name": "id", "type": "Uuid", "identity": True, "kwargs": {"primary_key": True}},
-                    {"name": "time_interval_id", "foreign_key": "time_interval.id"},
+                    {"name": "measurement_id", "foreign_key": "measurement.id"},
                     {"name": "owner_id", "foreign_key": "component.id"},
-                    {"name": "parent_curve_id", "foreign_key": "sd_curve.id"},
-                    {"name": "timestamp", "type": "DateTime"},
-                    {"name": "is_default", "type": "Boolean"}
+                    # {"name": "parent_curve_id", "foreign_key": "sd_curve.id"}, # TODO: Is this needed for order?
+                    {"name": "time_interval_id", "foreign_key": "time_interval.id"},
+                    {"name": "timestamp", "type": "DateTime"}
                 ]
             }
         ])
@@ -386,10 +437,14 @@ class SDMeasurement(Measurement):
     DATA_TYPE = SDCurve
     def __init__(self,
                  source: Component,
-                 vertex_type: MeasurementType = MeasurementType.Vertex):
-        if not 'Vertex' in vertex_type.name:
+                 measurement_type: MeasurementType = MeasurementType.Vertex,
+                 measurement_unit: MeasurementUnit = MeasurementUnit.kW):
+                # TODO: Adding vertex_unit: MeasurementUnit would allow SDCurves for quantities other than power.
+                #  This would require also adding the unit to the TransactiveSignal and making sure it is passed
+                #  everywhere it needs to be.
+        if not 'Vertex' in measurement_type.name:
             raise ValueError('SDMeasurement must contain vertex-type objects.')
-        super(SDMeasurement, self).__init__(source, MeasurementType.Vertex)
+        super(SDMeasurement, self).__init__(source, MeasurementType.Vertex, measurement_unit)
 
     @property
     def empty(self):
@@ -408,6 +463,6 @@ class SDMeasurement(Measurement):
 
     def update(self, time_interval: TimeInterval,
                value: SDCurve | list[Vertex] | list[list[float]] | list[dict],
-               archive: bool = True):
+               archive: bool = True, replace: bool = False):
         value = value.vertices if isinstance(value, SDCurve) else value
-        super(SDMeasurement, self).update(time_interval, value, archive)
+        super(SDMeasurement, self).update(time_interval, value, archive, replace)

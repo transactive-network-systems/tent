@@ -196,8 +196,8 @@ class Measurement(Archivable):
     def total(self, market=None):
         return sum(mv.value for ti, mv in self._data.items() if ti.market == market) if market else sum(self.values)
 
-    def update(self, time_interval: TimeInterval, value: any, archive: bool = True):
-        if time_interval in self._data:
+    def update(self, time_interval: TimeInterval, value: any, archive: bool = True, replace=False):
+        if time_interval in self._data and not replace:
             # Receiving datatype, here, must handle all its own transformations from allowed input types.
             self._data[time_interval].update(value)
         else:
