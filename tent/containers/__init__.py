@@ -3,7 +3,7 @@ from tent.containers.measurement import Measurement, MeasurementValue
 from tent.containers.sd_curve import SDCurve, SDMeasurement
 from tent.containers.time_interval import IntervalSeries, TimeInterval
 from tent.containers.vertex import Vertex  # NOTE: Must be imported before TransactiveSignal to avoid circular import.
-from tent.containers.transactive_record import TransactiveSignal
+from tent.containers.transactive_signal import TransactiveSignal
 
 
 __all__ = ['IntervalSeries', 'MarketDurations', 'MarketTimings', 'Measurement', 'MeasurementValue',
