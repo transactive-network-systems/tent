@@ -59,7 +59,6 @@ class Vertex(Archivable):
                  quantity: float = 0.0,
                  continuity: bool = True,
                  uncertainty: float = 0.0,
-                 record: int = 0, # TODO: Remove this and move to SDCurve.
                  curve = None
                  ):  # TODO: Order.Vertex had a timestamp argument. Should this or should it be in SDCurve?
                      #  Maybe dt_created, dt_modified, etc. in SDCurve?
@@ -101,18 +100,9 @@ class Vertex(Archivable):
         #  Vertex of the same SDCurve object having less quantity magnitude.
         self.continuity: bool = validate_bool(continuity, 'continuity')  # boolean
 
-    # TODO: Do we need this property, or can we just rely on finding this in the SDCurve?
     @property
-    def record(self):
+    def record(self):  # TODO: Consider change to "sequence_number" for clarity.
         return self.curve.vertices.index(self)
-
-    def get_dict(self):
-        vertex_dict = {
-            "marginalPrice": self.price,
-            "power": self.quantity,
-            "record": self.record
-        }
-        return vertex_dict
 
     def __lt__(self, other):
         return (self.price, self.quantity) < (other.price, other.quantity)
@@ -142,8 +132,17 @@ class Vertex(Archivable):
         return 'vertex'
 
     def get_record(self) -> dict:
-        # TODO: Need get_record implemented.
-        raise NotImplementedError
+        record = super(Vertex, self).get_record()
+        record.update({
+            "curve_id": self.curve.id if self.curve else None,
+            "marginal_price": self.price,
+            "power": self.quantity,
+            "prod_cost": self.cost,
+            "continuity": self.continuity,
+            "uncertainty": self.uncertainty,
+            "record": self.record
+        })
+        return record
 
     @classmethod
     def get_archive_definitions(cls) -> list[dict]:
@@ -158,7 +157,7 @@ class Vertex(Archivable):
                     {"name": "power", "type": "Float"},
                     {"name": "prod_cost", "type": "Float"},
                     {"name": "continuity", "type": "Boolean"},
-                    {"name": "power_uncertainty", "type": "Float"},
+                    {"name": "uncertainty", "type": "Float"},
                     {"name": "record", "type": "Integer"}
                 ]
             }
