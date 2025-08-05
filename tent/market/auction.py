@@ -186,10 +186,10 @@ class Auction(Market):
 
                 if upstream_agent.transactive is True:
                     # Call on the upstream agent model  to prepare its transactive signal.
-                    upstream_agent.prep_transactive_signal(self, self.tn)
+                    upstream_agent.prep_transactive_signal(self)
 
                     # Send transactive signal (i.e., aggregated bid) to the upstream agent if it is a transactive agent.
-                    upstream_agent.send_transactive_signal(self, self.tn)
+                    upstream_agent.send_transactive_signal(self)
 
             # TODO: We don't have foolproof verification that the upstream agent was sent this signal,
             #  but this might be improved later. This seems like the right place because it's confirmed that
@@ -273,7 +273,7 @@ class Auction(Market):
                 downstream_agent.schedule_power(self)
 
                 # Prepare aggregated offer for the downstream agent, and send it a transactive signal (i.e., an offer).
-                downstream_agent.prep_transactive_signal(self, self.tn)
-                downstream_agent.send_transactive_signal(self, self.tn)
+                downstream_agent.prep_transactive_signal(self)
+                downstream_agent.send_transactive_signal(self)
 
             self._stateIsCompleted = True

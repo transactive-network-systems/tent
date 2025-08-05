@@ -129,7 +129,7 @@ class BulkSupplierDC(Neighbor):
 
             # Modify the vertices to include the impacts of marginal losses.
             if self.loss_factor != 0:
-                self.include_marginal_losses(vertices=sd_curve)
+                self.include_marginal_losses(sd_curve)
 
             # Modify the vertices to include the impacts of demand charges.
             # Make sure that the demand_rate is set to the current demand rate.
@@ -138,19 +138,8 @@ class BulkSupplierDC(Neighbor):
 
             # Demand Charges only apply to HLH hours.
             if is_heavyloadhour(time_interval.start_time) and self.demand_rate != 0:
-                self.include_demand_charges(vertices=sd_curve, threshold=active_threshold)
-
-                # Update the active threshold. This is easy if the current interval has a corresponding scheduled power.
-                scheduled_power = self.scheduled_powers.get_by_interval(time_interval)
-
-                # However, if the power is not yet scheduled (price is not known), the power must be inferred:
-                if not scheduled_power:
-                    predicted_market_price = market.price_model.get(time_interval.start_time)[0]
-                    scheduled_power = sd_curve.power_from_vertices(predicted_market_price)
-
-                # Regardless how scheduled power was found, the temporary active threshold is updated within the series
-                # of time intervals in this market object.
-                active_threshold = max(active_threshold, scheduled_power)
+                self.include_demand_charges(sd_curve=sd_curve, threshold=active_threshold)
+                active_threshold = self._get_new_threshold(sd_curve, active_threshold, market, time_interval)
 
             # Update active vertices for the indexed time interval.
             self.active_vertices.update(time_interval, sd_curve)

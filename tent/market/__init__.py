@@ -598,23 +598,8 @@ class Market(Component):
         - power: system net power at the vertex (The system "clears" where system net power is zero.)
         """
         for time_interval in self.time_intervals:
-            # Find and delete existing aggregate active vertices in the indexed time interval. They will be recreated.
-            self.active_vertices = [x for x in self.active_vertices
-                                    if x.interval.start_time != time_interval.start_time]
-
-            # Call the utility sum_vertices to recreate the aggregate vertices in the indexed time interval. (This
-            # method is separated out because it will be used by other methods.)
-            summed_vertices = self.sum_vertices(self.tn, time_interval)
-
-            # Create and store an interval value for each vertex.
-            for vertex in summed_vertices:
-                self.active_vertices.append(IntervalValue(calling_object=self,
-                                                          time_interval=time_interval,
-                                                          market=self,
-                                                          measurement_type=MeasurementType.SystemVertex,
-                                                          value=vertex
-                                                          )
-                                            )
+            # Call the utility sum_vertices to recreate the aggregate vertices in the indexed time interval.
+            self.active_vertices.update(time_interval, self.sum_vertices(self.tn, time_interval), replace=True)
 
     def balance(self, k=1):
         """
@@ -654,49 +639,34 @@ class Market(Component):
 
             elif self.series.method == Method.Interpolation:
                 # Get the indexed active system vertices.
-                active_vertices = [x.value for x in self.active_vertices
-                                   if x.interval.start_time == time_interval.start_time]
+                active_sd_curve: SDCurve = self.active_vertices.get_by_interval(time_interval)
 
-                # Order the system vertices in the indexed time interval by price and power.
-                active_vertices = order_vertices(active_vertices)
-
-                err_msg = ''
                 try:
                     # Find the vertex that bookcases the balance point from the lower side.
-                    lower_active_vertex = [x for x in active_vertices if x.quantity < 0]
-                    if len(lower_active_vertex) == 0:
-                        _log.warning(f'No load demand cases were found in {time_interval.name}')
-                        err_msg = f"At {time_interval.name}, there is no point having power < 0"
-                    else:
-                        lower_active_vertex = lower_active_vertex[-1]
+                    if not (lower_active_vertex := max(filter(lambda v: v.quantity < 0, active_sd_curve.vertices),
+                                                       key=lambda v: v.quantity, default=None)):
+                        raise ValueError(f'No load demand vertices (quantity < 0) were found.')
 
                     # Find the vertex that bookcases the balance point from the upper side.
-                    upper_active_vertex = [x for x in active_vertices if x.quantity >= 0]
-                    if len(upper_active_vertex) == 0:
-                        _log.warning(f'No supply power cases were found in {time_interval.name}')
-                        err_msg = f"At {time_interval.name}, there is no point having power >= 0 "
-                    else:
-                        upper_active_vertex = upper_active_vertex[0]
+                    if not (upper_active_vertex := min(filter(lambda v: v.quantity >= 0, active_sd_curve.vertices),
+                                                       key=lambda v: v.quantity, default=None)):
+                        raise ValueError(f'No supply vertices (quantity >= 0) were found.')
+
+                    if (power_range := upper_active_vertex.quantity - lower_active_vertex.quantity) == 0:
+                        _log.warning(f'There is no quantity range is 0. Marginal price is not unique.')
 
                     # Interpolate the marginal price in the interval using a principle of similar triangles.
-                    power_range = upper_active_vertex.power - lower_active_vertex.power
-                    marginal_price_range = upper_active_vertex.marginalPrice - lower_active_vertex.marginalPrice
-                    if power_range == 0:
-                        _log.warning(f'There is no power range to interpolate.'
-                                     f' Marginal price is not unique in {time_interval.name}')
-                        err_msg = f"At {time_interval.name}, power range is 0"
-                    cleared_marginal_price = - marginal_price_range * lower_active_vertex.power / power_range \
-                                             + lower_active_vertex.marginalPrice
+                    marginal_price_range = upper_active_vertex.price - lower_active_vertex.price
+                    cleared_marginal_price = (- marginal_price_range * lower_active_vertex.quantity / power_range
+                                             + lower_active_vertex.price)
                     # TODO: Consider adding a feature to find each asset's and neighbor's cleared power at this point.
                     #       This would require interpolation of the cleared average power, and the implication must be
                     #       interpreted for each asset and neighbor.
-
-                except RuntimeWarning as w:
-                    _log.warning(f'No balance point was found in {time_interval.name}: {w}')
-                    _log.error(err_msg)
-
+                except ValueError as e:
+                    _log.warning(f'Failed to balance {self.name} in time interval {time_interval.name}: {e}')
                     self.converged = False
                     return
+
             # Regardless of the method used, assign the cleared marginal price to the marginal price value for the
             # indexed active time interval.
             self.marginal_prices.update(time_interval, cleared_marginal_price)
@@ -827,152 +797,51 @@ class Market(Component):
         :param: object_to_exclude:
         :returns: vertices: list of Vertex objects in the given time interval.
         """
-        # Initialize a list of marginal prices mps at which vertices will be created.
-        marginal_price_list = []
-        for neighbor in self.tn.neighbors:
-
+        # Build a list of marginal prices mps at which vertices will be created. For each neighbor and asset:
+        #    - Where there is one vertex, assign infinite marginal price because quantity is constant.
+        #    - Where there are multiple vertices. Use the marginal price values from the vertices themselves.
+        marginal_price_list = SortedList()
+        for entity in self.tn.neighbors + self.tn.local_assets:
             # Jump out of this iteration if neighbor model happens to be the "object to exclude"
-            if object_to_exclude is not None and neighbor == object_to_exclude:
+            if object_to_exclude is not None and entity == object_to_exclude:
                 continue
 
-            # Find the neighbor model's active vertices in this time interval
-            interval_values = find_objs_by_ti(neighbor.active_vertices, time_interval)  #
+            sd_curve = entity.active_vertices.get_by_interval(time_interval)
+            if not sd_curve.empty:
+                marginal_price_list.update([float("inf")] if len(sd_curve) == 1 else sd_curve.prices)  # [$/kWh]
 
-            if len(interval_values) > 0:
-                # At least one active vertex was found in the time interval. Extract the vertices from the interval
-                # values.
-                vertices = [x.value for x in interval_values]  #
+        # Keep only two (near) duplicates of any marginal price.
+        #   Where there are two instances of a price, offset one by a small number so the SDCurve remains a function.
+        for mp in marginal_price_set := SortedSet(marginal_price_list):
+            if marginal_price_list.count(mp) > 1:
+                marginal_price_set.add(mp - 1e-10)
 
-                if len(vertices) == 1:
-                    # There is one vertex. This means the power is constant for this neighbor. Enforce the policy of
-                    # assigning infinite marginal price to constant vertices.
-                    marginal_prices = [float("inf")]  # [$/kWh]
+        # An infinite marginal price is meaningful only if there is exactly one vertex (no flexibility). Remove others.
+        if len(marginal_price_set) > 1:
+            marginal_price_set.discard(float('inf'))
 
-                else:
-                    # There are multiple vertices. Use the marginal price values from the vertices themselves.
-                    marginal_prices = [x.price for x in vertices]  # [$/kWh]
-
-                marginal_price_list.extend(marginal_prices)  # marginal prices [$/kWh]
-
-        for asset in self.tn.local_assets:
-
-            # Jump out of this iteration if local asset model nm happens to be
-            # the "object to exclude"
-            if object_to_exclude is not None and asset == object_to_exclude:
-                continue
-
-            # Find the local asset model's active vertices in this time interval.
-            interval_values = find_objs_by_ti(asset.active_vertices, time_interval)
-
-            if len(interval_values) > 0:
-                # At least one active vertex was found in the time interval. Extract the vertices from the interval
-                # values.
-                vertices = [x.value for x in interval_values]  #
-                # Extract the marginal prices from the vertices.
-                if len(vertices) == 1:
-                    # There is one vertex. This means the power is constant for this local asset. Enforce the policy of
-                    # assigning infinite marginal price to constant vertices.
-                    marginal_prices = [float("inf")]  # [$/kWh]
-
-                else:
-                    # There are multiple vertices. Use the marginal price values from the vertices themselves.
-                    marginal_prices = [x.price for x in vertices]  # marginal prices [$/kWh]
-
-                marginal_price_list.extend(marginal_prices)  # [$/kWh]
-
-        # A list of vertex marginal prices have been created.
-        # Sort the marginal prices from least to greatest.
-        marginal_price_list.sort()  # [$/kWh]
-        # Ensure that no more than two vertices will be created at the same marginal price. The third output of function
-        # unique() is useful here because it is the index of unique entries in the original vector.
-        # [~, ~, ind] = unique(mps)  # index of unique vector contents
-
-        # Create a new vector of marginal prices. The first two entries are accepted because they cannot violate the
-        # two-duplicates rule. The vector is padded with zeros, which should be computationally efficient. A counter is
-        # used and should be incremented with new vector entries.
-        if len(marginal_price_list) >= 3:
-            marginal_price_list_new = [marginal_price_list[0], marginal_price_list[1]]
-        else:
-            marginal_price_list_new = list(marginal_price_list)
-
-        # Index through the indices and append the new list only when there are fewer than three duplicates.
-        for i in range(2, len(marginal_price_list)):
-            if marginal_price_list[i] != marginal_price_list[i - 1] \
-                    or marginal_price_list[i - 1] != marginal_price_list[i - 2]:
-                marginal_price_list_new.append(marginal_price_list[i])
-
-        # 180907DJH: THIS CONDITIONAL (COMMENTED OUT) WAS NOT QUITE RIGHT. A MARGINAL PRICE AT INFINITY IS MEANINGFUL
-        #             ONLY IF THERE IS EXACTLY ONE VERTEX-NO FLEXIBILITY. OTHERWISE, IT IS SUPERFLUOUS AND SHOULD BE
-        #             ELIMINATED. THIS MUCH SIMPLER APPROACH ENSURES THAT INFINITY IS RETAINED ONLY IF THERE IS A SINGLE
-        #             MARGINAL PRICE. OTHERWISE, INFINITY MARGINAL PRICES ARE TRIMMED FROM THE SET.
-        marginal_price_list = [marginal_price_list_new[0]]
-        for i in range(1, len(marginal_price_list_new)):
-            if marginal_price_list_new[i] != float('inf'):
-                marginal_price_list.append(marginal_price_list_new[i])
-
-        # A clean list of marginal prices has been created
-        # Correct assignment of vertex power requires a small offset of any duplicate values. Index through the new list
-        # of marginal prices again.
-        for i in range(1, len(marginal_price_list)):
-            if marginal_price_list[i] == marginal_price_list[i - 1]:
-                # A duplicate has been found. Offset the first of the two by a very small number.
-                marginal_price_list[i - 1] = marginal_price_list[i - 1] - 1e-10  # [$/kWh]
-
-        # Create vertices at the marginal prices. Initialize the list of vertices.
-        vertices = []
+        # A clean set of marginal prices has been created. Create vertices at the marginal prices.
+        summed_curve = SDCurve(None, time_interval)
         # Index through the cleaned list of marginal prices
-        for i in range(len(marginal_price_list)):
+        for mp in marginal_price_list:
             # Create a vertex at the indexed marginal price value
-            interval_value = Vertex(marginal_price_list[i], 0, 0)
-
-            # Initialize the net power pwr and total production cost pc at the indexed vertex
-            vertex_power = 0.0  # [avg.kW]
-            vertex_production_cost = 0.0  # [$]
+            vertex = Vertex(mp, 0, 0)
 
             # Include power and production costs from neighbor models. Index through the active neighbor models.
-            for neighbor in self.tn.neighbors:
-                if neighbor == object_to_exclude:
+            for entity in self.tn.neighbors + self.tn.local_assets:
+                if entity == object_to_exclude:
                     continue
 
-                # Calculate the indexed neighbor model's power at the indexed marginal price and time interval. NOTE:
-                # This must not corrupt the "scheduled power" at the converged system's marginal price.
-                neighbors_power = neighbor.production(marginal_price_list[i], time_interval)  # [avg.kW]
-
-                # Calculate the neighbor model's production cost at the indexed marginal price and time interval, and
-                # add it to the sum production cost pc. NOTE: This must not corrupt the "scheduled" production cost for
-                # this neighbor model.
-                neighbor_sd_curve = neighbor.active_vertices.get_by_interval(time_interval)
-                vertex_production_cost += neighbor_sd_curve.prod_cost_from_vertices(neighbors_power)
-
-                # Add the neighbor model's power to the sum net power at this vertex.
-                vertex_power += neighbors_power  # [avg.kW]
-
-            # Include power and production costs from local asset models. Index through the local asset models.
-            for asset in self.tn.local_assets:
-                if asset == object_to_exclude:
-                    continue
-
-                # Calculate the power for the indexed local asset model at the indexed marginal price and time interval.
-                assets_power = asset.production(marginal_price_list[i], time_interval)  # [avg.kW]
-
-                # Find the indexed local asset model's production cost and add it to the sum of production cost pc for
-                # this vertex.
-                asset_sd_curve = asset.active_vertices.get_by_interval(time_interval)
-                vertex_production_cost += asset_sd_curve.prod_cost_from_vertices(assets_power)  # [$]
-
-                # Add local asset power p to the sum net power pwr for this vertex.
-                vertex_power = vertex_power + assets_power  # [avg.kW]
-
-            # Save the sum production cost pc into the new vertex iv
-            interval_value.cost = vertex_production_cost  # [$]
-
-            # Save the net power pwr into the new vertex iv
-            interval_value.quantity = vertex_power  # [avg.kW]
+                # Add the entity's production quantity & cost at this price and interval to those of the vertex.
+                entity_sd_curve = entity.active_vertices.get_by_interval(time_interval)
+                entity_production = entity.production(mp, time_interval)  # [avg.kW]
+                vertex.cost += entity_sd_curve.prod_cost_from_vertices(entity_production)
+                vertex.quantity += entity_production  # [avg.kW]
 
             # Append Vertex iv to the list of vertices
-            vertices.append(interval_value)
+            summed_curve.update(vertex)
 
-        return vertices
+        return summed_curve
 
     def update_costs(self):
         """

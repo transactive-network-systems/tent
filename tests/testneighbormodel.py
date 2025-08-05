@@ -203,7 +203,7 @@ def test_check_for_convergence():
     # NOTE: The latter-defined record must be placed in receivedSignal to satisfy a precondition.
     test_model.sent_signal = [tr[0]]
     test_model.received_signal = [tr[1]]
-    test_model.my_signal = test_model.sent_signal  # This is needed to prevent are_different2() from asserting differences
+    test_model.my_signal = test_model.sent_signal  # This is needed to prevent conditions_have_changed() from asserting differences
 
     try:
         test_model.check_for_convergence(test_market)
@@ -1426,7 +1426,7 @@ def test_remove_demand_charges():
     threshold = -191
     test_neighbor = Neighbor()
     try:
-        corrected_vertices = test_neighbor.remove_demand_charges(vertices=test_vertices, threshold=threshold)
+        corrected_vertices = test_neighbor.remove_demand_charges(sd_curve=test_vertices, threshold=threshold)
         print('  - The test ran without errors.')
     except RuntimeError as messages:
         print('  - ERRORS WERE ENCOUNTERED: ' + messages)
@@ -1443,7 +1443,7 @@ def test_remove_demand_charges():
     test_neighbor.demand_rate = 10
 
     try:
-        corrected_vertices = test_neighbor.remove_demand_charges(vertices=test_vertices, threshold=threshold)
+        corrected_vertices = test_neighbor.remove_demand_charges(sd_curve=test_vertices, threshold=threshold)
         print('  - The test ran without errors.')
     except RuntimeError as messages:
         print('  - ERRORS WERE ENCOUNTERED: ' + messages)
@@ -1464,7 +1464,7 @@ def test_remove_demand_charges():
     threshold = test_vertices[2].quantity  # i.e., -40
 
     try:
-        corrected_vertices = test_neighbor.remove_demand_charges(vertices=test_vertices, threshold=threshold)
+        corrected_vertices = test_neighbor.remove_demand_charges(sd_curve=test_vertices, threshold=threshold)
         print('  - The test ran without errors.')
     except RuntimeError as messages:
         print('  - ERRORS WERE ENCOUNTERED: ' + messages)
@@ -1484,7 +1484,7 @@ def test_remove_demand_charges():
     threshold = -140
 
     try:
-        corrected_vertices = test_neighbor.remove_demand_charges(vertices=test_vertices, threshold=threshold)
+        corrected_vertices = test_neighbor.remove_demand_charges(sd_curve=test_vertices, threshold=threshold)
         print('  - The test ran without errors.')
     except RuntimeError as messages:
         print('  - ERRORS WERE ENCOUNTERED: ' + messages)
@@ -1505,7 +1505,7 @@ def test_remove_demand_charges():
     # vertex creates at p=0.
 
     try:
-        corrected_vertices = test_neighbor.remove_demand_charges(vertices=test_vertices, threshold=threshold)
+        corrected_vertices = test_neighbor.remove_demand_charges(sd_curve=test_vertices, threshold=threshold)
         print('  - The test ran without errors.')
     except RuntimeError as messages:
         print('  - ERRORS WERE ENCOUNTERED: ' + messages)
@@ -1526,7 +1526,7 @@ def test_remove_demand_charges():
     threshold = -150  # This threshold is far below the vertices' powers.
 
     try:
-        corrected_vertices = test_neighbor.remove_demand_charges(vertices=[test_vertices[0]], threshold=threshold)
+        corrected_vertices = test_neighbor.remove_demand_charges(sd_curve=[test_vertices[0]], threshold=threshold)
         print('  - The test ran without errors.')
     except RuntimeError as messages:
         print('  - ERRORS WERE ENCOUNTERED: ' + messages)

@@ -49,10 +49,10 @@ from typing import Union
 from weakref import WeakKeyDictionary
 
 from tent.base import Entity
-from tent.containers import Measurement, SDCurve, SDMeasurement, TransactiveRecord, Vertex
+from tent.containers import Measurement, SDCurve, TransactiveSignal, Vertex
 from tent.enumerations import Direction, MeasurementType, MeasurementUnit
 from tent.market import Market
-from tent.utils.helpers import are_different1, are_different2, validate_bool
+from tent.utils.helpers import validate_bool
 from tent.utils.timer import Timer
 from tent.utils.log import setup_logging
 
@@ -118,35 +118,14 @@ class Neighbor(Entity):
         ##################################
         # Dynamically assigned attributes:
         ##################################
-        self.converged = False                              # [boolean]: True if converged
-        self.convergence_flags = Measurement(self, MeasurementType.ConvergenceFlag, MeasurementUnit.Boolean)
-        # TODO: Consider renaming "my_signals" to "prepared_signals", "unsent_signals", "working_signals", "next_signals" or something.
-        self.my_signals: WeakKeyDictionary[Market, SDMeasurement] = WeakKeyDictionary()  # Current signal, ready to send.
-        # TODO: Consider renaming "received_signals" to "last_received_signals".
-        self.received_signals: WeakKeyDictionary[Market, SDMeasurement] = WeakKeyDictionary()  # Last records received.
-        # TODO: Consider renaming sent_signals "last_sent_signals".
-        self.sent_signals: WeakKeyDictionary[Market, SDMeasurement] = WeakKeyDictionary()  # Last records sent.
-        self.received_curves = None
-
+        self.converged = False                                          # [boolean]: True if converged
+        self.convergence_flags: Measurement = Measurement(self, MeasurementType.ConvergenceFlag, MeasurementUnit.Boolean)
+        self.prepared_signals: WeakKeyDictionary[Market, TransactiveSignal] = WeakKeyDictionary()  # Current signal, ready to send.
+        self.last_received_signals: WeakKeyDictionary[Market, TransactiveSignal] = WeakKeyDictionary()  # Last records received.
+        self.last_sent_signals: WeakKeyDictionary[Market, TransactiveSignal] = WeakKeyDictionary()  # Last records sent.
 
         transactive_node.register_subscription(subscribe_key=f'{self.name}_incoming_transactive_signal',
                                                callback=self.receive_transactive_signal)
-
-    @staticmethod
-    def find_last_message_ts(signals, ti_name, fallback_value):
-
-        # Create a logical array: true if the received TransactiveRecord is in the indexed active time interval.
-        ti_signals = [s for s in signals if s.time_interval == ti_name]
-
-        # If a signal message was found in the indexed time interval, its timestamp ts is the last time a message was
-        # sent. Otherwise, set the ts to the fallback value (e.g., current time dt)
-        if len(ti_signals) > 0:
-            ts = [s.timestamp for s in ti_signals if s.record == 0]
-            ts = ts[0]
-        else:
-            ts = fallback_value
-
-        return ts, ti_signals
 
     def check_for_convergence(self, market):
         # Qualifies state of convergence with a transactive Neighbor object by active time interval and globally.
@@ -173,55 +152,46 @@ class Neighbor(Entity):
         # NOTE: this method should not be called unless the balancing sub-problem and all the scheduling sub-problems
         # have been calculated and have converged.
 
-        # Index through active time intervals to assess their convergence status.
-        t_threshold = timedelta(minutes=5)
         for time_interval in market.time_intervals:
-            # Capture the current datetime in the same format as for the TransactiveRecord messages.
-            dt = Timer.now()
-
             # Initialize a flag true (converged) in this time interval until proven otherwise.
             flag = True
 
-            # Find the TransactiveRecord objects sent from the transactive Neighbor in this indexed active time
-            # interval.
-            ss_ts, ss = self.find_last_message_ts(self.sent_signal, time_interval.name, dt - t_threshold)
-            rs_ts, rs = self.find_last_message_ts(self.received_signal, time_interval.name, dt)
-            ms_ts, ms = self.find_last_message_ts(self.my_signal, time_interval.name, dt)
+            # Find the TransactiveSignals in this indexed active time interval.
+            sent_time = self.last_sent_signals[market].signal_time
+            sent_signal = self.last_sent_signals[market].get_by_interval(time_interval)
+            received_time = self.last_received_signals[market].signal_time
+            received_signal = self.last_received_signals[market].get_by_interval(time_interval)
+            prepared_signal = self.prepared_signals[market].get_by_interval(time_interval)
 
             # Now, work through the convergence criteria.
-            if len(ss) == 0:
-                # No signal has been sent in this time interval. This is the first convergence requirement. Set the
-                # convergence flag false.
+            if not sent_signal:
+                # No signal has been sent in this time interval. This is the first convergence requirement.
+                # Set the convergence flag false.
                 _log.debug(f"Signal for time interval {time_interval.name}. Enable send flag.")
                 flag = False
 
-            # received and received AFTER last sent and there is a big diff b/w ss and rs
-            elif len(rs) > 0 and rs_ts > ss_ts and are_different1(ss, rs, self.convergence_threshold, self.name):
+            # received and received AFTER last sent and there is a big diff b/w sent_signal and received_signal
+            elif (len(received_signal) > 0 and received_time > sent_time
+                  and TransactiveSignal.balance_points_differ(sent_signal, received_signal, time_interval,
+                                                              self.convergence_threshold)):
                 # One or more TransactiveRecord objects has been received in the indexed time interval, and it has been
                 # received AFTER the last time a message was sent. These are preconditions for the second convergence
-                # requirement. Function are_different1() checks whether the sent and received signals differ
+                # requirement. Function balance_points_differ() checks whether the sent and received signals differ
                 # significantly. If all these conditions are true, the Neighbor is not converged.
-
-                _log.debug(f"TCC for {self.name} are_different1 returned True? Check:"
-                           f" rs={[(x.time_interval, x.record, x.power, x.marginal_price) for x in rs]},"
-                           f" ss={[(x.time_interval, x.record, x.power, x.marginal_price) for x in ss]},"
-                           f" rs_ts={rs_ts}, ss_ts={ss_ts}, threshold={self.convergence_threshold}")
-
+                _log.debug(f"Received signal for time interval {time_interval.name} differs from sent signal.")
                 flag = False
 
             # TODO: Find out why the timing does not work with t_threshold.
-            # elif dt - ss_ts >= t_threshold and are_different2(ms, ss, self.convergenceThreshold, self.name):
-            elif are_different2(ms, ss, self.convergence_threshold, self.name):
+            # elif dt - sent_time >= t_threshold and conditions_have_changed(prepared_signal, sent_signal,
+            #                                                                self.convergenceThreshold, self.name):
+            elif TransactiveSignal.conditions_have_changed(prepared_signal, sent_signal, time_interval,
+                                                           self.convergence_threshold):
                 # Delay 5 min after last send AND More than 5 minutes have passed since the last time a signal was sent.
-                # This is a precondition to the third convergence criterion. Function are_different2() returns true if
-                # mySignal (ms) and the sentSignal (ss) differ significantly, meaning that local conditions have changed
+                # This is a precondition to the third convergence criterion.
+                # Function conditions_have_changed() returns true if mySignal (prepared_signal)
+                # and the sentSignal (sent_signal) differ significantly, meaning that local conditions have changed
                 # enough that a new, revised signal should be sent.
-
-                _log.debug(f"TCC for {self.name} are_different2 returned True? Check:"
-                           f" ms={[(x.time_interval, x.record, x.power, x.marginal_price) for x in ms]},"
-                           f" ss={[(x.time_interval, x.record, x.power, x.marginal_price) for x in ss]},"
-                           f" rs_ts={rs_ts}, ss_ts={ss_ts}, threshold={self.convergence_threshold}")
-
+                _log.debug(f"Local conditions have changed for time interval {time_interval.name}.")
                 flag = False
 
             self.convergence_flags.update(time_interval, flag)
@@ -345,75 +315,62 @@ class Neighbor(Entity):
                 Updates self.activeVertices - an array of IntervalValues that contain Vertex() structs
         """
 
-        # (1) Generate active vertices for the non-transactive or transactive neighbor object.
-        if not self.default_vertices:
-            # TODO: Is this check necessary? Entity.default_vertices, itself, has a default.
-            _log.warning(f'No default vertices were found for neighbor object {self.name}. '
-                    'No active vertices can be created and scheduling was not performed')
-            return
-
         # Recall the current demand threshold that applies to this neighbor in this month, and assign it to the active
         #  threshold that may increase while indexing through the time intervals.
         active_threshold = self.demand_threshold
 
         for time_interval in market.time_intervals:
             # Check for transactive records in the indexed time interval and market.
-            received_vertices = [x for x in self.received_signal if x.time_interval == time_interval.name]
+            received_signal: TransactiveSignal = self.last_received_signals.get(market)
+            received_sd_curve: SDCurve = (deepcopy(received_signal.get_by_interval(time_interval))
+                                          if received_signal else None)
 
-            if not self.transactive or not received_vertices:
+            if not self.transactive or not received_sd_curve:
                 # Note: Where non-transactive neighbor boundary conditions are more sophisticated, it may be necessary
                 #  or desirable to override this update_vertices method or make default_vertices a property.
-                self.active_vertices.update(time_interval, self.default_vertices)
+                self.active_vertices.update(time_interval, self.default_vertices, archive=False, replace=True)
                 if self.transactive:
                     # No records for an interval should be an abnormal condition except on startup of iterative markets.
                     _log.warning(f'No received transactive signal was found for transactive neighbor {self.name}'
                                  f' in time interval {time_interval.name}')
 
             else:  # The neighbor is transactive and at least one vertex has been received for this time interval.
-                    # Re-create active vertices from the received transactive records.
-                    # TODO: Check rationality is a method on SDCurve, not a list of TransactiveRecords.
-                    received_vertices, _ = received_vertices.check_rationality(action="fix_up")
+                # Re-create active vertices from the received transactive records.
+                received_sd_curve, _ = received_sd_curve.check_rationality(action="fix_up")
 
-                    # TODO: Is adjustment for a single vertex still necessary here or should it happen elsewhere?
-                    #  This also happens in creation of default_vertices in Entity. Should it happen for all SDCurves?
-                    #  If so, should it actually overwrite the value or only return inf if there is only one on read?
-                    # Check for and correct treatment of a lone default vertex marginal price.
-                    if len(received_vertices) == 1:
-                        received_vertices[0].price = float('inf')
-                    self.active_vertices.update(time_interval, received_vertices)
+                # TODO: Should this block be added to check_rationality?
+                # Check for and correct treatment of a lone default vertex marginal price.
+                if len(received_sd_curve) == 1:
+                    received_sd_curve.vertices[0].price = float('inf')
+                self.active_vertices.update(time_interval, received_sd_curve, archive=False, replace=True)
 
             # At this point, active vertices have been created, regardless whether the neighbor is transactive.
             #  These will be acted upon to include the impacts of marginal losses and demand charges.
-            sd_curve =self.active_vertices.get_by_interval(time_interval)
+            active_sd_curve =self.active_vertices.get_by_interval(time_interval)
 
             # Include the impacts of marginal losses for power that is RECEIVED from this neighbor.
             # Note: This impact can be turned off by setting the neighbor's loss_factor = 0.
             if self.loss_factor != 0:
-                self.include_marginal_losses(vertices=sd_curve)
+                self.include_marginal_losses(active_sd_curve)
 
             # Include the impacts of demand charges that are imposed on any power that is RECEIVED from this neighbor.
             # Note: This logic may be turned off by simply setting the neighbor's demand_rate = 0.
             if self.demand_rate != 0:
-                # TODO: The block after include_demand charges that updates the active_threshold is duplicated
-                #  in both places where that is called. Break out into function? Move to include_demand_charges?
-                #  NOTE: include_demand_charges alters the threshold internally,
-                #  but it is the passed value that gets updated below.
-                self.include_demand_charges(vertices=sd_curve, threshold=active_threshold)
+                self.include_demand_charges(sd_curve=active_sd_curve, threshold=active_threshold)
+                active_threshold = self._get_new_threshold(active_sd_curve, active_threshold, market, time_interval)
 
-                # Update the active threshold. This is easy if the current interval has a corresponding scheduled power.
-                current_scheduled_power = self.scheduled_powers.get_by_interval(time_interval)
+        self.active_vertices.archive()
 
-                # However, if the power is not yet scheduled (price is not known), the power must be inferred:
-                if not current_scheduled_power:
-                    predicted_market_price = market.price_model.get(time_interval.start_time)[0]
-                    current_scheduled_power = sd_curve.power_from_vertices(predicted_market_price)
-
-                # Regardless how scheduled power was found, the temporary active threshold is updated within the series
-                # of time intervals in this market object.
-                # TODO: This never gets saved back to self.demand_threshold. That is the intended behavior, right?
-                active_threshold = max(active_threshold, current_scheduled_power)
-
-        # TODO: Archive any updated vertices/curves.
+    def _get_new_threshold(self, sd_curve, current_threshold, market, time_interval):
+        # Update the active threshold with the current scheduled power.
+        #   If the power is not yet scheduled (price is not known), the power must be inferred:
+        if not (current_scheduled_power := self.scheduled_powers.get_by_interval(time_interval)):
+            predicted_market_price = market.price_model.get(time_interval.start_time)[0]
+            current_scheduled_power = sd_curve.power_from_vertices(predicted_market_price)
+        # The temporary active threshold is updated within the series of time intervals in this market object.
+        #    - NOTE: self.demand_threshold, itself, is updated from prior markets in update_dc_threshold().
+        new_threshold = max(current_threshold, current_scheduled_power)
+        return new_threshold
 
     def prep_transactive_signal(self, market):
         # Prepare transactive records to send to a transactive neighbor. The prepared transactive signal should
@@ -483,17 +440,19 @@ class Neighbor(Entity):
         for time_interval in market.time_intervals:
 
             # Create the vertices of the net supply or demand curve, EXCLUDING this transactive neighbor.
+            #     This SDCurve should already be a deep copy of any vertices from which it was originated.
             #  NOTE: It is important that the transactive neighbor is excluded.
-            vertices: SDCurve = market.sum_vertices(time_interval, object_to_exclude=self)
+            sd_curve: SDCurve = market.sum_vertices(time_interval, object_to_exclude=self)
 
             # This should be rare, Warn if no vertices are found.
-            if vertices is None:  # TODO: The comment says we should warn, but this would stop execution....
-                RuntimeError(f'No summed vertices were found in method prep_transactive_signal for neighbor '
+            if sd_curve is None:
+                _log.warning(f'No summed vertices were found in method prep_transactive_signal for neighbor '
                              f'{self.name} in time interval {time_interval.name}')
+                return
 
             # Apply the minimum and maximum power constraints to the vertices.
             # At this point, the vertices will include any flexibility, stated from the perspective of the local agent.
-            vertices.apply_constraints_and_bounds(self.minimum_power, self.maximum_power)
+            sd_curve.apply_constraints_and_bounds(self.minimum_power, self.maximum_power)
 
             # Remove the impacts of any demand charges that were included at the local node but are not relevant at the
             # remote agent location.
@@ -505,23 +464,22 @@ class Neighbor(Entity):
                 scheduled_power = self.scheduled_powers.get_by_interval(time_interval)
                 if scheduled_power:
                     active_threshold = min(active_threshold, scheduled_power)
-                vertices = self.remove_demand_charges(vertices=vertices, threshold=active_threshold)
+                self.remove_demand_charges(sd_curve=sd_curve, threshold=active_threshold)
 
             # Remove the impacts of marginal losses to place the vertices into the perspective of the remote neighbor to
             # which a transactive signal will be sent.
             # NOTE:
             #   * The effects of losses can be ignored by making the loss factor = 0.
             if self.loss_factor != 0:
-                vertices = self.remove_marginal_losses(vertices=vertices)
+                self.remove_marginal_losses(sd_curve)
 
             # The vertices are now suitable for creating transactive records representing the remote agent perspective.
-            #  Store the corrected vertices in my_signals, where they are ready to send to the remote neighbor.
-            self.my_signals[market].update(time_interval, vertices)
+            #  Store the corrected vertices in prepared_signals, where they are ready to send to the remote neighbor.
+            if market not in self.prepared_signals:
+                self.prepared_signals[market] = TransactiveSignal(market=market, neighbor=self)
+            self.prepared_signals[market].update(time_interval, sd_curve)
 
-        # Save a copy of the newly prepared signal.
-        self.my_signals[market].archive()  # TODO: Should it happen here, when sent, or both?
-
-    def send_transactive_signal(self, market):
+    def send_transactive_signal(self, market, include_schedule=False):
         # Send transactive records to a transactive neighbor.
         #
         # Retrieves the current transactive records, formats them into a table, and "sends" them to a text file for the
@@ -548,92 +506,34 @@ class Neighbor(Entity):
             return
 
         # Collect current transactive records concerning myTransactiveNode.
-        transactive_records = self.my_signals[market]
-        if transactive_records.empty:  # No signal records are ready to send
+        prepared_signal = self.prepared_signals.get(market)
+        if not prepared_signal or prepared_signal.empty:  # No signal records are ready to send
             _log.warning(f"No transactive records were found. No transactive signal can be sent to {self.name}.")
             return
 
-        # TODO: Make sure this information is available in serialized format of TransactiveSignal.
-        # # 210127DJH: These new parameters will help us keep track of record provenance.
-        # for transactive_record in transactive_records:
-        #     transactive_record.direction = 'sent'
-        #     transactive_record.neighbor_name = self.name
-        #     transactive_record.market_name = market.name
-
-        # TODO: Need to serialize the TransactiveSignal at this stage.
         # Publish the signal (if TN subclass implements messaging).
-        self.tn.issue_signal(self.name, transactive_records)
+        self.tn.issue_signal(self.name,
+                             prepared_signal.generate_signal(self.scheduled_powers if include_schedule else None))
 
-        # Save the sent signal as a copy of the calculated set that was drawn upon by this method (i.e., my_signal).
-        self.sent_signals[market] = transactive_records
+        # Save the sent signal as a copy of the calculated set that was drawn upon by this method (i.e., prepared_signal).
+        self.last_sent_signals[market] = prepared_signal
 
         # Save the newly sent transactive records.
-        self.sent_signals[market].archive()
+        self.last_sent_signals[market].archive()
 
         # Return transactive records to allow further processing by subclasses.
-        return transactive_records
+        return prepared_signal
 
-    # def receive_transactive_signal(self, this_transactive_node, market, curves=None):
-    def receive_transactive_signal(self, signal=None):
-        # Receive and save transactive records from a transactive Neighbor.
-        #
-        # The process of receiving a transactive signal is emulated by reading an available text table that is presumed
-        # to have been created by the transactive neighbor. This process may change in field settings and using Python
-        # and other code environments.
-        # If trying to receive a transactive signal from a non-transactive neighbor, create a warning and return.
+    def receive_transactive_signal(self, serialized_signal: str):
+        """Receive and save transactive records from a transactive Neighbor."""
         if not self.transactive:
             _log.warning('Transactive signals are not expected to be received from non-transactive neighbors. '
                          'No signal is read.')
             return
-        # TODO: This won't work yet, since the function to get market by name does not currently exist.
-        market = self.tn.get_market_by_attribute('name', signal.get('market', ''))
-        
 
-        if signal is None:
-            _log.warning(f'Received Transactive signal is None. {self.tn.name}')
-            return
-        elif isinstance(signal, dict) and 'curves' in signal:
-            signal = signal['curves']
-
-        # 201013DJH: The neighbor's list of received transactive records must be reinitialized so that it will not grow
-        #            indefinitely. Only the latest records are relevant. See the end of method prep_transactive_signal()
-        #            if more sophistication is warranted.
-        self.received_signal = []
-        # 210126DJH: TODO: Robert or Shwetha, class curves must be updated with the new properties of TransactiveRecord
-        #               class, please, to keep data collection straight. The new properties are
-        #             (1) TransactiveRecord.neighborName  # text name of Neighbor object
-        #             (2) TransactiveRecord.direction  # Indication from among {'sent', 'received', or 'prepared'}
-        #             (3) TransactiveRecord.marketName  # text reference to Market.name.
-        #             IMPORTANT: The first two can be inferred, but the marketName must be confirmed to be the same.
-        #                        Otherwise, there will be confusion between market series between agents.
-        newly_received_records = []
-
-        for curve in signal:
-            if curve['marketName'] in [m.name for m in self.tn.markets]:
-                new_record = TransactiveRecord(time_interval=curve['time_interval'],
-                                               neighbor_name=self.name,
-                                               direction='received',
-                                               market_name=curve['marketName'],  # market.name,
-                                               record=int(curve['record']),
-                                               marginal_price=float(curve['marginalPrice']),
-                                               power=float(curve['power']),
-                                               cost=float(curve['cost'])
-                                               )
-                newly_received_records.append(new_record)
-        self.received_signal.extend(newly_received_records)
-
-        # 210127DJH: Save the newly received records to a formatted csv table.
-        # TODO: Ensure append_table has been replaced by archive system.
-        if newly_received_records:
-            append_table(obj=newly_received_records)
-
-        # 210127DJH: Trim the received_signal list to remove any expired markets and time intervals.
-        active_markets = [x for x in self.tn.markets]  # TODO: Is this going to work with MarketSeries?
-        active_time_intervals = []  # TODO: If this code stays, it can be reorganized as a single comprehension.
-        for active_market in active_markets:
-            active_time_intervals.extend(active_market.time_intervals)
-        active_time_interval_names = [x.name for x in active_time_intervals]
-        self.received_signal = [x for x in self.received_signal if x.time_interval in active_time_interval_names]
+        signal_dict = json.loads(serialized_signal)
+        parsed_signal = TransactiveSignal.parse_signal(self.tn, signal_dict)
+        self.last_received_signals[parsed_signal.market] = parsed_signal
 
     def update_costs(self, market):
         """
@@ -659,8 +559,7 @@ class Neighbor(Entity):
         self.total_production_cost = self.production_costs.total(market)
         self.total_dual_cost = self.dual_costs.total(market)
 
-    def include_marginal_losses(self, vertices):
-        # TODO: Operate in-place on an existing SDCurve rather than returning vertices.
+    def include_marginal_losses(self, sd_curve: SDCurve):
         # This method corrects supply from neighbors based on transport inefficiency and the impact of transport losses
         # the effective marginal price. While all transactive signals should be stated from the perspective of the
         # remote neighbor, the active vertices should reflect the following modifications:
@@ -697,37 +596,32 @@ class Neighbor(Entity):
         #            The price and power corrections are based on a careful review of this impacts in a white paper
         #            "Addressing the Marginal Value of Transport Losses."
 
-        # Create a deep copy of the provided list of vertices so that they will not be corrupted.
-        corrected_vertices = deepcopy(vertices)
-
         if self.maximum_power is None or self.maximum_power <= 0:
             print('WARNING: Method Neighbor.include_losses requires that a full maximum power value > 0 be assigned. '
                                  'No losses were applied.')
-            return corrected_vertices
+            return
 
         if type(self.loss_factor) != float or self.loss_factor <= 0:
-            print('WARNING: Property lossFactor must be a small positive number. No losses were applied.')
-            return corrected_vertices
+            print('WARNING: Property lossFactor must be a small positive float. No losses were applied.')
+            return
 
-        if any([type(x) != Vertex for x in corrected_vertices]):
-            print('WARNING: This method acts on Vertex objects. No losses were applied.')
-            return corrected_vertices
+        if not isinstance(sd_curve, SDCurve):
+            print(f'WARNING: This method acts on SDCurve objects. Received {type(sd_curve)}. No losses were applied.')
+            return
 
         # Get on with the business of reviewing and correcting the input vertices.
-        for vertex in corrected_vertices:
+        for vertex in sd_curve.vertices:
             # Losses apply to only imported, not exported, power in the current practice. Calculate the effective
             # received power and price.
             # Assumptions:
             # - The supplier agrees with the value of lossFactor.
-            # - corrected_vertex.power is currently the power delivered from the supply side.
+            # - corrected_vertex.quantity is currently the power delivered from the supply side.
             # - maximumPower is the full-load transport capacity, stated from the supplier's perspective.
-            # - corrected_vertex.marginalPrice is currently the LMP of delivered supply, excluding effects of transport
-            #   losses.
+            # - corrected_vertex.price is currently the LMP of delivered supply, excluding effects of transport losses.
             if vertex.quantity > 0:
-                # 210907DJH: Checked this next calculation of power based on supplier's power.
                 power = vertex.quantity * (1 - self.loss_factor * (vertex.quantity / self.maximum_power))
                 # Make sure that the reduced power is not greater than the maximum capacity referred to the demand side.
-                if power > self.maximum_power * (1 - self.loss_factor):
+                if power > self.maximum_power * (1 - self.loss_factor):  # TODO: Check that this only gets applied to supply (positive power).
                     power = self.maximum_power * (1 - self.loss_factor)
                 # Correct the supplier's LMP to include marginal losses.
                 # 210907DJH: Checked this next calculation of marginal loss price based on supply neighbor's marginal
@@ -737,17 +631,13 @@ class Neighbor(Entity):
                 vertex.price = vertex.price / (1 - 2 * (vertex.quantity / self.maximum_power) * self.loss_factor)
                 vertex.quantity = power
 
-        return corrected_vertices
-
-    def remove_marginal_losses(self, vertices):
+    def remove_marginal_losses(self, sd_curve :SDCurve):
         # Remove impacts of marginal losses from method include_marginal_losses(). This is usually done while preparing
         # the transactive signal and its transactive records from the neighbor's active vertices. By practice,
         # transactive signals should always be sent and received using the remote neighbor's perspective. Impacts exist
         # only among vertices with demand (i.e., p < 0).
 
-        corrected_vertices = deepcopy(vertices)
-
-        for vertex in corrected_vertices:
+        for vertex in sd_curve.vertices:
             if vertex.quantity < 0:
                 # ASSUMPTIONS:
                 # - self.maximumPower is the transport actual constraint power magnitude from the supply perspective.
@@ -774,15 +664,10 @@ class Neighbor(Entity):
                 #            price, less loss impacts. It uses the local import power instead of the estimated
                 #            neighbor's export power.
                 # vertex.marginalPrice = vertex.marginalPrice * (1 - 2 * (-power / self.maximumPower) * self.lossFactor)
-                vertex.price = vertex.price * \
-                               (1 + 4 * self.loss_factor * vertex.quantity / self.maximum_power) ** 0.5
-
+                vertex.price = vertex.price * (1 + 4 * self.loss_factor * vertex.quantity / self.maximum_power) ** 0.5
                 vertex.quantity = power
 
-        return corrected_vertices
-
-    def include_demand_charges(self, vertices, threshold):
-        # TODO: Operate on an existing SDCurve rather than returning vertices.
+    def include_demand_charges(self, sd_curve: SDCurve, threshold: float):
         # 200731DJH: This method acts on and modifies a set of vertices to include demand charges.
         # Important: This method should be called no more than once. It will typically be called once as a transactive
         #            signal is being RECEIVED from a neighbor and applied to only imported supply powers.
@@ -796,80 +681,40 @@ class Neighbor(Entity):
         # - corrected_vertices: A set of corresponding Vertex objects that has demand charges applied to peak powers in
         #   this time interval.
 
-        # Make a deep copy of the vertices that are to be corrected and returned. This method should not change the set
-        # of input vertices.
-        corrected_vertices = deepcopy(vertices)
+        # If the demand threshold power lies above the maximum vertex power, this is all moot.
+        #   Return the received vertices unchanged.
+        if threshold > sd_curve.max_quantity():
+            return
 
-        # Find the minimum and maximum powers represented in the received vertices.
-        powers = [x.quantity for x in corrected_vertices]
-        maximum_power = max(powers[:])
-        minimum_power = min(powers[:])
-
-        # If the demand threshold power lies above the maximum vertex power, this is all moot. Return the received
-        # vertices unchanged.
-        if threshold > maximum_power:
-            return order_vertices(corrected_vertices)
-
-        # Demand charges only apply to supply from this remote neighbor.
+        # Demand charges only apply to supply vertices (i.e., quantity > 0) from this remote neighbor.
         if threshold < 0:
             threshold = 0
 
-        # Interpolate a price at the threshold power for these vertices. This should be determined using the original
-        # vertices before any of their marginal prices have been changed.
-        if minimum_power <= threshold <= maximum_power:
-            # TODO: This is now SDCurve.price_from_vertices(power)
-            threshold_price = self.marginal_price_from_vertices(threshold, corrected_vertices)
+        # If any vertices exist on the threshold, a vertex will need to be created at the lowest price of these.
+        if not (threshold_vertices := sd_curve.get_vertices_at_quantity(threshold)).empty:
+            lower_threshold_price = threshold_vertices.min_price
+            upper_threshold_price = threshold_vertices.max_price
+            # Remove vertices from the SDCurve that lie on the threshold. These will be recreated.
+            sd_curve.vertices -= threshold_vertices.vertices
+        else:
+            # Interpolate a price at the threshold power before any of their marginal prices are changed.
+            lower_threshold_price = upper_threshold_price = sd_curve.price_from_vertices(threshold)
 
-        # If there was only one vertex, its marginal price will also be the threshold price.
-        if minimum_power == maximum_power:
-            threshold_price = corrected_vertices[0].price
-
-        # Regardless, the default condition is that the other threshold price is the same as the first. (The other
-        # threshold price may be needed for the second vertex that may become created at the threshold.)
-        # TODO: There is no guarantee above that threshold_price has been set. Handle any other cases.
-        other_threshold_price = threshold_price
-
-        # Find the active supply vertices (i.e., p > 0) in this time interval that lie ABOVE the threshold. Simply add
-        # the demand rate to their marginal prices.
-        affected_vertices = [x for x in corrected_vertices if x.quantity > threshold]
-        for av in range(len(affected_vertices)):
-            affected_vertex = affected_vertices[av]
-            affected_vertex.price = affected_vertex.price + self.demand_rate
-
-        # Find unaffected vertices that lie below the threshold.
-        unaffected_vertices = [x for x in corrected_vertices if x.quantity < threshold]
-
-        # Find any existing vertices that lie ON the threshold.
-        threshold_vertex_prices = [x.price for x in corrected_vertices if x.quantity == threshold]
-
-        # If any vertex exists on the threshold, a vertex will need to be created at the minimum marginal price of the
-        # vertex or vertices, not necessarily the same value as was found above.
-        if len(threshold_vertex_prices) > 0:
-            threshold_price = min(threshold_vertex_prices[:])
-            other_threshold_price = max(threshold_vertex_prices[:])
-
-        # Trim the list of vertices. This can eliminate one or more vertices AT the threshold, which are re-created in
-        # the next step.
-        corrected_vertices = affected_vertices + unaffected_vertices
+        # Add the demand rate to the marginal price of any active supply vertices that lie ABOVE the threshold.
+        for vertex in sd_curve.vertices:
+            if vertex.quantity > threshold:
+                vertex.price += self.demand_rate
 
         # Create vertices at the threshold. The two criteria make sure that no redundant vertices are created.
-        if minimum_power < threshold <= maximum_power:
-            corrected_vertices.append(Vertex(price=threshold_price,
-                                             cost=0,
-                                             quantity=threshold
-                                             )
-                                      )
+        if sd_curve.min_quantity() < threshold <= sd_curve.max_quantity():
+            # Add a lower threshold vertex unless the threshold is already at the minimum quantity.
+            sd_curve.update(Vertex(price=lower_threshold_price, cost=0, quantity=threshold))
 
-        if minimum_power <= threshold < maximum_power:
-            corrected_vertices.append(Vertex(price=other_threshold_price + self.demand_rate,
-                                             cost=0,
-                                             quantity=threshold
-                                             )
-                                      )
+        if sd_curve.min_quantity() <= threshold < sd_curve.max_quantity():
+            # Add an upper threshold vertex unless the threshold is already at the maximum quantity.
+            sd_curve.update(Vertex(price=upper_threshold_price + self.demand_rate, cost=0, quantity=threshold))
 
-        return order_vertices(corrected_vertices)
-
-    def remove_demand_charges(self, vertices, threshold):
+    def remove_demand_charges(self, sd_curve: SDCurve, threshold):
         # 200804DJH: If the demand lies at or below the threshold, the demand rate is removed from the vertex's marginal
         #            price. This is done in preparation of transactive signals that are to be sent to the remote
         #            neighbor.
@@ -878,96 +723,39 @@ class Neighbor(Entity):
         #            threshold.
         #            The threshold is always stated from the local agent's perspective.
 
-        # Make a deep copy of provided vertices to correct and return.
-        corrected_vertices = deepcopy(vertices)
-
-        # Find the minimum and maximum powers represented among the vertices.
-        powers = [x.quantity for x in corrected_vertices]
-        minimum_power = min(powers[:])
-        maximum_power = max(powers[:])
-
-        # This is all moot if the threshold is so low that it will not cause demand prices to be affected. Return with
-        # vertices unchanged.
-        if threshold < minimum_power:
-            return order_vertices(corrected_vertices)
+        # This is all moot if the threshold is so low that it will not cause demand prices to be affected.
+        #   Return with vertices unchanged.
+        if threshold < sd_curve.min_quantity():
+            return
 
         # Demand charges only apply to demand from this remote neighbor.
         if threshold > 0:
             threshold = 0
 
-        threshold_price = corrected_vertices[0].price
-        # Determine the price that corresponds to the threshold power for this set of vertices. This should be done
-        # before any of the vertices' marginal prices have been changed.
-        if minimum_power <= threshold <= maximum_power:
-            # TODO: This is now SDCurve.price_from_vertices(power)
-            threshold_price = self.marginal_price_from_vertices(vertices=corrected_vertices, power=threshold)
-
-        # If there was only one vertex, its marginal price will also be the threshold price.
-        if minimum_power == maximum_power:
-            threshold_price = corrected_vertices[0].price
-
-        # Regardless, the default condition is that the other threshold price is the same as the first. (The other
-        # threshold price may be needed for the second vertex that may become created at the threshold.)
-        other_threshold_price = threshold_price
-
-        # Find the affected vertices that have demand below the threshold. Note: the threshold should normally be
-        # negative, meaning it is a demand level.
-        affected_vertices = [x for x in corrected_vertices if x.quantity < threshold]
-        for av in range(len(affected_vertices)):
-            affected_vertex = affected_vertices[av]
-            affected_vertex.price = affected_vertex.price - self.demand_rate
-
-        # Find unaffected vertices that lie above the threshold.
-        unaffected_vertices = [x for x in corrected_vertices if x.quantity > threshold]
-
-        # Find any existing vertices that lie ON the threshold.
-        threshold_vertex_prices = [x.price for x in corrected_vertices if x.quantity == threshold]
-
-        # If any vertex exists on the threshold, a vertex will need to be created at the maximum marginal price of the
-        # vertex or vertices, not necessarily the same value as was found above.
-        if len(threshold_vertex_prices) > 0:
-            threshold_price = max(threshold_vertex_prices[:])
-            other_threshold_price = min(threshold_vertex_prices[:])
+        # If any vertices exist on the threshold, a vertex will need to be created at the highest price of these.
+        if not (threshold_vertices := sd_curve.get_vertices_at_quantity(threshold)).empty:
+            lower_threshold_price = threshold_vertices.min_price
+            upper_threshold_price = threshold_vertices.max_price
+            # Remove vertices from the SDCurve that lie on the threshold. These will be recreated.
+            sd_curve.vertices -= threshold_vertices.vertices
         else:
-            other_threshold_price = threshold_price
+            # Interpolate a price at the threshold power before any of their marginal prices are changed.
+            lower_threshold_price = upper_threshold_price = sd_curve.price_from_vertices(threshold)
 
-        # Trim the list of vertices. This can eliminate one or more vertices AT the threshold, which are re-created in
-        # the next step.
-        corrected_vertices = affected_vertices + unaffected_vertices
+        # Subtract the demand rate from the marginal price of any active demand vertices that lie BELOW the threshold.
+        #   Note: the threshold should normally be negative, meaning it is a demand level.
+        for vertex in sd_curve.vertices:
+            if vertex.quantity < threshold:
+                vertex.price -= self.demand_rate
 
         # Create vertices at the threshold. The two criteria make sure that no redundant vertices are created.
         if sd_curve.min_quantity() <= threshold < sd_curve.max_quantity():
             # Add an upper threshold vertex unless the threshold is already at the maximum quantity.
             sd_curve.update(Vertex(price=upper_threshold_price, cost=0, quantity=threshold))
 
-        # Index through each curve and convert its properties into Vertex properties.
-        for c in range(len(curves)):
-            # Pick out indexed curve.
-            curve = curves[c]
-
-            # Make and append a vertex to the list of Vertex objects that is to be returned.
-            vertices.append(Vertex(record=int(curve['record']),
-                                   price=float(curve['marginalPrice']),
-                                   quantity=float(curve['power']),
-                                   cost=float(curve['cost'])
-                                   )
-                            )
-
-        return vertices
-
-    def get_dict(self):
-        scheduled_powers = [(k.start_time.isoformat(), v.value) for k, v in self.scheduled_powers.all]
-        received_signal = [(x.time_interval, x.marginal_price, x.power) for x in self.received_signal]
-        sent_signal = [(x.time_interval, x.marginal_price, x.power) for x in self.sent_signal]
-
-        neighbor_dict = {
-            "isTransactive": self.transactive,
-            "name": self.name,
-            "scheduled_power": scheduled_powers,
-            "received_signal": received_signal,
-            "sent_signal": sent_signal
-        }
-        return neighbor_dict
+        if sd_curve.min_quantity() < threshold <= sd_curve.max_quantity():
+            # Add a lower threshold vertex unless the threshold is already at the minimum quantity.
+            sd_curve.update(Vertex(price=lower_threshold_price - self.demand_rate, cost=0, quantity=threshold))
 
     @property
     def table_name(self):
