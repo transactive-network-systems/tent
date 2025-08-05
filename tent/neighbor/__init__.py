@@ -40,11 +40,11 @@ PACIFIC NORTHWEST NATIONAL LABORATORY
 operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
-
+import json
 import logging
 
 from copy import deepcopy
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Union
 from weakref import WeakKeyDictionary
 
@@ -231,8 +231,8 @@ class Neighbor(Entity):
         # TODO: This works but is ugly. Measurement should be an Iterator to allow "any(self.convergent_flags)".
         self.converged = False if any(self.convergence_flags.values) else True
 
-        _log.debug(f"TCC convergence flags for {self.name} are {self.convergence_flags.log_report}")
-        _log.debug(f"TCC convergence flag for {self.name} is {self.converged}.")
+        _log.debug(f"Convergence flags for {self.name} are {self.convergence_flags.log_report}")
+        _log.debug(f"Convergence flag for {self.name} is {self.converged}.")
 
     # SEALED - DO NOT MODIFY
     # Have object schedule its power in active time intervals
@@ -480,7 +480,6 @@ class Neighbor(Entity):
         # An active threshold is initialized here and used during the assessment of demand charges.
         active_threshold = -self.demand_threshold
 
-        #new_signal = []
         for time_interval in market.time_intervals:
 
             # Create the vertices of the net supply or demand curve, EXCLUDING this transactive neighbor.
@@ -937,36 +936,9 @@ class Neighbor(Entity):
         corrected_vertices = affected_vertices + unaffected_vertices
 
         # Create vertices at the threshold. The two criteria make sure that no redundant vertices are created.
-        if minimum_power <= threshold < maximum_power:
-            corrected_vertices.append(Vertex(price=threshold_price,
-                                             cost=0,
-                                             quantity=threshold
-                                             )
-                                      )
-
-        if minimum_power < threshold <= maximum_power:
-            corrected_vertices.append(Vertex(price=other_threshold_price - self.demand_rate,
-                                             cost=0,
-                                             quantity=threshold
-                                             )
-                                      )
-
-        return order_vertices(corrected_vertices)
-
-    @staticmethod
-    def curves_to_vertices(curves):
-        # 200803DJH: This static method converts building curves into Vertex objects. This was needed because many TENT
-        #            methods have been standardized to act on Vertex objects. Since a Vertex is not assigned a specific
-        #            time interval, the set of curves sent to this method should all reside in the same time interval.
-
-        # Find the set of unique time intervals among the list curves.
-        time_intervals = set([x.time_interval for x in curves])
-
-        if len(time_intervals) != 1:
-            raise Warning('The curves sent to Neighbor.curves_to_curves should all be in the same time interval.')
-
-        # Initialize the list of vertices that is to be returned.
-        vertices = []
+        if sd_curve.min_quantity() <= threshold < sd_curve.max_quantity():
+            # Add an upper threshold vertex unless the threshold is already at the maximum quantity.
+            sd_curve.update(Vertex(price=upper_threshold_price, cost=0, quantity=threshold))
 
         # Index through each curve and convert its properties into Vertex properties.
         for c in range(len(curves)):

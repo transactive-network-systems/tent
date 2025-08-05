@@ -44,7 +44,6 @@ under Contract DE-AC05-76RL01830
 
 import importlib
 import logging
-import math
 import re
 
 from datetime import datetime
@@ -92,18 +91,6 @@ def json_encoder(obj):
         return obj.isoformat()
     else:
         return obj.__dict__
-
-
-# TODO: Remove deprecated/commented block once references to these functions have been replaced.
-######## BEGIN DEPRECATED
-def find_objs_by_ti(items, ti):
-    # 200922DJH: This is lacking in Version 3 because multiple markets can share the same start time. Changing to match
-    #            the actual TimeInterval object, which is unique to a market.
-    # found_items = [x for x in items if x.interval.startTime == ti.startTime]
-    found_items = [x for x in items if x.interval == ti]
-    return found_items
-######## END DEPRECATED
-
 
 def is_heavyloadhour(datetime_value):
     """True if time is within a HLH hour

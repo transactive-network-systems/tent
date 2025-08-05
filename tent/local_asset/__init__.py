@@ -94,15 +94,15 @@ class LocalAsset(Entity):
                                          maximum_power, meter_points, minimum_power, name, transactive_node)
 
         # These following static properties may be assigned as parameters:
-        self.default_power = float(default_power)           # [avg.kW, signed] Assignable default power value(s)
-        self.engagement_costs = [float(ec) for ec in engagement_costs]  # {engagement, [$]; hold, [$]; disengagement, [$]} Transition costs
-        self.scheduling_horizon = scheduling_horizon if isinstance(scheduling_horizon, timedelta)\
-            else timedelta(seconds=scheduling_horizon) # [time duration] Future that price and energy shift are relevant
+        self.default_power: float = float(default_power)           # [avg.kW, signed] Assignable default power value(s)
+        self.engagement_costs: list[float] = [float(ec) for ec in engagement_costs]  # {engagement, [$]; hold, [$]; disengagement, [$]} Transition costs
+        self.scheduling_horizon: timedelta = (scheduling_horizon if isinstance(scheduling_horizon, timedelta)
+            else timedelta(seconds=scheduling_horizon)) # [time duration] Future that price and energy shift are relevant
 
         # These following properties are dynamically managed and should not normally be manually configured:
-        self.engagement_schedule = Measurement(self, MeasurementType.EngagementSchedule, MeasurementUnit.Boolean)  # True = engaged
-        self.schedule_calculated = False            # Flag set True after asset has scheduled power
-        self.transition_costs = Measurement(self, MeasurementType.TransitionCost, MeasurementUnit.Monetary)
+        self.engagement_schedule: Measurement = Measurement(self, MeasurementType.EngagementSchedule, MeasurementUnit.Boolean)  # True = engaged
+        self.schedule_calculated: bool = False            # Flag set True after asset has scheduled power
+        self.transition_costs: Measurement = Measurement(self, MeasurementType.TransitionCost, MeasurementUnit.Monetary)
 
     def cost(self, power=0):
         # Calculate production (consumption) cost at the given power level.

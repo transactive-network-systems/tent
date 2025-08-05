@@ -42,20 +42,22 @@ under Contract DE-AC05-76RL01830
 """
 
 import logging
-import os
-import sys
 
 from collections import defaultdict
-from warnings import warn
+from sortedcontainers import SortedList, SortedSet
+from typing import TYPE_CHECKING
 from weakref import proxy
 
 from tent.base import Component
-from tent.containers import IntervalSeries, MarketTimings, Measurement, Vertex
+from tent.containers import IntervalSeries, MarketTimings, Measurement, SDCurve, SDMeasurement, Vertex
 from tent.enumerations import MarketState, MarketTypes, MeasurementType, MeasurementUnit, Method
 from tent.market.price_models import HourlyAveragePriceModel
 from tent.utils.helpers import safe_weak_proxy_callback
 from tent.utils.log import setup_logging
 from tent.utils.timer import Timer
+
+if TYPE_CHECKING:
+    from tent.market.market_series import MarketSeries
 
 setup_logging()
 _log = logging.getLogger(__name__)
@@ -77,7 +79,7 @@ class Market(Component):
                  ):
         market_name = '_'.join((*self.name.split(' '), transition_times.delivery_lead.isoformat(timespec='seconds')))
         super(Market, self).__init__(market_series.description, market_name, transactive_node)
-        self.series = proxy(market_series, safe_weak_proxy_callback(self, 'market_series'))
+        self.series: MarketSeries = proxy(market_series, safe_weak_proxy_callback(self, 'market_series'))
         self.transition_times: MarketTimings = transition_times
 
         #### References to other markets: ####
@@ -91,25 +93,25 @@ class Market(Component):
                                        if isinstance(prior_market_in_series, Market) else None)
 
         # These are dynamic properties that are assigned in code and should not be manually configured:
-        self.active_vertices = []  # [IntervalValue]; values are [vertices]
-        self.blended_prices1 = Measurement(self, MeasurementType.BlendedPrice, MeasurementUnit.Monetary)  # (future functionality)
-        self.blended_prices2 = Measurement(self, MeasurementType.BlendedPrice, MeasurementUnit.Monetary)  # (future functionality)
-        self.converged = False
-        self.dual_costs = Measurement(self, MeasurementType.DualCost, MeasurementUnit.Monetary)  # Values are [$]
-        self.market_state = self.series.initial_market_state  # TODO: Is this still even needed?
-        self.marginal_prices = Measurement(self, MeasurementType.MarginalPrice, MeasurementUnit.Monetary) # [$/kWh]
-        self.net_powers = Measurement(self, MeasurementType.NetPower, MeasurementUnit.kW)  # [avg.kW]
+        self.active_vertices: SDMeasurement = SDMeasurement(self, measurement_type=MeasurementType.SystemVertex)
+        self.blended_prices1: Measurement = Measurement(self, MeasurementType.BlendedPrice, MeasurementUnit.Monetary)  # (future functionality)
+        self.blended_prices2: Measurement = Measurement(self, MeasurementType.BlendedPrice, MeasurementUnit.Monetary)  # (future functionality)
+        self.converged: bool = False
+        self.dual_costs: Measurement = Measurement(self, MeasurementType.DualCost, MeasurementUnit.Monetary)  # Values are [$]
+        self.market_state: MarketState = self.series.initial_market_state  # TODO: Is this still even needed?
+        self.marginal_prices: Measurement = Measurement(self, MeasurementType.MarginalPrice, MeasurementUnit.Monetary) # [$/kWh]
+        self.net_powers: Measurement = Measurement(self, MeasurementType.NetPower, MeasurementUnit.kW)  # [avg.kW]
         self.price_model = price_model
-        self.production_costs = Measurement(self, MeasurementType.ProductionCost, MeasurementUnit.Monetary)  # [$]
-        self.reconciled = False  # [Boolean] Convergence flag
-        self.time_intervals = IntervalSeries(self,  # [TimeInterval] Current list of active time intervals
-                                             first_start_time=self.transition_times.delivery,
-                                             duration=self.series.duration.market_interval,
-                                             number_of_intervals=self.series.intervals_to_clear)
-        self.total_demand = Measurement(self, MeasurementType.TotalDemand, MeasurementUnit.kW)  # [avg.kW]
-        self.total_dual_cost = 0.0  # [$]
-        self.total_generation = Measurement(self, MeasurementType.TotalGeneration, MeasurementUnit.kW)  # [avg.kW]
-        self.total_production_cost = 0.0  # [$]
+        self.production_costs: Measurement = Measurement(self, MeasurementType.ProductionCost, MeasurementUnit.Monetary)  # [$]
+        self.reconciled: bool = False  # [Boolean] Convergence flag
+        self.time_intervals: IntervalSeries = IntervalSeries(self,  # [TimeInterval] Current list of active time intervals
+                                                             first_start_time=self.transition_times.delivery,
+                                                             duration=self.series.duration.market_interval,
+                                                             number_of_intervals=self.series.intervals_to_clear)
+        self.total_demand: Measurement = Measurement(self, MeasurementType.TotalDemand, MeasurementUnit.kW)  # [avg.kW]
+        self.total_dual_cost: float = 0.0  # [$]
+        self.total_generation: Measurement = Measurement(self, MeasurementType.TotalGeneration, MeasurementUnit.kW)  # [avg.kW]
+        self.total_production_cost: float = 0.0  # [$]
 
         # Set up market
         self.check_marginal_prices()
@@ -312,7 +314,7 @@ class Market(Component):
             self.while_in_delivery()
 
         # EVENT 6A: TRANSITION FROM DELIVERY TO RECONCILE **************************************************************
-        # This is the transition from "Delivery" to "Reconcile" market states. The Reconcile market state begins at a
+        # This is the transition from "Delivery" to "Reconcile" market states. The "Reconcile" market state begins at a
         # time referenced from the market object's clearing time. Specifically, reconciliation begins after all the
         # market object's market intervals and an additional delivery lead time have expired after the market clears.
         # 210118DJH: Adding flag. No state transition should be allowed unless the prior state is completed.
@@ -505,7 +507,7 @@ class Market(Component):
         self.balanced_price_publish()
         return None
 
-    def balanced_price_publish(self):
+    def balanced_price_publish(self):  # TODO: Should this be replaced with archival functionality?
         scheduled_powers = defaultdict(dict)
         for entity in self.tn.neighbors + self.tn.local_assets:
             for time_interval, scheduled_power in entity.scheduled_powers.all:
@@ -629,16 +631,15 @@ class Market(Component):
         # TODO: Consider having the balance method solve for both marginal price AND quantity.
         if self.series.method == Method.Interpolation:
             self.assign_system_vertices()
-            av = [(x.interval.name, x.value.price, x.value.quantity) for x in self.active_vertices]
-            _log.debug("{} market active vertices are: {}".format(self.name, av))
+            _log.debug(f"{self.name} market active vertices are: {self.active_vertices.log_report}")
 
         # Index through active time intervals.
         for time_interval in self.time_intervals:
             # Find the marginal price interval value for the corresponding indexed time interval.
-            marginal_price = self.marginal_prices.get_by_interval(time_interval)
+            marginal_price = self.marginal_prices.get_by_interval(time_interval) # [$/kWh]
 
-            # Extract its marginal price value as a trial clearing price (that may be replaced).
-            cleared_marginal_price = self.series.default_price if marginal_price is None else marginal_price.value  # [$/kWh]
+            # Extract its marginal price value [$/kWh] as a trial clearing price (that may be replaced).
+            cleared_marginal_price = self.series.default_price if marginal_price is None else marginal_price.value
 
             if self.series.method == Method.Subgradient:
                 # Find the net power corresponding to the indexed time interval.
@@ -714,8 +715,7 @@ class Market(Component):
         # Perform checks on interval primal production costs to ensure smooth calculations.
         # NOTE: This does not check the veracity of the primal costs.
         if not self.production_costs:
-            warn('Production costs have not been calculated.')
-            #            _log.warning('Primal costs have not yet been calculated.')
+            _log.warning('Production costs have not been calculated.')
             return
 
         for time_interval in self.time_intervals:
@@ -816,7 +816,6 @@ class Market(Component):
         for neighbor in self.tn.neighbors:
             neighbor.schedule(self)
 
-    # TODO: Assuming in other places that this will return an SDCurve, not list[Vetex]. Update those if it does not change this way.
     def sum_vertices(self, time_interval, object_to_exclude=None):
         """
         Create system vertices with system information for a single time interval. An optional argument allows the
