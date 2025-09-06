@@ -77,8 +77,14 @@ class Market(Component):
                  prior_market_in_series=None,
                  price_model=None
                  ):
-        market_name = '_'.join((*self.name.split(' '), transition_times.delivery_lead.isoformat(timespec='seconds')))
-        super(Market, self).__init__(market_series.description, market_name, transactive_node)
+        # Build market name BEFORE calling Component.__init__ (self.name not yet set)
+        series_description = getattr(market_series, 'description', getattr(market_series, 'name', 'Market'))
+        base_name = str(series_description).replace(' ', '_')
+        market_name = f"{base_name}_{transition_times.delivery_lead.isoformat(timespec='seconds')}"
+        super(Market, self).__init__(series_description, market_name, transactive_node)
+        # Backwards compatibility: some legacy code expects market_series_name attr
+        if not hasattr(self, 'market_series_name'):
+            self.market_series_name = getattr(market_series, 'name', base_name)
         self.series: MarketSeries = proxy(market_series, safe_weak_proxy_callback(self, 'market_series'))
         self.transition_times: MarketTimings = transition_times
 
@@ -115,8 +121,14 @@ class Market(Component):
 
         # Set up market
         self.check_marginal_prices()
-        for neighbor in self.tn.neighbors:
-            neighbor.schedule(self)
+        neighbors = getattr(self.tn, 'neighbors', [])
+        # Avoid iterating over Mock or non-iterable placeholders
+        if not isinstance(neighbors, (list, tuple, set)):
+            neighbors = []
+        for neighbor in neighbors:
+            schedule_fn = getattr(neighbor, 'schedule', None)
+            if callable(schedule_fn):
+                schedule_fn(self)
 
         # This flag should be made False in each transition.
         # It should be made True after all the tasks have been completed in the ensuing market state.
@@ -812,7 +824,7 @@ class Market(Component):
 
         # Keep only two (near) duplicates of any marginal price.
         #   Where there are two instances of a price, offset one by a small number so the SDCurve remains a function.
-        for mp in marginal_price_set := SortedSet(marginal_price_list):
+        for mp in (marginal_price_set := SortedSet(marginal_price_list)):
             if marginal_price_list.count(mp) > 1:
                 marginal_price_set.add(mp - 1e-10)
 

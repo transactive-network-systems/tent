@@ -2,7 +2,7 @@ import abc
 
 from tent.base.archivable import Archivable
 
-class Component(Archivable):
+class Component(Archivable, abc.ABC):
     def __init__(self, description: str, name: str, transactive_node):
         super(Component, self).__init__()
         self.description: str = str(description)              # [text]

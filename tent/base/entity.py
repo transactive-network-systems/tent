@@ -12,7 +12,7 @@ setup_logging()
 _log = logging.getLogger(__name__)
 
 
-class Entity(Component):
+class Entity(Component, abc.ABC):
     def __init__(self, cost_parameters: list[float], default_vertices: list[Vertex | list[float] | dict],
                  description: str, information_services: list, location: str, maximum_power: float, meter_points: list,
                  minimum_power: float, name: str, transactive_node):

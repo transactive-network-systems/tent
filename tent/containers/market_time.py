@@ -32,18 +32,22 @@ class MarketDurations:
         return self.market_interval * self.intervals_to_clear
 
     @classmethod
-    def new(cls, active: float, negotiation: float, market_lead: float, delivery_lead: float, reconciliation: float,
-            market_interval: float, intervals_to_clear: int, market_clearing_interval: float,
+    def new(cls, active, negotiation, market_lead, delivery_lead, reconciliation,
+            market_interval, intervals_to_clear: int, market_clearing_interval,
             delivery_anchor_time: str | None):
+        """Factory that tolerates either float seconds or timedelta inputs for duration fields."""
+        def to_td(v):
+            return v if isinstance(v, timedelta) else timedelta(seconds=float(v))
+
         return MarketDurations(
-            active=timedelta(seconds=active),
-            negotiation=timedelta(seconds=negotiation),
-            market_lead=timedelta(seconds=market_lead),
-            delivery_lead=timedelta(seconds=delivery_lead),
-            reconciliation=timedelta(seconds=reconciliation),
-            market_interval=timedelta(seconds=market_interval),
+            active=to_td(active),
+            negotiation=to_td(negotiation),
+            market_lead=to_td(market_lead),
+            delivery_lead=to_td(delivery_lead),
+            reconciliation=to_td(reconciliation),
+            market_interval=to_td(market_interval),
             intervals_to_clear=int(intervals_to_clear),
-            market_clearing_interval=timedelta(seconds=market_clearing_interval),
+            market_clearing_interval=to_td(market_clearing_interval),
             delivery_anchor_time=time.fromisoformat(delivery_anchor_time) if delivery_anchor_time else None
         )
 

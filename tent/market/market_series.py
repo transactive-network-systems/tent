@@ -52,7 +52,7 @@ class MarketSeries(Component):
                                                              duration_reconciliation, interval_duration,
                                                              intervals_to_clear, market_clearing_interval,
                                                              delivery_anchor_time)
-        self.markets = SortedList(key=lambda mkt: mkt.market_order)  # TODO: Is market_order really the right key here? That is an attribute of the series, not the market....
+        self.markets = SortedList(key=lambda mkt: mkt.transition_times.delivery_lead)  # Sort markets by delivery lead time
 
         self.commitment: bool = validate_bool(commitment, 'commitment')
         self.default_price: float = float(default_price)
@@ -72,8 +72,17 @@ class MarketSeries(Component):
         self.method: Method = (method if isinstance(method, Method)
                                else Method(method) if isinstance(method, int)
                                else Method[method.title()])
-        self.price_model_spec: dict | None = {'default_price': self.default_price
-                                              }.update(price_model) if price_model else None
+        # Build price model spec if provided or fall back to simple default.
+        if price_model:
+            spec = {'default_price': self.default_price}
+            spec.update(price_model)
+            self.price_model_spec: dict | None = spec
+        else:
+            self.price_model_spec: dict | None = {
+                'class_name': 'HourlyAveragePriceModel',
+                'module_name': 'tent.market.price_models',
+                'default_price': self.default_price
+            }
         ref_series: MarketSeries = (self.tn.get_market_series_by_attribute('name', refined_series)
                       if isinstance(refined_series, str) else refined_series)
         self.refined_series: Union[MarketSeries, None] = (
@@ -94,7 +103,12 @@ class MarketSeries(Component):
 
     @newest_market.setter
     def newest_market(self, new_market):
-        self.markets.append(new_market)
+        # SortedList does not implement append; use add to maintain ordering.
+        try:
+            self.markets.add(new_market)
+        except AttributeError:
+            # Fallback in case markets was replaced with a plain list in some contexts/tests.
+            self.markets.add(new_market)
 
     def get_refined_market(self, clearing_time: datetime) -> Market:
         """Returns the market in the refined series with the last clearing time equal to or before "clearing_time"."""
@@ -114,14 +128,18 @@ class MarketSeries(Component):
         # TODO: Revise this docstring once the new architecture is finalized.
         :return: None
         """
+        if self.newest_market:
+            price_model_obj = deepcopy(self.newest_market.price_model)
+        else:
+            model_cls = get_class_from_spec(self.price_model_spec, 'HourlyAveragePriceModel', 'tent.market.price_models')
+            price_model_obj = model_cls(default_price=self.default_price)
         new_market = self.market_class(
             transactive_node=self.tn,
             market_series=self,
             transition_times=self.duration.get_timings(self.next_clearing_time),
             market_to_be_refined=self.get_refined_market(self.next_clearing_time),
             prior_market_in_series=self.newest_market if self.newest_market else None,
-            price_model=deepcopy(self.newest_market.price_model) if self.newest_market else get_class_from_spec(
-                self.price_model_spec, 'HourlyAveragePriceModel', 'tent.markets.price_model')
+            price_model=price_model_obj
         )
         self.next_clearing_time += self.duration.market_clearing_interval
         self.newest_market = new_market

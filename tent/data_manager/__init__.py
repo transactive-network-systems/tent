@@ -63,7 +63,9 @@ class DataManager:
         # Handle enums:
         enumeration = column_def.get('enumeration')
         if enumeration:
-            args.append(Enum(getattr(tent.enumerations, enumeration), create_type=True))
+            enum_obj = getattr(tent.enumerations, enumeration, None)
+            if enum_obj is not None:
+                args.append(Enum(enum_obj, create_type=True))
 
         # Handle foreign key reference:
         foreign_key = column_def.get('foreign_key')

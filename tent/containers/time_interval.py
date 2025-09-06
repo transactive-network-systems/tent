@@ -120,11 +120,12 @@ class IntervalSeries:
         # TODO: See the TODO notes in LocalAsset.get_extended_prices(). --- These concern TimeInterval handling.
         self.number_of_intervals = number_of_intervals
         self.total_duration = duration * number_of_intervals
-
-        self._intervals: dict[datetime, TimeInterval] = SortedDict(lambda ti: ti.start_time)  # Sort key is start_time.
+        # Keys are datetime start times already comparable; no custom key function needed.
+        self._intervals: dict[datetime, TimeInterval] = SortedDict()
 
         for i in range(number_of_intervals):
-            new_interval = TimeInterval(self.market, duration, first_start_time + duration * i)
+            # Pass original market object (not the already proxied self.market) to avoid proxy-of-proxy TypeError
+            new_interval = TimeInterval(market, duration, first_start_time + duration * i)
             self._intervals[new_interval.start_time] = new_interval
             new_interval.archive()
 

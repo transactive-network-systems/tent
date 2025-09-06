@@ -1,5 +1,5 @@
 from tent.market import Market
-from tent.containers.interval_value import IntervalValue
+# from tent.containers.interval_value import IntervalValue
 from enum import Enum
 from tent.enumerations.market_types import MarketTypes
 from datetime import datetime, timedelta

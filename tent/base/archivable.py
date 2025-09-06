@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from uuid6 import uuid7, UUID
 
 
-class Archivable:
+class Archivable(abc.ABC):
     def __init__(self):
         self.__id: UUID = uuid7()
         self.__real_time_created: datetime = datetime.now(timezone.utc).astimezone()

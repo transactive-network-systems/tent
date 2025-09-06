@@ -1,7 +1,11 @@
 import logging
 
 from sortedcontainers import SortedSet
-from typing import Self
+try:  # Python <3.11 compatibility
+    from typing import Self  # type: ignore
+except ImportError:  # pragma: no cover
+    from typing import TypeVar
+    Self = TypeVar("Self")
 from weakref import proxy
 
 from tent.base import Archivable, Component
@@ -111,7 +115,7 @@ class SDCurve(Archivable):
     def has_vertex_at_quantity(self, quantity: float) -> bool:
         return bool(next(filter(lambda v: v.quantity == quantity, self.vertices), False))
 
-    def get_vertices_at_quantity(self, quantity: float) -> Self:
+    def get_vertices_at_quantity(self, quantity: float):  # -> SDCurve (annotated dynamically for py<3.11)
         return SDCurve(None, self.interval, [v.quantity for v in  self.vertices if v.quantity == quantity])
 
     @staticmethod

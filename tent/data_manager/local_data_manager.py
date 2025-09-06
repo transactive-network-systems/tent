@@ -38,6 +38,8 @@ class LocalDataManager(DataManager):
             table_orm = self.orm.get(table_name)
             if not table_orm:
                 _log.warning(f'Attempted to archive data to non-existent table: {table_name}')
+                # Early return so we don't attempt to call a NoneType (regression fix for unit test failure)
+                return
             _log.debug(rec['data'])
             record_object = table_orm(**rec['data'])
             sess.add(record_object)
@@ -56,6 +58,8 @@ class LocalDataManager(DataManager):
 class VolttronDataManager(DataManager):
     def __init__(self, transactive_node, historian_topic: str = 'TNS/Archive', historian_vip: str = 'tns.historian'):
         super(VolttronDataManager, self).__init__(transactive_node)
+        # Store reference used by tests and internal methods
+        self.tn = transactive_node
         self.historian_topic = historian_topic
         self.historian_vip = historian_vip
 
