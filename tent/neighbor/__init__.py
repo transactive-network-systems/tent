@@ -357,7 +357,7 @@ class Neighbor(Entity):
                 self.include_demand_charges(sd_curve=active_sd_curve, threshold=active_threshold)
                 active_threshold = self._get_new_threshold(active_sd_curve, active_threshold, market, time_interval)
 
-        self.active_vertices.archive()
+        #self.active_vertices.archive()
 
     def _get_new_threshold(self, sd_curve, current_threshold, market, time_interval):
         # Update the active threshold with the current scheduled power.

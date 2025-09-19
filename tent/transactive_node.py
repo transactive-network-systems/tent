@@ -197,7 +197,7 @@ class TransactiveNode(Archivable):
     def _setup_data_manager(self, config):
         dm_configs = config.get('data_manager', {})
         dm_class =  get_class_from_spec(dm_configs, default_module_prefix='tent.data_manager', transactive_node=self)
-        self._data_manager = dm_class(**dm_configs)
+        self._data_manager = dm_class(self, **dm_configs)
         self.data_manager.add_tables(self.get_archive_definitions())
 
     def get_meters_by_attribute(self, attribute, match, first_only=False):
@@ -281,7 +281,9 @@ class TransactiveNode(Archivable):
         # TODO: Mechanism to create initial entries.  How to store these until db is ready? Queue?
         # TODO: Mechanism for queueing and storing entries. How does this relate to archive_data?
         definitions = list(chain.from_iterable(
-            [getattr(containers, c).get_archive_definitions() for c in containers.__all__]))
+            [c.get_archive_definitions() for c in [getattr(containers, name) for name in containers.__all__]
+             if issubclass(c, Archivable)])
+        )
         definitions.extend([
             {
                 "name": "transactive_node",

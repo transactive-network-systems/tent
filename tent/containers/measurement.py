@@ -53,14 +53,18 @@ from tent.utils.timer import Timer
 
 # TODO: Consider renaming Measurement to DataCollection, MeasurementValue to Measurement.
 class MeasurementValue(Archivable):
-    def __init__(self, measurement, interval, value):
+    def __init__(self, measurement, interval, value, archive: bool = True):
         super(MeasurementValue, self).__init__()
         self.interval: TimeInterval = proxy(interval, safe_weak_proxy_callback(self, 'interval'))
         self.measurement: Measurement = proxy(measurement, safe_weak_proxy_callback(self, 'measurement'))
         self.value: float | bool = value  # TODO: Should there be separate Value classes for different types?
+        if archive:
+            self.archive()
 
-    def update(self, value: float | bool):
+    def update(self, value: float | bool, archive=True):
         self.value = value
+        if archive:
+            self.archive()
 
     def __add__(self, other):
         return self.value + other.value
@@ -201,14 +205,9 @@ class Measurement(Archivable):
         # TODO: Is replace used and/or necessary?
         if time_interval in self._data and not replace:
             # Receiving datatype, here, must handle all its own transformations from allowed input types.
-            self._data[time_interval].update(value)
+            self._data[time_interval].update(value, archive)
         else:
-            self._data[time_interval] = self.DATA_TYPE(self, time_interval, value)
-        if archive:
-            # TODO: This would just be updating the collection table, not the value objects.
-            # TODO: How to properly handle archival of sets of values at once? Archive values?
-            # TODO: Does the update to the value/vertex call archive on those?  Should it?
-            self.archive()
+            self._data[time_interval] = self.DATA_TYPE(self, time_interval, value, archive)
 
     def __bool__(self):
         return bool(self._data)
