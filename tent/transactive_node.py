@@ -47,6 +47,7 @@ from datetime import datetime, timezone
 from dateutil import parser
 from itertools import chain
 from sortedcontainers import SortedList
+from zoneinfo import ZoneInfo
 
 from tent.base import Archivable
 import tent.containers as containers
@@ -132,14 +133,17 @@ class TransactiveNode(Archivable):
         # Simulation Configurations:
         self.simulation = bool(config.get('simulation', self.simulation))
         if self.simulation:
-            self.simulation_start_time = parser.parse(config.get('simulation_start_time', self.simulation_start_time))
+            self.simulation_start_time = parser.parse(config.get('simulation_start_time', self.simulation_start_time)
+                                                      ).replace(tzinfo=ZoneInfo(self.tz))
             self.simulation_one_hour_in_seconds = int(config.get('simulation_one_hour_in_seconds',
                                                                  self.simulation_one_hour_in_seconds))
-        Timer.created_time = Timer.now()
+        # TODO: If the TN is started repeatedly many times, the created time will change unexplainably.
+        #  It may help to have a class method that guards changes in items like "created_time".
+        Timer.created_time = Timer.now(timezone.utc).astimezone(ZoneInfo(self.tz))
         Timer.simulation = self.simulation
         Timer.sim_start_time = self.simulation_start_time
         Timer.sim_one_hr_in_sec = self.simulation_one_hour_in_seconds
-        Timer.tz = self.tz
+        Timer.tz = ZoneInfo(self.tz)
 
     def _setup_component_objects(self, config):
         # Configure TransactiveNode Component Classes

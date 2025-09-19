@@ -73,6 +73,6 @@ class MarketDurations:
         if not self.delivery_anchor_time:
             delivery_time = now + run_gap
         else:
-            delivery_anchor_today = datetime.combine(now.date(), self.delivery_anchor_time)
+            delivery_anchor_today = datetime.combine(now.date(), self.delivery_anchor_time, now.tzinfo)
             delivery_time = now + ((delivery_anchor_today - now - run_gap) % self.market_clearing_interval)
         return delivery_time - self.delivery_lead
