@@ -4,7 +4,7 @@ import logging
 from weakref import WeakSet
 
 from tent.base.component import Component
-from tent.containers import Measurement, SDMeasurement, TimeInterval, Vertex
+from tent.containers import Measurement, SDCurve, SDMeasurement, TimeInterval, Vertex
 from tent.enumerations import MeasurementType, MeasurementUnit
 
 _log = logging.getLogger(__name__)
@@ -22,10 +22,11 @@ class Entity(Component, abc.ABC):
         self.minimum_power = float(minimum_power)  # [avg.kW, signed] Asset's physical "hard" constraint
 
         # Setup Vertices for Default Supply/Demand Curve
-        default_vertices = default_vertices if default_vertices else [Vertex(price=float("inf"), cost=0.0, quantity=1.0)]
-        if len(default_vertices) == 1:
-            default_vertices[0].price = float('inf')
-        self.default_vertices: list[Vertex] = default_vertices
+        self.default_vertices = SDCurve(None, None,
+                                        default_vertices if default_vertices
+                                            else [Vertex(price=float("inf"), cost=0.0, quantity=1.0)])
+        if len(self.default_vertices) == 1:
+            self.default_vertices.vertices[0].price = float('inf')
 
         # [InformationService] See class InformationService
         self.information_services = WeakSet()
