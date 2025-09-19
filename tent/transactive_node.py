@@ -51,7 +51,7 @@ from zoneinfo import ZoneInfo
 
 from tent.base import Archivable
 import tent.containers as containers
-from tent.market import Market
+from tent.market.market_series import MarketSeries
 from tent.utils.helpers import get_class_from_spec
 from tent.utils.timer import Timer
 
@@ -161,7 +161,7 @@ class TransactiveNode(Archivable):
             _log.debug('DONE WITH ASSETS')
             self.neighbors = self._configure_components(config.get('neighbors'), 'Neighbors')
             _log.debug('DONE WITH NEIGHBORS')
-            self.market_series = self._configure_components(config.get('markets'), 'Markets')
+            self.market_series = self._configure_components(config.get('market_series'), 'Market Series')
             # TODO: Organize them by market order?
             _log.debug('DONE WITH MARKETS')
         except ValueError as e:
@@ -179,9 +179,14 @@ class TransactiveNode(Archivable):
         for config in configs:
             component_class = get_class_from_spec(config, default_module_prefix='tent', transactive_node=self)
             self.data_manager.add_tables(component_class.get_archive_definitions())
-            if issubclass(component_class, Market):
-                config['first_market_in_series'] = True
+            if issubclass(component_class, MarketSeries):
+                market_class = get_class_from_spec({'class_name': (config.pop('market_class_name', None)),
+                                                    'module_name': (config.pop('market_module_name', None))},
+                                                   default_module_prefix='tent', transactive_node=self)
+                config['market_class'] = market_class
             component = component_class(**config)
+            if issubclass(component_class, MarketSeries):
+                self.data_manager.add_tables(component.market_class.get_archive_definitions())
             component.archive()
             components.append(component)
         dep_names = [d.name for d in components]
