@@ -100,14 +100,14 @@ class SDCurve(Archivable):
     def max_quantity(self, limit: float = None) -> float:
         default = limit if limit is not None else 0.0 # TODO: Limit is a float, but default should be a Vertex or (possibly?) None.
         # TODO: max_vertex_quantity is a vertex, not a quantity. (BUG -> unless default is used -- then it is a float).
-        max_vertex_quantity =  max(self.vertices, key=lambda v: v.quantity, default=default)
+        max_vertex_quantity =  max(self.vertices, key=lambda v: v.quantity, default=default).quantity
         # The upper operational constraint must be less than or equal to the object's hard physical constraint.
         constrained_quantity = min(limit, max_vertex_quantity) if limit is not None else max_vertex_quantity
         return constrained_quantity
 
     def min_quantity(self, limit: float = None) -> float:
         default = limit if limit is not None else 0.0
-        min_vertex_quantity =  min(self.vertices, key=lambda v: v.quantity, default=default)
+        min_vertex_quantity =  min(self.vertices, key=lambda v: v.quantity, default=default).quantity
         # The upper operational constraint must be less than or equal to the object's hard physical constraint.
         constrained_quantity = max(limit, min_vertex_quantity) if limit is not None else min_vertex_quantity
         return constrained_quantity
