@@ -50,8 +50,8 @@ from datetime import datetime
 
 _log = logging.getLogger(__name__)
 
-first_cap_re = re.compile('(.)([A-Z][a-z]+)')
-all_cap_re = re.compile('([a-z\d])([A-Z])')
+first_cap_re = re.compile(r'(.)([A-Z][a-z]+)')
+all_cap_re = re.compile(r'([a-z\d])([A-Z])')
 
 def camel_to_snake(name):
     s1 = first_cap_re.sub(r'\1_\2', name)
