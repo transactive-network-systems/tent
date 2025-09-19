@@ -43,8 +43,6 @@ under Contract DE-AC05-76RL01830
 
 from tent.enumerations import MarketTypes, Method
 from tent.market import Market
-# from tent.utils.helpers import order_vertices
-
 
 
 class ConsensusMarket(Market):

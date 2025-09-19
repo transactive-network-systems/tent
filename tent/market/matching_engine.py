@@ -1,13 +1,14 @@
-from tent.market import Market
-# from tent.containers.interval_value import IntervalValue
-from enum import Enum
-from tent.enumerations.market_types import MarketTypes
-from datetime import datetime, timedelta
-from tent.enumerations.market_state import MarketState
-from tent.transactive_node import TransactiveNode
-from tent.containers.order import Order, OrderStatus, SupplyOrDemand, Vertex, VTypes
-from tent.local_asset import LocalAsset
 from copy import copy
+from datetime import datetime, timedelta
+from enum import Enum
+
+from tent.market import Market
+from tent.containers.order import Order, OrderStatus, SupplyOrDemand, Vertex, VTypes
+from tent.enumerations import MarketTypes
+from tent.enumerations import MarketState
+from tent.transactive_node import TransactiveNode
+from tent.local_asset import LocalAsset
+
 
 
 # Constants:

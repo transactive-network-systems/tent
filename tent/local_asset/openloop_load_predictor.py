@@ -48,9 +48,7 @@ from typing import List
 
 from tent.enumerations import MeasurementType
 from tent.local_asset import LocalAsset
-from tent.utils.log import setup_logging
 
-setup_logging()
 _log = logging.getLogger(__name__)
 
 

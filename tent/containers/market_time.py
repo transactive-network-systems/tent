@@ -1,8 +1,11 @@
+import logging
+
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 
 from tent.utils.timer import Timer
 
+_log = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class MarketTimings:

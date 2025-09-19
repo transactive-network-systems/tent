@@ -48,9 +48,6 @@ import re
 
 from datetime import datetime
 
-from tent.utils.log import setup_logging
-
-setup_logging()
 _log = logging.getLogger(__name__)
 
 first_cap_re = re.compile('(.)([A-Z][a-z]+)')

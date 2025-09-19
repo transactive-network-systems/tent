@@ -54,9 +54,7 @@ from tent.enumerations import Direction, MeasurementType, MeasurementUnit
 from tent.market import Market
 from tent.utils.helpers import validate_bool
 from tent.utils.timer import Timer
-from tent.utils.log import setup_logging
 
-setup_logging()
 _log = logging.getLogger(__name__)
 
 

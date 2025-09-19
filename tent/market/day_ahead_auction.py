@@ -43,9 +43,7 @@ under Contract DE-AC05-76RL01830
 import logging
 
 from tent.market.auction import Auction
-from tent.utils.log import setup_logging
 
-setup_logging()
 _log = logging.getLogger(__name__)
 #            TODO: Depreciate, stop using class DayAheadAuction.
 

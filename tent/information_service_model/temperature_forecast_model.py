@@ -45,19 +45,14 @@ under Contract DE-AC05-76RL01830
 import os
 import csv
 import logging
-import tzlocal
 
 from datetime import timedelta
-from zoneinfo import ZoneInfo
-
 from dateutil import parser
 from typing import Union
 
 from tent.information_service_model import InformationServiceModel
 from tent.enumerations import MeasurementType
-from tent.utils.log import setup_logging
 
-setup_logging()
 _log = logging.getLogger(__name__)
 
 

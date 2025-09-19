@@ -47,12 +47,10 @@ from datetime import timedelta
 from typing import Union
 
 from tent.base import Entity
-from tent.containers import Measurement, SDMeasurement, TimeInterval, Vertex
+from tent.containers import Measurement, TimeInterval, Vertex
 from tent.enumerations import MeasurementType, MeasurementUnit
-from tent.utils.log import setup_logging
 from tent.utils.timer import Timer
 
-setup_logging()
 _log = logging.getLogger(__name__)
 
 

@@ -1,9 +1,7 @@
 import logging
 
-from tent.utils.log import setup_logging
 from tent.meter_point import MeterPoint
 
-setup_logging()
 _log = logging.getLogger(__name__)
 
 

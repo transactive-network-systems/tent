@@ -40,9 +40,11 @@ PACIFIC NORTHWEST NATIONAL LABORATORY
 operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
+import logging
 
 from datetime import datetime, timezone, tzinfo
 
+_log = logging.getLogger(__name__)
 
 class Timer(object):
     created_time = None

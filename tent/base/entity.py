@@ -6,9 +6,7 @@ from weakref import WeakSet
 from tent.base.component import Component
 from tent.containers import Measurement, SDMeasurement, TimeInterval, Vertex
 from tent.enumerations import MeasurementType, MeasurementUnit
-from tent.utils.helpers import setup_logging
 
-setup_logging()
 _log = logging.getLogger(__name__)
 
 

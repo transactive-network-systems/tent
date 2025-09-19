@@ -48,9 +48,7 @@ from tent.enumerations import MarketState, MeasurementType
 from tent.neighbor import Neighbor
 from tent.utils.const import bpa_demand_rate, bpa_energy_rate
 from tent.utils.helpers import is_heavyloadhour
-from tent.utils.log import setup_logging
 
-setup_logging()
 _log = logging.getLogger(__name__)
 
 

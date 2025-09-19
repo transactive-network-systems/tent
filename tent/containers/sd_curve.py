@@ -13,9 +13,8 @@ from tent.containers.measurement import Measurement
 from tent.containers.time_interval import TimeInterval
 from tent.containers.vertex import Vertex
 from tent.enumerations import MeasurementType, MeasurementUnit
-from tent.utils.helpers import safe_weak_proxy_callback, setup_logging
+from tent.utils.helpers import safe_weak_proxy_callback
 
-setup_logging()
 _log = logging.getLogger(__name__)
 
 

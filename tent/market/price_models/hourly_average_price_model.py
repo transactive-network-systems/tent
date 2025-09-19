@@ -5,9 +5,6 @@ from datetime import datetime
 from statistics import mean, stdev, StatisticsError
 from typing import Dict
 
-from tent.utils.log import setup_logging
-
-setup_logging()
 _log = logging.getLogger(__name__)
 
 

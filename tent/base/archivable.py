@@ -1,8 +1,10 @@
 import abc
+import logging
 
 from datetime import datetime, timezone
 from uuid6 import uuid7, UUID
 
+_log = logging.getLogger(__name__)
 
 class Archivable(abc.ABC):
     def __init__(self):

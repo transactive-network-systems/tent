@@ -1,4 +1,5 @@
 import abc
+import logging
 
 import sqlalchemy_utils
 import tent.enumerations
@@ -9,6 +10,7 @@ from typing import Mapping, Sequence
 from sqlalchemy import Column, Enum, ForeignKey, Identity, Index, Table, types
 from sqlalchemy.orm import registry
 
+_log = logging.getLogger(__name__)
 
 class DataManager:
     def __init__(self, parent, archival_buffer_length: int = 100, *args, **kwargs):

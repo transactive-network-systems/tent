@@ -1,4 +1,3 @@
-
 import json
 import logging
 
@@ -7,9 +6,7 @@ from sqlalchemy.orm import Session
 from typing import Mapping, Sequence
 
 from tent.data_manager import DataManager
-from tent.utils.log import setup_logging
 
-setup_logging()
 _log = logging.getLogger(__name__)
 
 

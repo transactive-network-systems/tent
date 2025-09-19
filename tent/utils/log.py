@@ -4,7 +4,6 @@ import os
 import stat
 import sys
 import traceback
-import warnings
 
 
 class JsonFormatter(logging.Formatter):
@@ -24,6 +23,11 @@ def is_a_pipe(fd):
 
 
 def setup_logging(level=logging.DEBUG, console=False):
+    """ This function can be used to set up logging in non-VOLTTRON agent similar to how it is done in VOLTTRON.
+         (This file is largely copied from the VOLTTRON source code with minor simplifications.)
+         This function should not be used within the TENT library itself, as this would override the log handling
+         specified at the application layer. It should instead be called from the entry-point file of agent-level code.
+    """
     root = logging.getLogger()
     if not root.handlers:
         handler = logging.StreamHandler()
@@ -36,12 +40,5 @@ def setup_logging(level=logging.DEBUG, console=False):
         else:
             fmt = '%(asctime)s %(name)s %(levelname)s: %(message)s'
             handler.setFormatter(logging.Formatter(fmt))
-        if level != logging.DEBUG:
-            # TODO: Why do we need InsecureRequestWarning? Is this relevant to TENT?
-            # import it here so that when urllib3 imports the requests package, ssl would already got
-            # monkey patched by gevent.
-            # and this warning is needed only when log level is not debug
-            from urllib3.exceptions import InsecureRequestWarning
-            warnings.filterwarnings("ignore", category=InsecureRequestWarning)
         root.addHandler(handler)
     root.setLevel(level)

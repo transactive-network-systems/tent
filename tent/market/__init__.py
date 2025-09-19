@@ -53,13 +53,11 @@ from tent.containers import IntervalSeries, MarketTimings, Measurement, SDCurve,
 from tent.enumerations import MarketState, MarketTypes, MeasurementType, MeasurementUnit, Method
 from tent.market.price_models import HourlyAveragePriceModel
 from tent.utils.helpers import safe_weak_proxy_callback
-from tent.utils.log import setup_logging
 from tent.utils.timer import Timer
 
 if TYPE_CHECKING:
     from tent.market.market_series import MarketSeries
 
-setup_logging()
 _log = logging.getLogger(__name__)
 
 

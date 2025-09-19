@@ -52,10 +52,8 @@ from tent.base import Archivable
 import tent.containers as containers
 from tent.market import Market
 from tent.utils.helpers import get_class_from_spec
-from tent.utils.log import setup_logging
 from tent.utils.timer import Timer
 
-setup_logging()
 _log = logging.getLogger(__name__)
 
 
