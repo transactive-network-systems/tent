@@ -42,6 +42,7 @@ under Contract DE-AC05-76RL01830
 """
 from copy import deepcopy
 from datetime import datetime
+from typing import Any
 from weakref import proxy, WeakKeyDictionary
 
 from tent.base import Archivable, Component
@@ -196,7 +197,8 @@ class Measurement(Archivable):
     def total(self, market=None):
         return sum(mv.value for ti, mv in self._data.items() if ti.market == market) if market else sum(self.values)
 
-    def update(self, time_interval: TimeInterval, value: any, archive: bool = True, replace=False):
+    def update(self, time_interval: TimeInterval, value: Any, archive: bool = True, replace: bool = False):
+        # TODO: Is replace used and/or necessary?
         if time_interval in self._data and not replace:
             # Receiving datatype, here, must handle all its own transformations from allowed input types.
             self._data[time_interval].update(value)

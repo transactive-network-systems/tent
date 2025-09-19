@@ -31,8 +31,9 @@ class SDCurve(Archivable):
     #  - There are currently (at least) checks (which overwrite the value) in entity and in neighbor.update_vertices()
     def __init__(self,
                  measurement,
-                 interval: TimeInterval,
-                 vertices: list | None = None
+                 interval: TimeInterval | None,
+                 vertices: list | None = None,
+                 archive: bool = True
                  ):
         super(SDCurve, self).__init__()
         self.__interval: TimeInterval = proxy(interval, safe_weak_proxy_callback(self, 'interval')
