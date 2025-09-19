@@ -9,13 +9,13 @@
   "tz": "UTC",
   "data_manager": {
     "class_name": "LocalDataManager",
-    "module_name": "tent.utils.data_manager_new",
+    "module_name": "tent.data_manager.local_data_manager",
     "db_params": {
       "db_type": "sqlite",
       "url": "sqlite:///testent.sqlite"
     }
   },
-  "meterPoints": [
+  "meter_points": [
     {
       "class_name": "MeterPoint",
       "module_name": "tent.meter_point",
@@ -29,7 +29,7 @@
       "scale_factor": 1.0
     }
   ],
-  "informationServiceModels": [
+  "information_service_models": [
     {
       "class_name": "TemperatureForecastModel",
       "module_name": "tent.information_service_model.temperature_forecast_model",
@@ -37,10 +37,10 @@
       "location": "",
       "temperature_point_name": "",
       "tmy_fallback_path": "",
-      "weather_file_path": "/home/dmr/Projects/TentWork/platform_configs/campus/agent_configs/pasco_2017_dry_bulb_temperature.csv"
+      "weather_file_path": "/home/dmr/Projects/tsp/tent/sample_configs/temperature_forecast_model/pasco_2017_dry_bulb_temperature.csv"
     }
   ],
-  "localAssets": [
+  "local_assets": [
     {
       "class_name": "OpenLoopLoadPredictor",
       "module_name": "tent.local_asset.openloop_load_predictor",
@@ -225,8 +225,7 @@
       "minimum_power": -16400.0,
       "meter_points": null,
       "name": "InelasticBuildings",
-      "scheduling_horizon": 86400,
-      "subclass": null
+      "scheduling_horizon": 86400
     },
     {
       "class_name": "SolarPvResource",
@@ -236,40 +235,68 @@
       "default_power": 0.0,
       "default_vertices": [[0, 0, 30.0, true]],
       "description": "120 kW solar PV site on the campus",
-      "engagement_cost": [0.0, 0.0, 0.0],
+      "engagement_costs": [0.0, 0.0, 0.0],
       "information_services": null,
       "location": "",
       "maximum_power": 120.0,
       "minimum_power": 0.0,
       "meter_points": null,
       "name": "SolarPv",
-      "scheduling_horizon": 86400,
-      "subclass": null
+      "scheduling_horizon": 86400
     }
   ],
-  "markets": [
-    {
-      "class_name": "DayAheadAuction",
-      "module_name": "tent.market.day_ahead_auction",
-      "activation_lead_time": 0,
+  "market_series": [
+{
+      "class_name": "MarketSeries",
+      "module_name": "tent.market.market_series",
+      "market_class_name": "Auction",
+      "market_module_name": "tent.market.auction",
       "commitment": true,
       "default_price": 0.0428,
       "delivery_anchor_time": "02:00",
-      "delivery_lead_time": 3600,
+      "description": "",
       "duality_gap_threshold": 0.15,
+      "duration_active": 0.0,
+      "duration_delivery_lead":  900,
+      "duration_market_lead":  900,
+      "duration_negotiation": 0.0,
+      "duration_reconciliation": 0.0,
       "future_horizon": 86400,
       "initial_market_state": "Inactive",
       "interval_duration": 3600,
       "intervals_to_clear": 24,
       "market_clearing_interval": 86400,
-      "market_lead_time": 900,
       "market_order": 1,
-      "market_series_name": "Day-Ahead_Auction",
-      "market_to_be_refined": null,
+      "name": "Day-Ahead_Auction",
       "method": "Interpolation",
-      "negotiation_lead_time": 480,
-      "prior_market_in_series": null,
-      "real_time_duration": 900
+      "price_model": null,
+      "refined_series": null
+    },
+    {
+      "class_name": "MarketSeries",
+      "module_name": "tent.market.market_series",
+      "market_class_name": "Auction",
+      "market_module_name": "tent.market.auction",
+      "commitment": true,
+      "default_price": 0.0428,
+      "delivery_anchor_time": "02:00",
+      "description": "",
+      "duality_gap_threshold": 0.15,
+      "duration_active": 0.0,
+      "duration_delivery_lead":  300,
+      "duration_market_lead":  300,
+      "duration_negotiation": 0.0,
+      "duration_reconciliation": 0.0,
+      "future_horizon": 900,
+      "initial_market_state": "Inactive",
+      "interval_duration": 900,
+      "intervals_to_clear": 24,
+      "market_clearing_interval": 900,
+      "market_order": 1,
+      "name": "Real-Time_Auction",
+      "method": "Interpolation",
+      "price_model": null,
+      "refined_series": null
     }
   ],
   "neighbors": [
@@ -293,7 +320,6 @@
       "meter_points": null,
       "minimum_power": 0.0,
       "name": "CoR",
-      "subclass": null,
       "transactive": true,
       "up_or_down": "upstream"
     },
@@ -317,7 +343,6 @@
       "meter_points": null,
       "minimum_power": -120.0,
       "name": "SMALL_OFFICE_ILC",
-      "subclass": null,
       "transactive": true,
       "up_or_down": "downstream"
     },
@@ -341,7 +366,6 @@
        "meter_points": null,
        "minimum_power": -120.0,
        "name": "SMALL_OFFICE_DR",
-       "subclass": null,
        "transactive": true,
        "up_or_down": "downstream"
      }
