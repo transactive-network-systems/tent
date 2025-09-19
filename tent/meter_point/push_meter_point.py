@@ -9,7 +9,7 @@ class PushMeterPoint(MeterPoint):
     def __init__(self, *args, **kwargs):
         super(PushMeterPoint, self).__init__(*args, **kwargs)
 
-        self.set_up_subscription()
+        self.tn.register_subscription()
 
     def set_up_subscription(self):
         # Subscribe to pushed meter readings.
