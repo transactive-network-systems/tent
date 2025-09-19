@@ -53,10 +53,10 @@ class LocalDataManager(DataManager):
 
 # TODO: Move to TransactiveNodeAgent.
 class VolttronDataManager(DataManager):
-    def __init__(self, transactive_node, historian_topic: str = 'TNS/Archive', historian_vip: str = 'tns.historian'):
-        super(VolttronDataManager, self).__init__(transactive_node)
+    def __init__(self, parent, historian_topic: str = 'TNS/Archive', historian_vip: str = 'tns.historian'):
+        # NOTE: Parent is assumed to be a VOLTTRON Agent.
+        super(VolttronDataManager, self).__init__(parent)
         # Store reference used by tests and internal methods
-        self.tn = transactive_node
         self.historian_topic = historian_topic
         self.historian_vip = historian_vip
 
@@ -65,10 +65,12 @@ class VolttronDataManager(DataManager):
         # TODO: Should this really be using RPC?
         # TODO: Should it instead expose an RPC to allow the historian to collect tables?
         message = json.dumps(self.definitions)
-        self.tn.rpc.call(self.historian_vip, 'create_tables', message)
+        self.parent.rpc.call(self.historian_vip, 'create_tables', message)
 
     def archive_data(self, records: Mapping|Sequence):
-        self.tn.publish(self.historian_topic, message=records)
+        # TODO: This should use self.parent.vip.pubsub.publish directly.  Does anything need changed?
+        # TODO: This should use self.parent.vip.pubsub.publish directly.  Does anything need changed?
+        self.parent.publish(self.historian_topic, message=records)
 
 
 # # TODO: This should end up elsewhere, but for now, a record of how to initialize a local db:
