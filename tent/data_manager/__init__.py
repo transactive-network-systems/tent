@@ -13,7 +13,7 @@ from sqlalchemy.orm import registry
 _log = logging.getLogger(__name__)
 
 class DataManager:
-    def __init__(self, parent, archival_buffer_length: int = 100, *args, **kwargs):
+    def __init__(self, parent, archival_buffer_length: int = 10000, *args, **kwargs):
         self.parent = parent
 
         # State Variables:
