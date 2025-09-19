@@ -152,7 +152,7 @@ class MarketSeries(Component):
         record = super(MarketSeries, self).get_record()
         record.update({
             'id': self.id,
-            'market_class': self.market_class,
+            'market_class': self.market_class.__name__,
             'commitment': self.commitment,
             'default_price': self.default_price,
             'duality_gap_threshold': self.duality_gap_threshold,
