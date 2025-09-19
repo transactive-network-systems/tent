@@ -40,7 +40,7 @@ PACIFIC NORTHWEST NATIONAL LABORATORY
 operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
-
+import abc
 import logging
 
 from datetime import datetime, timezone
@@ -63,9 +63,10 @@ class TransactiveNode(Archivable):
     TransactiveNode is the local perspective of the computational agent among a network of such nodes.
     """
 
-    def __init__(self, description='', mechanism='consensus', name='', status='unknown'):
+    def __init__(self, description='', loop_sleep_duration=0.01, mechanism='consensus', name='', status='unknown'):
         super(TransactiveNode, self).__init__()
         self.description = description                          # [text]
+        self.loop_sleep_duration = loop_sleep_duration
         self.mechanism = mechanism                              # future, unused in Version 2
         self.name = name                                        # [text]
         self.registry_id = None                                 # string: An out-of-band identifier from a node registry.
@@ -88,6 +89,7 @@ class TransactiveNode(Archivable):
         self.default_config = {
             # TransactiveNode Configurations (from TransactiveNode super-class):
             "description": self.description,
+            "loop_sleep_duration": self.loop_sleep_duration,
             "mechanism": self.mechanism,
             "name": self.name,
             "registry_id": self.registry_id,
@@ -122,6 +124,7 @@ class TransactiveNode(Archivable):
 
         # TransactiveNode Configurations:
         self.description = updated_configs.get('description', self.description)
+        self.loop_sleep_duration = updated_configs.get('loop_sleep_duration', self.loop_sleep_duration)
         self.mechanism = updated_configs.get('mechanism', self.mechanism)
         self.name = updated_configs.get('name', self.name)
         self.registry_id = updated_configs.get('registry_id', self.registry_id)
@@ -219,15 +222,33 @@ class TransactiveNode(Archivable):
         else:
             return matches
 
-    def publish(self, publish_key, message, date_time=None):
-        pass
-
-    def issue_signal(self, recipient, transactive_records):
+    @abc.abstractmethod
+    def issue_signal(self, recipient: str, serialized_signal: dict):
         _log.debug("WRONG PLACE: THIS IS THE ABSTRACT METHOD IN TN")
         pass
 
+    @abc.abstractmethod
     def register_subscription(self, subscribe_key, callback):
         pass
+
+    @abc.abstractmethod
+    def _sleep(self):
+        """This method should sleep for self.loop_sleep_duration as is appropriate
+            to the multitasking system employed by the agent.
+        """
+        pass
+
+    @abc.abstractmethod
+    def state_machine_loop(self):
+        """This method should call _state_machine_iteration in a loop until stopped."""
+        pass
+
+    def _state_machine_iteration(self):
+        """One complete iteration through the market state machine. """
+        for series in self.market_series:
+            for market in series:
+                market.events()
+                self._sleep()
 
     @property
     def data_manager(self):
