@@ -817,7 +817,8 @@ class Market(Component):
                 continue
 
             sd_curve = entity.active_vertices.get_by_interval(time_interval)
-            if not sd_curve.empty:
+            if sd_curve is None or sd_curve.empty:
+                continue
                 marginal_price_list.update([float("inf")] if len(sd_curve) == 1 else sd_curve.prices)  # [$/kWh]
 
         # Keep only two (near) duplicates of any marginal price.

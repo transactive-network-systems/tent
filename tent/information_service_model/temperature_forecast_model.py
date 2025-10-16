@@ -72,24 +72,35 @@ class TemperatureForecastModel(InformationServiceModel):
                  *args, **kwargs):
         super(TemperatureForecastModel, self).__init__(*args, **kwargs)
         self.informationType = MeasurementType.Temperature
-        self.weather_file_path = str(weather_file_path)
+        # Preserve None (don't cast None -> 'None') so we can test whether a file path was provided.
+        self.weather_file_path = str(weather_file_path) if weather_file_path is not None else None
         self.weather_data = []
         self.last_modified = None
 
         if self.weather_file_path is not None:
-            self.init_weather_data()
-            self.location = None
-            self.max_gap_time = None
-            self.oat_point_name = None
+            # Only initialize weather data if the file actually exists. Protect against
+            # invalid or placeholder paths (e.g., the string 'None').
+            if os.path.exists(self.weather_file_path):
+                self.init_weather_data()
+                self.location = None
+                self.max_gap_time = None
+                self.oat_point_name = None
+            else:
+                # If the provided path doesn't exist, treat as if no weather file was provided.
+                self.weather_file_path = None
         else:
             self.location = [dict(location)] if location else []
-            self.max_gap_time = max_gap_time if isinstance(max_gap_time, timedelta) else\
+            self.max_gap_time = max_gap_time if isinstance(max_gap_time, timedelta) else \
                 timedelta(seconds=float(max_gap_time))
             self.oat_point_name = str(temperature_point_name) if temperature_point_name else "OutdoorAirTemperature"
             if tmy_fallback_path:
                 self.weather_file_path = str(tmy_fallback_path)
-                self.init_weather_data()
-            self.weather_file_path = None
+                # Only init if fallback exists
+                if os.path.exists(self.weather_file_path):
+                    self.init_weather_data()
+            # If no valid weather file was found, ensure attribute is None
+            if not self.weather_file_path:
+                self.weather_file_path = None
 
     def update_information(self, market):
         if self.weather_file_path is not None:

@@ -66,41 +66,45 @@ class MeasurementValue(Archivable):
         if archive:
             self.archive()
 
+    def _get_numeric_value(self, other):
+        """Extract numeric value from MeasurementValue or plain numeric type."""
+        return other.value if hasattr(other, 'value') else other
+
     def __add__(self, other):
-        return self.value + other.value
+        return self.value + self._get_numeric_value(other)
 
     def __sub__(self, other):
-        return self.value - other.value
+        return self.value - self._get_numeric_value(other)
 
     def __mul__(self, other):
-        return self.value * other.value
+        return self.value * self._get_numeric_value(other)
 
     def __floordiv__(self, other):
-        return self.value // other.value
+        return self.value // self._get_numeric_value(other)
 
     def __truediv__(self, other):
-        return self.value / other.value
+        return self.value / self._get_numeric_value(other)
 
     def __mod__(self, other):
-        return self.value % other.value
+        return self.value % self._get_numeric_value(other)
 
     def __eq__(self, other):
-        return self.value == other.value
+        return self.value == self._get_numeric_value(other)
 
     def __ne__(self, other):
-        return self.value != other.value
+        return self.value != self._get_numeric_value(other)
 
     def __lt__(self, other):
-        return self.value < other.value
+        return self.value < self._get_numeric_value(other)
 
     def __gt__(self, other):
-        return self.value > other.value
+        return self.value > self._get_numeric_value(other)
 
     def __le__(self, other):
-        return self.value <= other.value
+        return self.value <= self._get_numeric_value(other)
 
     def __ge__(self, other):
-        return self.value >= other.value
+        return self.value >= self._get_numeric_value(other)
 
 
     @property

@@ -41,8 +41,11 @@ class SDCurve(Archivable):
         self.__measurement: Measurement = proxy(measurement, safe_weak_proxy_callback(self, 'measurement')
                                                 ) if measurement else None
         # TODO: This is a rather different default than is used in Entity.default_vertices....
-        self.vertices: SortedSet = SortedSet(self._parse_vertices(vertices) if vertices
-                                             else [Vertex(price=0.0, quantity=0.0, continuity=False, curve=self)])
+        self.vertices: SortedSet = SortedSet()
+        if vertices:
+            self.vertices.update(self._parse_vertices(vertices))
+        else:
+            self.vertices.add(Vertex(price=0.0, quantity=0.0, continuity=False, curve=self))
 
     @property
     def empty(self):
@@ -116,7 +119,8 @@ class SDCurve(Archivable):
         return bool(next(filter(lambda v: v.quantity == quantity, self.vertices), False))
 
     def get_vertices_at_quantity(self, quantity: float):  # -> SDCurve (annotated dynamically for py<3.11)
-        return SDCurve(None, self.interval, [v.quantity for v in  self.vertices if v.quantity == quantity])
+        # Return an SDCurve containing the Vertex objects that match the given quantity.
+        return SDCurve(None, self.interval, [v for v in self.vertices if v.quantity == quantity])
 
     @staticmethod
     def _parse_vertices(vertices):
@@ -158,14 +162,17 @@ class SDCurve(Archivable):
                 self.update(Vertex(price=(self.price_from_vertices(max_power)), cost=0, quantity=max_power))
         elif len(self.vertices) == 1:
             self.vertices[0].price = float('inf')
-            self.vertices[0].record = 0
-        else:  # TODO: Does this correctly identify the neighbor when called from prep_transactive_signal?
-               #  The SDCurve was created by a Market.sum_vertices()...
-            _log.error(f'Unexpected flexibility logic in while bounding SDCurve in {self.measurement.source.name}. '
-                       f'Maximum and minimum power are the same, but in separate vertices.')
+        else:
+            # TODO: Does this correctly identify the neighbor when called from prep_transactive_signal?
+            #  The SDCurve was created by a Market.sum_vertices()...
+            owner_name = getattr(getattr(self.measurement, 'source', None), 'name', 'unknown')
+            _log.error('Unexpected flexibility logic while bounding SDCurve in %s. '
+                       'Maximum and minimum power are the same, but in separate vertices.', owner_name)
 
         # Trim the list of vertices to remove any that are outside the soft flexibility range.
-        self.vertices = [x for x in self.vertices if min_power <= x.quantity <= max_power]
+        # Preserve the SortedSet type to keep downstream set-like operations working.
+        self.vertices = SortedSet([x for x in self.vertices if min_power <= x.quantity <= max_power])
+        return None
 
     def check_rationality(self, action="None"):
         """The check_rationality method checks whether a list of vertices is rational, meaning that signed power is a
@@ -466,7 +473,12 @@ class SDMeasurement(Measurement):
         raise NotImplementedError
 
     def update(self, time_interval: TimeInterval,
-               value: SDCurve | list[Vertex] | list[list[float]] | list[dict],
+               value: SDCurve | list[Vertex] | Vertex | list[list[float]] | list[dict],
                archive: bool = True, replace: bool = False):
-        value = value.vertices if isinstance(value, SDCurve) else value
-        super(SDMeasurement, self).update(time_interval, value, archive, replace)
+        if isinstance(value, SDCurve):
+            processed_value = value.vertices
+        elif isinstance(value, Vertex):
+            processed_value = [value]
+        else:
+            processed_value = value
+        super(SDMeasurement, self).update(time_interval, processed_value, archive, replace)

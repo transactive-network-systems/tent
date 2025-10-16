@@ -10,6 +10,7 @@ class Archivable(abc.ABC):
     def __init__(self):
         self.__id: UUID = uuid7()
         self.__real_time_created: datetime = datetime.now(timezone.utc).astimezone()
+        self.__is_archived: bool = False
 
     @property
     def id(self) -> UUID:
@@ -29,15 +30,20 @@ class Archivable(abc.ABC):
     def table_name(self):
         raise NotImplementedError
 
-    def archive(self, records: list[dict] = None):
-        records = records if records else []
-        records.extend([
-                {
-                    'table_name': self.table_name,
-                    'data': self.get_record()
-                }
-            ])
-        self.data_manager.archive_data(records)
+    def archive(self, records: list[dict] | None = None):
+        archive_records = list(records) if records else []
+
+        if not self.__is_archived:
+            archive_records.append({
+                'table_name': self.table_name,
+                'data': self.get_record()
+            })
+            self.__is_archived = True
+        elif not archive_records:
+            # No additional records to persist and base record already stored.
+            return
+
+        self.data_manager.archive_data(archive_records)
 
     @abc.abstractmethod
     def get_record(self) -> dict:
