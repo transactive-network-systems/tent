@@ -1,0 +1,33 @@
+[tool.poetry]
+name = "tent"
+version = "3.0.0"
+description = "TENT package"
+authors = ["riley206-pnnl"]
+
+[tool.poetry.dependencies]
+python = ">=3.12,<4.0"
+gevent = "~24.2.1"
+SQLAlchemy = "~2.0.29"
+pandas = "~2.1.0"
+python-dateutil = "~2.8.2"
+tzlocal = "~5.0.1"
+matplotlib = "~3.7.2"
+setuptools = ">=68.0.0"
+numpy = "~1.26.4"
+sqlalchemy-utils = ">=0.41.3"
+intervals = "~0.9.1"
+six = "~1.16.0"
+greenlet = ">=3.0.0"
+bacpypes = "~0.16.7"
+wheel = "~0.30.0"
+pytest = "~7.4.3"
+deepdiff = "~6.3.0"
+sortedcontainers = "^2.4.0"
+uuid6 = "^2025.0.1"
+
+[tool.poetry.dev-dependencies]
+pytest = "~7.4.3"
+
+[build-system]
+requires = ["poetry-core>=1.6.0"]
+build-backend = "poetry.core.masonry.api"
