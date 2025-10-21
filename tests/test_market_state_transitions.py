@@ -10,6 +10,7 @@ import json
 import logging
 import os
 import tempfile
+from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch, Mock
 
@@ -45,7 +46,8 @@ def test_market_full_lifecycle():
     try:
         # Set up MockTN with campus configuration
         tn = MockTN()
-        config_path = '/home/riley/TENT/A_TENT_TESTING/TENT/sample_configs/tn.campus.json'
+        base_dir = Path(__file__).resolve().parent.parent
+        config_path = base_dir / 'sample_configs' / 'tn.campus.json'
         with open(config_path, encoding='utf-8') as f:
             configs = json.load(f)
 
@@ -218,7 +220,8 @@ def test_market_convergence_blocking():
     print("="*80)
     
     tn = MockTN()
-    config_path = '/home/riley/TENT/A_TENT_TESTING/TENT/sample_configs/tn.campus.json'
+    base_dir = Path(__file__).resolve().parent.parent
+    config_path = base_dir / 'sample_configs' / 'tn.campus.json'
     with open(config_path, encoding='utf-8') as f:
         configs = json.load(f)
     
