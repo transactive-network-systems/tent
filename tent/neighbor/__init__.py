@@ -237,21 +237,22 @@ class Neighbor(Entity):
 
             # Find the TransactiveSignals in this indexed active time interval.
             sent_time = self.last_sent_signals[market].signal_time
-            sent_signal = self.last_sent_signals[market].get_by_interval(time_interval)
+            sent_signal_curve = self.last_sent_signals[market].get_by_interval(time_interval)
             received_time = self.last_received_signals[market].signal_time
-            received_signal = self.last_received_signals[market].get_by_interval(time_interval)
-            prepared_signal = self.prepared_signals[market].get_by_interval(time_interval)
+            received_signal_curve = self.last_received_signals[market].get_by_interval(time_interval)
+            prepared_signal_curve = self.prepared_signals[market].get_by_interval(time_interval)
 
             # Now, work through the convergence criteria.
-            if not sent_signal:
+            if not sent_signal_curve:
                 # No signal has been sent in this time interval. This is the first convergence requirement.
                 # Set the convergence flag false.
                 _log.debug(f"Signal for time interval {time_interval.name}. Enable send flag.")
                 flag = False
 
             # received and received AFTER last sent and there is a big diff b/w sent_signal and received_signal
-            elif (len(received_signal) > 0 and received_time > sent_time
-                  and TransactiveSignal.balance_points_differ(sent_signal, received_signal, time_interval,
+            elif (received_signal_curve is not None and len(received_signal_curve) > 0 and received_time > sent_time
+                  and TransactiveSignal.balance_points_differ(self.last_sent_signals[market], 
+                                                              self.last_received_signals[market], time_interval,
                                                               self.convergence_threshold)):
                 # One or more TransactiveRecord objects has been received in the indexed time interval, and it has been
                 # received AFTER the last time a message was sent. These are preconditions for the second convergence
@@ -263,7 +264,8 @@ class Neighbor(Entity):
             # TODO: Find out why the timing does not work with t_threshold.
             # elif dt - sent_time >= t_threshold and conditions_have_changed(prepared_signal, sent_signal,
             #                                                                self.convergenceThreshold, self.name):
-            elif TransactiveSignal.conditions_have_changed(prepared_signal, sent_signal, time_interval,
+            elif TransactiveSignal.conditions_have_changed(self.prepared_signals[market], 
+                                                           self.last_sent_signals[market], time_interval,
                                                            self.convergence_threshold):
                 # Delay 5 min after last send AND More than 5 minutes have passed since the last time a signal was sent.
                 # This is a precondition to the third convergence criterion.

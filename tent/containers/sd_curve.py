@@ -399,12 +399,15 @@ class SDCurve(Archivable):
     def __len__(self):
         return len(self.vertices)
 
-    def update(self, value: Vertex | dict | list[float|int] | list[Vertex] | list[list[float|int]] | list[dict]):
+    def update(self, value: Vertex | dict | list[float|int] | list[Vertex] | list[list[float|int]] | list[dict], archive: bool = True):
         # TODO: Should this have a default value like in the constructor?
         if isinstance(value, (Vertex, dict)) or all(isinstance(v, (int, float)) for v in value):
             value = [value]
         new_vertices = self._parse_vertices(value)
-        return self.vertices.update(new_vertices)
+        result = self.vertices.update(new_vertices)
+        if archive and self.measurement is not None:
+            self.archive()
+        return result
 
     @property
     def data_manager(self):
