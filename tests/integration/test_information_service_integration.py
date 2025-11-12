@@ -13,12 +13,14 @@ This is critical for TENT's responsiveness to real-world conditions.
 """
 import json
 import os
+import tempfile
 from pathlib import Path
 from datetime import datetime, timezone
 from unittest.mock import patch, Mock
 
 from tests.mock_tn import MockTN
 from tent.utils.timer import Timer
+from tests.integration.fixtures.sample_weather_data import write_weather_csv
 
 
 def test_weather_forecast_impacts_market():
@@ -31,11 +33,7 @@ def test_weather_forecast_impacts_market():
     - Building load predictor uses temperature to adjust forecasts
     - Solar PV predictor uses irradiance to adjust generation
     - Market signals reflect weather-adjusted forecasts
-    """
-    print("\n" + "="*80)
-    print("INTEGRATION TEST: Weather Forecast Impacts Market")
-    print("="*80)
-    
+    """    
     Timer.simulation = False
     tn = MockTN()
     base_dir = Path(__file__).resolve().parent.parent.parent
@@ -44,8 +42,10 @@ def test_weather_forecast_impacts_market():
     with open(config_path, encoding='utf-8') as f:
         configs = json.load(f)
     
-    # Point to our test weather CSV
-    test_weather_path = base_dir / 'tests' / 'integration' / 'fixtures' / 'sample_weather.csv'
+    # Create temporary CSV file from Python data
+    temp_dir = tempfile.mkdtemp()
+    test_weather_path = Path(temp_dir) / 'sample_weather.csv'
+    write_weather_csv(test_weather_path)
     
     print(f"\nTest weather file: {test_weather_path}")
     print(f"  Exists: {test_weather_path.exists()}")
@@ -96,8 +96,8 @@ def test_weather_forecast_impacts_market():
                         shown += 1
     
     if temp_forecast_model is None:
-        print("\n⚠️  No temperature forecast model found with weather_file_path")
-        print("   Test will proceed but weather integration cannot be fully validated")
+        print("\nNo temperature forecast model found with weather_file_path")
+        print("Test will proceed but weather integration cannot be fully validated")
     
     print(f"\n{'='*80}")
     print("PHASE 2: LOCAL ASSET FORECAST GENERATION")
@@ -124,7 +124,7 @@ def test_weather_forecast_impacts_market():
         else:
             print(f"  Load predictor: Not found")
     else:
-        print("\n⚠️  No building asset found")
+        print("\nNo building asset found")
     
     if solar_pv:
         print(f"\nSolar PV asset: {solar_pv.name}")
@@ -134,7 +134,7 @@ def test_weather_forecast_impacts_market():
         if hasattr(solar_pv, 'irradiance'):
             print(f"  Has irradiance data: Yes")
     else:
-        print("\n⚠️  No solar PV asset found")
+        print("\nNo solar PV asset found")
     
     print(f"\n{'='*80}")
     print("PHASE 3: MARKET OPERATION WITH WEATHER DATA")
@@ -146,7 +146,7 @@ def test_weather_forecast_impacts_market():
         markets.extend(list(series))
     
     if not markets:
-        print("\n⚠️  No markets found")
+        print("\nNo markets found")
         return
     
     market = markets[0]
@@ -225,9 +225,6 @@ def test_weather_forecast_impacts_market():
                 print(f"    Nighttime avg: {sum(nighttime_power)/len(nighttime_power):.2f} kW")
                 print(f"    Pattern check: {'✓ Solar higher during day' if sum(daytime_power)/len(daytime_power) > sum(nighttime_power)/len(nighttime_power) else '✗ Unexpected pattern'}")
     
-    print(f"\n{'='*80}")
-    print("VALIDATION")
-    print("="*80)
     
     validations = [
         ("Weather file loaded", temp_forecast_model is not None),
@@ -241,12 +238,17 @@ def test_weather_forecast_impacts_market():
         status = "✓" if passed else "✗"
         print(f"  {status} {check}")
     
-    print("\n✅ Weather forecast integration validated!")
-    print("   - External data loaded and parsed ✓")
-    print("   - Forecasts propagate to local assets ✓")
-    print("   - Asset schedules reflect weather conditions ✓")
-    print("   - Market operates with weather-informed schedules ✓")
-    print("\n🎉 Test complete!")
+    # Pytest assertions
+    assert temp_forecast_model is not None, "Weather forecast model should be loaded"
+    assert len(tn.information_service_models) > 0, "Should have information service models configured"
+    # Market may advance past Active state during step, so just check it progressed
+    assert market.market_state.name in ['Active', 'MarketLead', 'DeliveryLead', 'Delivery'], \
+        f"Market should have progressed through workflow, got {market.market_state.name}"
+    
+    # At least one asset should have schedules
+    has_building_schedules = inelastic_building is not None and 'building_powers' in locals() and len(building_powers) > 0
+    has_solar_schedules = solar_pv is not None and 'solar_powers' in locals() and len(solar_powers) > 0
+    assert has_building_schedules or has_solar_schedules, "At least one asset should have power schedules"
 
 
 def test_temperature_forecast_model_loading():
@@ -268,7 +270,10 @@ def test_temperature_forecast_model_loading():
     base_dir = Path(__file__).resolve().parent.parent.parent
     config_path = base_dir / 'sample_configs' / 'tn.campus.json'
     
-    test_weather_path = base_dir / 'tests' / 'integration' / 'fixtures' / 'sample_weather.csv'
+    # Create temporary CSV file from Python data
+    temp_dir = tempfile.mkdtemp()
+    test_weather_path = Path(temp_dir) / 'sample_weather.csv'
+    write_weather_csv(test_weather_path)
     
     print(f"\nTest weather CSV: {test_weather_path}")
     print(f"  File exists: {test_weather_path.exists()}")
@@ -302,7 +307,7 @@ def test_temperature_forecast_model_loading():
             break
     
     if temp_model is None:
-        print("\n⚠️  No TemperatureForecastModel found")
+        print("\nNo TemperatureForecastModel found")
         return
     
     print(f"\n{temp_model.__class__.__name__}:")
@@ -324,10 +329,24 @@ def test_temperature_forecast_model_loading():
             for i, (interval, mv) in enumerate(list(temp_model.predicted_values.all)[:10]):
                 print(f"    {interval.name}: {mv.value:.1f} °C")
     
+    # Pytest assertions
+    assert temp_model is not None, "Temperature forecast model should be found"
+    assert hasattr(temp_model, 'weather_file_path'), "Model should have weather_file_path attribute"
+    assert hasattr(temp_model, 'predicted_values'), "Model should have predicted_values"
+    
+    # Check that forecasts were loaded (or can be loaded)
+    # Note: Forecasts may be loaded lazily or require market progression
+    valid_forecasts = [mv for _, mv in temp_model.predicted_values.all if mv and mv.value is not None]
+    
+    # If no forecasts loaded yet, at least verify the weather file exists and is readable
+    if len(valid_forecasts) == 0:
+        assert test_weather_path.exists(), f"Weather file should exist at {test_weather_path}"
+        print(f"\n  Note: Forecasts not yet loaded (may require market progression)")
+    else:
+        # If forecasts are loaded, validate them
+        temps = [mv.value for mv in valid_forecasts]
+        assert all(-50 <= t <= 60 for t in temps), f"Temperature values should be reasonable, got range [{min(temps)}, {max(temps)}]"
+        print(f"\n  Loaded {len(valid_forecasts)} temperature forecasts")
+    
     print("\n✅ Temperature forecast model loading validated!")
-    print("\n🎉 Test complete!")
-
-
-if __name__ == "__main__":
-    test_weather_forecast_impacts_market()
-    test_temperature_forecast_model_loading()
+    print("\nTest complete!")

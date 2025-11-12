@@ -19,11 +19,7 @@ from tent.utils.timer import Timer
 
 
 def test_market_progresses_through_all_states():
-    """Validate market transitions through complete state machine cycle."""
-    print("\n" + "="*80)
-    print("INTEGRATION TEST: Complete Market State Cycle")
-    print("="*80)
-    
+    """Validate market transitions through complete state machine cycle."""    
     Timer.simulation = False
     tn = MockTN()
     base_dir = Path(__file__).resolve().parent.parent.parent
@@ -53,10 +49,6 @@ def test_market_progresses_through_all_states():
     
     # Track state progression
     states_visited = [market.market_state.name]
-    
-    print(f"\n{'='*80}")
-    print("STATE PROGRESSION")
-    print("="*80)
     
     # Active state
     with patch.object(Timer, 'now', return_value=market.transition_times.active):
@@ -111,19 +103,9 @@ def test_market_progresses_through_all_states():
     # Check that we visited multiple distinct states (at least 4)
     unique_states = set(states_visited)
     assert len(unique_states) >= 4, f"Market should progress through multiple distinct states, got: {unique_states}"
-    
-    print("\n✅ Market successfully progressed through transactive state machine!")
-    print(f"   - Visited {len(unique_states)} unique states")
-    print(f"   - Key states validated: {', '.join(key_states_to_check)}")
-    print("\n🎉 Test complete!")
-
 
 def test_delivery_lead_propagates_prices():
-    """Validate that DeliveryLead state propagates cleared prices to assets."""
-    print("\n" + "="*80)
-    print("INTEGRATION TEST: Price Propagation in DeliveryLead")
-    print("="*80)
-    
+    """Validate that DeliveryLead state propagates cleared prices to assets."""    
     Timer.simulation = False
     tn = MockTN()
     base_dir = Path(__file__).resolve().parent.parent.parent
@@ -204,17 +186,9 @@ def test_delivery_lead_propagates_prices():
         if interval_name in delivery_prices:
             assert abs(cleared_prices[interval_name] - delivery_prices[interval_name]) < 1e-6, \
                 f"Price for {interval_name} should not change in DeliveryLead"
-    
-    print("\n✅ Prices successfully propagated to DeliveryLead!")
-    print("\n🎉 Test complete!")
-
 
 def test_asset_schedules_committed_for_delivery():
-    """Validate that asset power schedules are committed during delivery phase."""
-    print("\n" + "="*80)
-    print("INTEGRATION TEST: Power Schedule Commitment")
-    print("="*80)
-    
+    """Validate that asset power schedules are committed during delivery phase."""    
     Timer.simulation = False
     tn = MockTN()
     base_dir = Path(__file__).resolve().parent.parent.parent
@@ -300,10 +274,6 @@ def test_asset_schedules_committed_for_delivery():
         if interval_name in delivery_schedules:
             assert abs(pre_delivery_schedules[interval_name] - delivery_schedules[interval_name]) < 0.01, \
                 f"Schedule for {interval_name} should be committed in Delivery"
-    
-    print("\n✅ Power schedules successfully committed for delivery!")
-    print("\n🎉 Test complete!")
-
 
 def test_reconciliation_compares_scheduled_vs_actual():
     """Validate reconciliation phase compares scheduled vs actual power."""
@@ -395,10 +365,6 @@ def test_reconciliation_compares_scheduled_vs_actual():
     assert market.reconciled is True, "Market should be marked as reconciled"
     assert len(committed_schedules) > 0, "Should have committed schedules"
     assert len(reconcile_schedules) > 0, "Schedules should persist to Reconcile phase"
-    
-    print("\n✅ Reconciliation phase completed successfully!")
-    print("\n🎉 Test complete!")
-
 
 def test_production_and_dual_costs_calculated():
     """Validate that production and dual costs are calculated through delivery."""
@@ -487,17 +453,11 @@ def test_production_and_dual_costs_calculated():
     print(f"  Total production cost: ${inelastic_building.total_production_cost:.2f}")
     print(f"  Total dual cost: ${inelastic_building.total_dual_cost:.2f}")
     
-    # Assertions - relaxed because costs may be zero in some scenarios
-    # The important thing is that the system runs without errors
-    print(f"\n✅ System progressed through full delivery cycle!")
-    print(f"   - Cost tracking available: {prod_cost_intervals > 0}")
-    print(f"   - Total production cost: ${inelastic_building.total_production_cost:.2f}")
-    print("\n🎉 Test complete!")
-
-
-if __name__ == "__main__":
-    test_market_progresses_through_all_states()
-    test_delivery_lead_propagates_prices()
-    test_asset_schedules_committed_for_delivery()
-    test_reconciliation_compares_scheduled_vs_actual()
-    test_production_and_dual_costs_calculated()
+    # Assertions
+    assert hasattr(inelastic_building, 'production_costs'), "Asset should have production_costs attribute"
+    assert hasattr(inelastic_building, 'dual_costs'), "Asset should have dual_costs attribute"
+    assert hasattr(inelastic_building, 'total_production_cost'), "Asset should have total_production_cost"
+    assert hasattr(inelastic_building, 'total_dual_cost'), "Asset should have total_dual_cost"
+    # Costs may be zero in some scenarios, so just check they're numeric
+    assert isinstance(inelastic_building.total_production_cost, (int, float)), "Total production cost should be numeric"
+    assert isinstance(inelastic_building.total_dual_cost, (int, float)), "Total dual cost should be numeric"
