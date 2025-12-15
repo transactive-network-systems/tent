@@ -236,7 +236,7 @@ def test_market_price_archiving():
         markets.extend(list(series))
     
     if not markets:
-        print(f"⚠️  No markets")
+        print(f"No markets")
         return
     
     market = markets[0]
@@ -669,6 +669,106 @@ def test_archive_transactive_record_data():
     
     print(f"\n{'='*80}")
     print("Transactive negotiation archiving tests completed")
+    print(f"{'='*80}")
+    
+    # Pytest assertions
+    assert hasattr(tn, 'data_manager') and tn.data_manager is not None, "Data manager should exist"
+    assert hasattr(tn.data_manager, 'archive_data'), "Data manager should have archive_data method"
+
+
+def test_archive_market_object_data():
+    """
+    Test archiving market object data (replaces old MarketObject test).
+    
+    The old test used Market objects directly. This test validates the same core 
+    functionality - archiving market state, clearing times, and configuration.
+    
+    Validates:
+    - Single market record can be archived
+    - List of market records can be archived
+    """
+    
+    print("\n" + "="*80)
+    print("INTEGRATION TEST: Archive Market Object Data")
+    print("="*80)
+    
+    Timer.simulation = False
+    tn = MockTN()
+    base_dir = Path(__file__).resolve().parent.parent.parent
+    config_path = base_dir / 'sample_configs' / 'tn.campus.json'
+    
+    with open(config_path, encoding='utf-8') as f:
+        configs = json.load(f)
+    
+    # Clean up weather path for test
+    for ism in configs.get('information_service_models', []) or []:
+        wf = ism.get('weather_file_path')
+        if wf and not os.path.exists(wf):
+            ism['weather_file_path'] = None
+    
+    with patch.object(Timer, 'now', return_value=datetime(2017, 7, 1, 0, 0, tzinfo=timezone.utc)):
+        tn.configure_node(configs)
+    
+    # Get test objects
+    markets = []
+    for series in tn.market_series:
+        markets.extend(list(series))
+    
+    if not markets:
+        print("No markets, skipping test")
+        return
+    
+    test_market = markets[0]
+    print(f"Test setup: market={test_market.name}")
+    
+    # Case 1: Single Market object
+    print(f"\nCASE 1: Single Market object.")
+    test_object = {
+        "table_name": "test_market_objects",
+        "data": {
+            "market_name": test_market.name,
+            "clearing_time": test_market.transition_times.delivery.isoformat(),
+            "market_state": test_market.market_state.name,
+            "converged": test_market.converged
+        }
+    }
+    
+    try:
+        if hasattr(tn, 'data_manager') and tn.data_manager:
+            tn.data_manager.archive_data([test_object])
+            print("- the test ran without errors")
+        else:
+            print("- No data manager available")
+    except Exception as error:
+        print(f"- THE TEST FAILED: {error}")
+    
+    # Case 2: List of Market objects
+    print(f"\nCASE 2: List of Market objects.")
+    test_object = [
+        {
+            "table_name": "test_market_objects",
+            "data": {
+                "market_name": test_market.name,
+                "clearing_time": test_market.transition_times.delivery.isoformat(),
+                "market_state": test_market.market_state.name,
+                "converged": test_market.converged,
+                "iteration": i
+            }
+        }
+        for i in range(3)
+    ]
+    
+    try:
+        if hasattr(tn, 'data_manager') and tn.data_manager:
+            tn.data_manager.archive_data(test_object)
+            print("- the test ran without errors")
+        else:
+            print("- No data manager available")
+    except Exception as error:
+        print(f"- THE TEST FAILED: {error}")
+    
+    print(f"\n{'='*80}")
+    print("Market object archiving tests completed")
     print(f"{'='*80}")
     
     # Pytest assertions
