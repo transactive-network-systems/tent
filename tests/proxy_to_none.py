@@ -1,40 +1,83 @@
-from weakref import proxy
+"""
+Test suite for safe_weak_proxy_callback functionality.
 
-class D:
+Tests the weak reference proxy mechanism used throughout TENT to handle
+circular references and automatic cleanup of dead references.
+"""
+import pytest
+from weakref import proxy, ProxyType
+
+from tent.utils.helpers import safe_weak_proxy_callback
+
+
+class DummyObject:
+    """Test object with some data."""
     inner = {'foo': 1, 'bar': 2}
 
-class P:
-    def __init__(self, d):
-        self.prox = proxy(d, safe_weak_proxy_callback(self, 'prox'))
 
-def safe_weak_proxy_callback(obj: object, attribute: str):
-    """ Safe Weak Proxy Callback
-        Provides a callback function that will return a variable used by WeakRef Proxy to None if the reference dies."""
+class ProxyContainer:
+    """Container that holds a weak proxy to another object."""
+    def __init__(self, target):
+        self.prox = proxy(target, safe_weak_proxy_callback(self, 'prox'))
 
-    def back_to_none(_):  # A Weak Reference is passed in, but it is dead, and therefore useless, so using "_".
-        setattr(obj, attribute, None)
-    return back_to_none
+
+def test_proxy_while_alive():
+    """Test that proxy works correctly while the target is alive."""
+    d = DummyObject()
+    p = ProxyContainer(d)
     
-d = D()
-p = P(d)
+    # Verify proxy is accessible and works
+    assert p.prox is not None
+    assert isinstance(p.prox, ProxyType)
+    assert p.prox.inner == {'foo': 1, 'bar': 2}
 
-print(f'While alive, prox.inner is: {p.prox.inner}')
 
-if p.prox:
-    print('prox is good')
+def test_proxy_truthiness_while_alive():
+    """Test that proxy evaluates to True while target is alive."""
+    d = DummyObject()
+    p = ProxyContainer(d)
+    
+    assert p.prox, "Proxy should be truthy while target is alive"
 
-print('deleting d')
-del d
 
-if p.prox:
-    print('deleted prox is not None')
-else:
-    print('delteted prox is None')
+def test_proxy_set_to_none_when_target_deleted():
+    """Test that proxy is set to None when the target object is deleted."""
+    d = DummyObject()
+    p = ProxyContainer(d)
+    
+    # Verify initial state
+    assert p.prox is not None
+    assert p.prox.inner == {'foo': 1, 'bar': 2}
+    
+    # Delete the target
+    del d
+    
+    # After deletion, callback should have set prox to None
+    assert p.prox is None, "Proxy should be None after target deletion"
 
-print('printing prox type:')
-print(type(p.prox))
 
-if p.prox:
-    print(p.prox.inner)
-else:
-    print('skipping inner print')
+def test_proxy_type_after_deletion():
+    """Test that proxy attribute becomes NoneType after target deletion."""
+    d = DummyObject()
+    p = ProxyContainer(d)
+    
+    del d
+    
+    assert type(p.prox).__name__ == 'NoneType'
+    assert p.prox is None
+
+
+def test_cannot_access_inner_after_deletion():
+    """Test that accessing inner attributes is safe after target deletion."""
+    d = DummyObject()
+    p = ProxyContainer(d)
+    
+    del d
+    
+    # Should be None, so accessing .inner would raise AttributeError if we tried
+    if p.prox:
+        # This branch should not execute
+        pytest.fail("Proxy should be None after target deletion")
+    else:
+        # Expected: proxy is None, so we skip accessing inner
+        assert p.prox is None
