@@ -6,7 +6,7 @@ try:  # Python <3.11 compatibility
 except ImportError:  # pragma: no cover
     from typing import TypeVar
     Self = TypeVar("Self")
-from weakref import proxy
+from weakref import ProxyType, proxy
 
 from tent.base import Archivable, Component
 from tent.containers.measurement import Measurement
@@ -120,7 +120,12 @@ class SDCurve(Archivable):
 
     def get_vertices_at_quantity(self, quantity: float):  # -> SDCurve (annotated dynamically for py<3.11)
         # Return an SDCurve containing the Vertex objects that match the given quantity.
-        return SDCurve(None, self.interval, [v for v in self.vertices if v.quantity == quantity])
+        interval = self.interval if not isinstance(self.interval, ProxyType) else None
+        matching_vertices = [v for v in self.vertices if v.quantity == quantity]
+        result = SDCurve(None, interval, matching_vertices)
+        if not matching_vertices:
+            result.vertices.clear()
+        return result
 
     @staticmethod
     def _parse_vertices(vertices):
