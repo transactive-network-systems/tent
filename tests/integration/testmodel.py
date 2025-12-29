@@ -44,46 +44,144 @@ under Contract DE-AC05-76RL01830
 
 from datetime import datetime, timedelta, date, time
 
-from tent.containers.vertex import Vertex
-from tent.neighbor import Neighbor
+from tent.containers import MarketDurations, MarketTimings, TimeInterval, Vertex
+from tent.enumerations import MarketState
 from tent.local_asset import LocalAsset
 from tent.market import Market
-from tent.containers.time_interval import TimeInterval
-from tent.containers.interval_value import IntervalValue
-from tent.enumerations.measurement_type import MeasurementType
+from tent.neighbor import Neighbor
 from tent.transactive_node import TransactiveNode
+
+
+DEFAULT_PRICE = 0.05
+
+
+class _TestTransactiveNode(TransactiveNode):
+    """Concrete TransactiveNode for tests that satisfies abstract methods."""
+
+    def issue_signal(self, recipient: str, serialized_signal: dict):  # pylint: disable=unused-argument
+        return None
+
+    def register_subscription(self, subscribe_key, callback):  # pylint: disable=unused-argument
+        return None
+
+    def _sleep(self):
+        return None
+
+    def state_machine_loop(self):
+        return None
+
+
+class _NoOpDataManager:
+    """Minimal data manager stub so Archivable objects can initialize."""
+
+    def archive_data(self, _records):
+        return None
+
+    def add_tables(self, _table_defs):
+        return None
+
+    def init_archive(self):
+        return None
+
+
+class _NoOpPriceModel:
+    """Predictable price model for tests that returns a constant price."""
+
+    def get(self, _timestamp):
+        return DEFAULT_PRICE, None
+
+
+class _SimpleMarketSeries:
+    """Lightweight stand-in for MarketSeries required by Market()."""
+
+    def __init__(self, name='TestMarketSeries'):
+        self.name = name
+        self.description = name
+        self.market_order = 1
+        self.default_price = DEFAULT_PRICE
+        self.duration: MarketDurations = MarketDurations.new(
+            active=0,
+            negotiation=0,
+            market_lead=0,
+            delivery_lead=0,
+            reconciliation=0,
+            market_interval=timedelta(hours=1),
+            intervals_to_clear=1,
+            market_clearing_interval=timedelta(hours=1),
+            delivery_anchor_time=None,
+        )
+        self.intervals_to_clear = self.duration.intervals_to_clear
+        self.initial_market_state = MarketState.Inactive
+
+
+def create_transactive_node():
+    tn = _TestTransactiveNode()
+    tn._data_manager = _NoOpDataManager()  # pylint: disable=protected-access
+    return tn
+
+
+def create_neighbor_model(transactive_node, name='TestNeighbor'):
+    return Neighbor(
+        transactive_node,
+        cost_parameters=[0.0, 0.0, 0.0],
+        default_vertices=[Vertex(price=DEFAULT_PRICE, cost=0.0, quantity=0.0)],
+        information_services=[],
+        meter_points=[],
+        name=name,
+        maximum_power=100.0,
+        minimum_power=0.0,
+    )
+
+
+def create_test_market(transactive_node):
+    series = _SimpleMarketSeries()
+    transition_times: MarketTimings = series.duration.get_timings(datetime.now())
+    market = Market(transactive_node, series, transition_times)
+    market.price_model = _NoOpPriceModel()
+    return market
+
+
+def create_time_interval(market, start_time=None, duration=timedelta(hours=1)):
+    start = start_time if start_time else datetime.now()
+    return TimeInterval(market, duration, start)
+
+
+def assign_price(market, time_interval, price=DEFAULT_PRICE):
+    market.marginal_prices.update(time_interval, price)
+
+
+def seed_measurements(entity, time_interval, scheduled_power=100, vertex_power=100, price=DEFAULT_PRICE):
+    entity.scheduled_powers.update(time_interval, scheduled_power)
+    entity.active_vertices.update(time_interval, [Vertex(price=price, cost=0.0, quantity=vertex_power)])
+
+
+def sum_measurement_values(measurement):
+    return sum(value.value for _, value in measurement.all)
 
 
 def test_schedule():
     print('Running AbstractModel.test_schedule()')
 
-    test_mtn = TransactiveNode()
+    test_tn = create_transactive_node()
 
     #   Create a test market test_mkt
-    test_mkt = Market()
+    test_mkt = create_test_market(test_tn)
 
     #   Create a sample time interval ti
-    dt = datetime.now()
-    at = dt
-    # NOTE: Function Hours() corrects behavior of Matlab hours().
     dur = timedelta(hours=1)
-    mkt = test_mkt
-    mct = dt
-    # NOTE: Function Hours() corrects behavior of Matlab hours().
     st = datetime.combine(date.today(), time()) + timedelta(hours=20)
-    ti = TimeInterval(mkt, dur, st)
+    ti = create_time_interval(test_mkt, st, dur)
 
-    #   Save the time interval
+    #   Save the time interval and assign a marginal price
     test_mkt.time_intervals = [ti]
-
-    #   Assign a marginal price in the time interval
-    test_mkt.check_marginal_prices(test_mtn)
+    assign_price(test_mkt, ti)
 
     #   Create a Neighbor test object and give it a default maximum power value
     # test_obj = Neighbor()
 
     #   Create a corresponding Neighbor.
-    test_mdl = Neighbor()
+    test_mdl = create_neighbor_model(test_tn)
+    test_tn.neighbors.append(test_mdl)
     test_mdl.maximum_power = 100
 
     # 210803DJH: The assignment of active vertices depends on whether a neighbor is transactive or not. Let's presume it
@@ -103,14 +201,22 @@ def test_schedule():
     except RuntimeWarning:
         print('  - ERRORS ENCOUNTERED')
 
+    scheduled_power = test_mdl.scheduled_powers.get_by_interval(ti)
+    reserve_margin = test_mdl.reserve_margins.get_by_interval(ti)
+    active_vertices = test_mdl.active_vertices.get_by_interval(ti)
+
     assert len(test_mdl.scheduled_powers) == 1, '  - the method did not store a scheduled power'
     assert len(test_mdl.reserve_margins) == 1, '  - the method did not store a reserve margin'
     assert len(test_mdl.active_vertices) == 1, '  - the method did not store an active vertex'
+    assert scheduled_power is not None, '  - scheduled power measurement missing'
+    assert reserve_margin is not None, '  - reserve margin measurement missing'
+    assert active_vertices is not None and not active_vertices.empty, '  - active vertices were not stored'
 
     # Run a test again with a LocalAsset.
     # test_obj = LocalAsset()
 
-    test_mdl = LocalAsset()
+    test_mdl = LocalAsset(test_tn)
+    test_tn.local_assets.append(test_mdl)
     # test_obj.model = test_mdl
     # test_mdl.object = test_obj
     test_mdl.maximum_power = 100
@@ -123,9 +229,13 @@ def test_schedule():
     except RuntimeWarning:
         print('  - ERRORS ENCOUNTERED')
 
+    scheduled_power = test_mdl.scheduled_powers.get_by_interval(ti)
+    active_vertices = test_mdl.active_vertices.get_by_interval(ti)
+
     assert len(test_mdl.scheduled_powers) == 1, '  - the method did not store a scheduled power'
-#    assert len(test_mdl.reserveMargins) == 1, '  - the method did not store a reserve margin'
+    assert scheduled_power is not None, '  - the scheduled power record is missing'
     assert len(test_mdl.active_vertices) == 1, '  - the method did not store an active vertex'
+    assert active_vertices is not None and not active_vertices.empty, '  - the stored vertex set is empty'
 
     # Success
     print('test_schedule() ran to completion.\n')
@@ -134,41 +244,33 @@ def test_schedule():
 def test_update_costs():
     print('Running AbstractModel.test_update_costs()')
 
-    test_mtn = TransactiveNode()
+    test_tn = create_transactive_node()
 
     #   Create a test market test_mkt
-    test_mkt = Market()
+    test_mkt = create_test_market(test_tn)
 
     #   Create a sample time interval ti
-    dt = datetime.now()
-    at = dt
-    #   NOTE: Function Hours() corrects behavior of Matlab hours().
     dur = timedelta(hours=1)
-    mkt = test_mkt
-    mct = dt
     st = datetime.combine(date.today(), time()) + timedelta(hours=20)
-    ti = TimeInterval(mkt, dur, st)
+    ti = create_time_interval(test_mkt, st, dur)
 
-    #   Save the time interval
+    #   Save the time interval and assign a marginal price in the time interval
     test_mkt.time_intervals = [ti]
-
-    #   Assign a marginal price in the time interval
-    test_mkt.check_marginal_prices(test_mtn)
+    assign_price(test_mkt, ti)
 
     #   Create a Neighbor test object and give it a default maximum power value
     # test_obj = Neighbor()
     #     test_obj.maximumPower = 100
 
     #   Create a corresponding Neighbor.
-    test_mdl = Neighbor()
+    test_mdl = create_neighbor_model(test_tn, name='CostNeighbor')
+    test_tn.neighbors.append(test_mdl)
 
     #   Make sure that the model and object cross-reference one another
     # test_obj.model = test_mdl
     # test_mdl.object = test_obj
 
-    test_mdl.scheduled_powers = [IntervalValue(test_mdl, ti, test_mkt, MeasurementType.ScheduledPower, 100)]
-    test_mdl.active_vertices = [IntervalValue(test_mdl, ti, test_mkt,
-                                              MeasurementType.ActiveVertex, Vertex(0.05, 0, 100))]
+    seed_measurements(test_mdl, ti, scheduled_power=100, vertex_power=100, price=DEFAULT_PRICE)
 
     #   Run a test with a Neighbor object
     print('- running test with a Neighbor:')
@@ -180,21 +282,20 @@ def test_update_costs():
 
     assert len(test_mdl.production_costs) == 1, '  - the method did not store a production cost'
     assert len(test_mdl.dual_costs) == 1, '  - the method did not store a dual cost'
-    assert test_mdl.total_production_cost == sum([x.value for x in test_mdl.production_costs]), \
-            '  - the method did not store a total production cost'
-    assert test_mdl.total_dual_cost == sum([x.value for x in test_mdl.dual_costs]), \
-            '  - the method did not store a total dual cost'
+    assert test_mdl.total_production_cost == sum_measurement_values(test_mdl.production_costs), \
+        '  - the method did not store a total production cost'
+    assert test_mdl.total_dual_cost == sum_measurement_values(test_mdl.dual_costs), \
+        '  - the method did not store a total dual cost'
 
     # Run a test again with a LocalAsset.
     # test_obj = LocalAsset()
-    test_mdl = LocalAsset()
+    test_mdl = LocalAsset(test_tn)
+    test_tn.local_assets.append(test_mdl)
     # test_obj.model = test_mdl
     # test_mdl.object = test_obj
     test_mdl.maximum_power = 100
 
-    test_mdl.scheduled_powers = [IntervalValue(test_mdl, ti, test_mkt, MeasurementType.ScheduledPower, 100)]
-    test_mdl.active_vertices = [IntervalValue(test_mdl, ti, test_mkt,
-                                              MeasurementType.ActiveVertex, Vertex(0.05, 0, 100))]
+    seed_measurements(test_mdl, ti, scheduled_power=100, vertex_power=100, price=DEFAULT_PRICE)
 
     print('- running test with a LocalAsset:')
 
@@ -206,10 +307,10 @@ def test_update_costs():
 
     assert len(test_mdl.production_costs) == 1, '  - the method did not store a production cost'
     assert len(test_mdl.dual_costs) == 1, '  - the method did not store a dual cost'
-    assert test_mdl.total_production_cost == sum([x.value for x in test_mdl.production_costs]), \
-            '  - the method did not store a total production cost'
-    assert test_mdl.total_dual_cost == sum([x.value for x in test_mdl.dual_costs]), \
-            '  - the method did not store a total dual cost'
+    assert test_mdl.total_production_cost == sum_measurement_values(test_mdl.production_costs), \
+        '  - the method did not store a total production cost'
+    assert test_mdl.total_dual_cost == sum_measurement_values(test_mdl.dual_costs), \
+        '  - the method did not store a total dual cost'
 
     # Success
     print('test_update_costs() ran to completion.\n')
