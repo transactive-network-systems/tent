@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 from tent.containers.vertex import Vertex
 from tent.containers.time_interval import TimeInterval
+from tent.containers.sd_curve import SDCurve
 from tent.market import Market
 from tent.neighbor import Neighbor
 from tent.utils.timer import Timer
@@ -1386,4 +1387,814 @@ def test_update_dual_costs():
 
     # Success
     print('✅ test_update_dual_costs() ran to completion.\n')
+
+def test_update_production_costs():
+    """Test Neighbor.update_production_costs() method.
+    
+    Legacy test: testneighbormodel.py::test_update_production_costs
+    
+    Tests:
+    1. First calculation of a production cost
+    2. Reassignment of an existing production cost
+    """
+    from tent.containers.sd_curve import SDCurve
+    from datetime import datetime, timedelta
+    
+    # Create dummy data manager (required for archiving)
+    class DummyDataManager:
+        def archive_data(self, records):
+            pass
+
+    # Create dummy transactive node (required for Neighbor constructor)
+    class DummyTransactiveNode:
+        def __init__(self):
+            self.data_manager = DummyDataManager()
+        
+        def register_subscription(self, subscribe_key, callback):
+            pass
+
+    dummy_tn = DummyTransactiveNode()
+
+    # Create dummy market first (needed for TimeInterval constructor)
+    class DummyMarket:
+        def __init__(self):
+            self.time_intervals = []
+            self.market_series_name = "test_market"
+    
+    test_market = DummyMarket()
+    
+    # Create time interval
+    dt = datetime.now()
+    time_interval = TimeInterval(test_market, timedelta(hours=1), dt)
+    test_market.time_intervals = [time_interval]
+    
+    # Create test neighbor
+    test_neighbor = Neighbor(transactive_node=dummy_tn, cost_parameters=[])
+    
+    # Create and store a scheduled power value
+    test_neighbor.scheduled_powers.update(time_interval, 50.0)
+    
+    # Create and store some active vertices (supply/demand curve)
+    # vertex1: marginalPrice=0.1, prodCost=1000, power=0
+    # vertex2: marginalPrice=0.2, prodCost=1015, power=100
+    vertex1 = Vertex(0.1, 1000, 0)
+    vertex2 = Vertex(0.2, 1015, 100)
+    sd_curve = SDCurve(test_neighbor.active_vertices, time_interval, vertices=[vertex1, vertex2])
+    test_neighbor.active_vertices.update(time_interval, sd_curve)
+    
+    # ===== TEST 1: First calculation of a production cost =====
+    print('  Case 1: First calculation of a production cost')
+    
+    try:
+        test_neighbor.update_production_costs(test_market)
+        print('    ✓ Method ran without errors')
+    except Exception as e:
+        print(f'    ✗ ERRORS ENCOUNTERED: {e}')
+        raise
+    
+    # Check that production cost was created
+    production_cost_obj = test_neighbor.production_costs.get_by_interval(time_interval)
+    assert production_cost_obj is not None, '  - production cost should exist for this interval'
+    
+    # Expected: linear interpolation between vertices at power=50
+    # At power=0: cost=1000, price=0.1
+    # At power=100: cost=1015, price=0.2
+    # At power=50 (midpoint): cost = 1000 + (50/100) * (1015-1000) = 1000 + 7.5 = 1007.5
+    expected_production_cost = 1007.5
+    production_cost = production_cost_obj.value
+    assert production_cost == pytest.approx(expected_production_cost), \
+        f'  - unexpected production cost value (got {production_cost}, expected {expected_production_cost})'
+    print(f'    ✓ Production cost calculated: {production_cost}')
+    
+    # ===== TEST 2: Reassignment of an existing production cost =====
+    print('  Case 2: Reassignment of an existing production cost')
+    
+    # Modify the scheduled power value
+    test_neighbor.scheduled_powers.update(time_interval, 150.0)
+    
+    try:
+        test_neighbor.update_production_costs(test_market)
+        print('    ✓ Method ran without errors')
+    except Exception as e:
+        print(f'    ✗ ERRORS ENCOUNTERED: {e}')
+        raise
+    
+    # Check that production cost still exists (only one)
+    production_cost_obj = test_neighbor.production_costs.get_by_interval(time_interval)
+    assert production_cost_obj is not None, '  - production cost should still exist for this interval'
+    
+    # Expected: power=150 is beyond the rightmost vertex (power=100)
+    # So it should use the rightmost vertex cost: 1015
+    expected_production_cost = 1015.0
+    production_cost = production_cost_obj.value
+    assert production_cost == pytest.approx(expected_production_cost), \
+        f'  - unexpected production cost value after update (got {production_cost}, expected {expected_production_cost})'
+    print(f'    ✓ Production cost updated to {production_cost} (extrapolated from rightmost vertex)')
+    
+    # Success
+    print('✅ test_update_production_costs() ran to completion.\n')
+
+def test_update_vertices():
+    """Test Neighbor.update_vertices() method.
+    
+    Legacy test: testneighbormodel.py::test_update_vertices
+    
+    Tests:
+    1. No default vertex has been defined for the Neighbor
+    2. The Neighbor is not transactive
+    3. The Neighbor is transactive, but transactive records are not available
+    4. The Neighbor is transactive, and transactive records are available to use
+    """
+    from tent.containers.vertex import Vertex
+    from tent.containers.transactive_signal import TransactiveSignal
+    from tent.containers.sd_curve import SDCurve
+    from datetime import datetime, timedelta
+    
+    print('Running Neighbor.test_update_vertices()')
+    
+    # Create dummy data manager (required for archiving)
+    class DummyDataManager:
+        def archive_data(self, records):
+            pass
+    
+    # Create dummy data manager (required for archiving)
+    class DummyDataManager:
+        def archive_data(self, _records=None):
+            return None
+        def add_tables(self, *_args, **_kwargs):
+            return None
+        def init_archive(self):
+            return None
+    
+    # Create dummy market (matches pattern from other tests in this file)
+    class DummyMarket:
+        def __init__(self, name, data_manager):
+            from uuid6 import uuid7
+            self.id = uuid7()  # Required by TransactiveSignal.get_record()
+            self.name = name
+            self.market_series_name = f"{name}Series"
+            self.data_manager = data_manager
+            self.time_intervals = []
+    
+    # Create dummy transactive node (required for Neighbor constructor)
+    class DummyTransactiveNode:
+        def __init__(self):
+            self.data_manager = DummyDataManager()
+        
+        def register_subscription(self, subscribe_key, callback):
+            pass
+    
+    dummy_tn = DummyTransactiveNode()
+    
+    # Create test market (using pattern from original test)
+    test_market = DummyMarket("test_market", dummy_tn.data_manager)
+    
+    # Create time interval
+    dt = datetime.now()
+    time_interval = TimeInterval(test_market, timedelta(hours=1), dt)
+    test_market.time_intervals = [time_interval]
+    
+    # Create test neighbor
+    test_model = Neighbor(transactive_node=dummy_tn, cost_parameters=[])
+    
+    # Create and store a scheduled power value
+    test_model.scheduled_powers.update(time_interval, 50.0)
+    
+    # Set maximum and minimum powers
+    test_model.maximum_power = 200
+    test_model.minimum_power = 0
+    test_model.loss_factor = 0  # eliminate losses from the calcs for now
+    
+    # TEST 1
+    print('- Test 1: No default vertex has been defined for the Neighbor')
+    
+    test_model.default_vertices = []
+    
+    try:
+        test_model.update_vertices(test_market)
+        print('  - the method warned and returned, as designed.')
+    except RuntimeWarning:
+        print('  - ERRORS ENCOUNTERED')
+    
+    # TEST 2
+    print('- Test 2: The Neighbor is not transactive')
+    
+    # Create the default Vertex object
+    test_model.default_vertices = [Vertex(.1, 0, 100)]
+    test_model.transactive = False
+    
+    try:
+        test_model.update_vertices(test_market)
+        print('  - the method ran without errors')
+    except RuntimeWarning:
+        print('  - ERRORS ENCOUNTERED')
+    
+    # Get the active vertices - should be an SDCurve stored in Measurement
+    sd_curve_obj = test_model.active_vertices.get_by_interval(time_interval)
+    assert sd_curve_obj is not None, '  - active vertices should exist for this interval'
+    
+    vertices = sd_curve_obj.vertices
+    assert len(vertices) == 1, f'  - there is an unexpected number of active vertices ({len(vertices)})'
+    
+    vertex = vertices[0]
+    # Modern API: Single vertex keeps its original price (legacy converted to inf)
+    assert vertex.quantity == 100 and vertex.price == 0.1, '  - the vertex values are not as expected'
+    
+    # TEST 3
+    print('- Test 3: The Neighbor is transactive, but transactive records are not available')
+    test_model.transactive = True
+    test_model.default_vertices = [Vertex(.2, 0, 200)]  # Changed
+    
+    # Note: No need to clear active_vertices - update_vertices will overwrite
+    
+    try:
+        test_model.update_vertices(test_market)
+        print('  - the method ran without errors')
+    except RuntimeWarning:
+        print('  - ERRORS ENCOUNTERED')
+    
+    sd_curve_obj = test_model.active_vertices.get_by_interval(time_interval)
+    assert sd_curve_obj is not None, '  - active vertices should exist for this interval'
+    
+    vertices = sd_curve_obj.vertices
+    assert len(vertices) == 1, '  - there is an unexpected number of active vertices'
+    
+    vertex = vertices[0]
+    # Modern API: Single vertex keeps its original price (legacy converted to inf)
+    assert vertex.quantity == 200 and vertex.price == 0.2, '  - the vertex values are not as expected'
+    
+    # TEST 4
+    print('- Test 4: The Neighbor is transactive, and transactive records are available to use')
+    test_model.transactive = True
+    
+    # Note: No need to clear active_vertices - update_vertices will overwrite
+    
+    # Create and store a received transactive signal with vertices
+    # In modern API, we create a TransactiveSignal with SDCurve containing the vertices
+    transactive_signal = TransactiveSignal(market=test_market, neighbor=test_model, direction='received')
+    
+    # Create vertices to represent the flexibility curve
+    # Legacy: TransactiveRecord(time_interval, record=1, marginal_price=0.15, power=0)
+    # Modern: Vertex with marginal_price, prod_cost, power
+    vertex1 = Vertex(0.15, 0, 0)     # power=0
+    vertex2 = Vertex(0.25, 0, 100)   # power=100
+    vertex3 = Vertex(0.2, 0, 50)     # power=50
+    
+    # Create SDCurve with these vertices
+    sd_curve = SDCurve(transactive_signal, time_interval, vertices=[vertex1, vertex2, vertex3])
+    transactive_signal.update(time_interval, sd_curve)
+    
+    # Store in last_received_signals (modern API storage)
+    test_model.last_received_signals[test_market] = transactive_signal
+    
+    test_model.demand_threshold = 500
+    
+    try:
+        test_model.update_vertices(test_market)
+        print('  - the method ran without errors')
+    except RuntimeWarning:
+        print('  - ERRORS ENCOUNTERED')
+    
+    # 200803DJH: In Version 3, all received records, including Record 0, are turned into active vertices.
+    sd_curve_obj = test_model.active_vertices.get_by_interval(time_interval)
+    assert sd_curve_obj is not None, '  - active vertices should exist for this interval'
+    
+    vertices = sd_curve_obj.vertices
+    assert len(vertices) == 3, f'  - there is an unexpected number of active vertices ({len(vertices)})'
+    
+    vertex_power = [v.quantity for v in vertices]
+    vertex_marginal_price = [v.price for v in vertices]
+    # 200803DJH: In Version 3, all received records, including Record 0, are turned into active vertices.
+    non_members1 = [x for x in vertex_power if x not in [0, 50, 100]]
+    non_members2 = [x for x in vertex_marginal_price if x not in [0.1500, 0.2000, 0.2500]]
+    assert len(non_members1) == 0 and len(non_members2) == 0, '  - the vertex values are not as expected'
+    
+    print('test_update_vertices() ran to completion.\n')
+
+
+def test_include_demand_charges():
+    print('Running test_include_demand_charges().')
+    
+    # Set up dummy infrastructure for Neighbor
+    class DummyDataManager:
+        def archive_data(self, _records=None):
+            pass
+    
+    class DummyTransactiveNode:
+        def __init__(self, data_manager):
+            self.data_manager = data_manager
+        
+        def register_subscription(self, subscribe_key, callback):
+            pass
+    
+    data_manager = DummyDataManager()
+    tn = DummyTransactiveNode(data_manager)
+
+    print('Case 1: The threshold is greater than any of the vertex powers.')
+    test_vertices = [Vertex(price=-.2, cost=0, quantity=-100),  #0
+                     Vertex(price=.1, cost=0, quantity=0),  #1
+                     Vertex(price=0.2, cost=0, quantity=50),  #2
+                     Vertex(price=0.3, cost=0, quantity=50),  #3
+                     Vertex(price=0.3, cost=0, quantity=90),  #4
+                     Vertex(price=0.4, cost=0, quantity=100)]  #5
+    threshold = 101
+    test_neighbor = Neighbor(transactive_node=tn, cost_parameters=[])
+    
+    # Modern API: Create SDCurve from vertices
+    from tent.containers.sd_curve import SDCurve
+    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices, archive=False)
+    original_prices = [v.price for v in sd_curve.vertices]
+    original_quantities = [v.quantity for v in sd_curve.vertices]
+    
+    try:
+        test_neighbor.include_demand_charges(sd_curve=sd_curve, threshold=threshold)
+        print('  - The test ran without errors.')
+    except RuntimeError as messages:
+        print('  - ERRORS WERE ENCOUNTERED: ' + str(messages))
+
+    # Modern API: Method modifies sd_curve in place (no return value)
+    corrected_vertices = list(sd_curve.vertices)
+    assert [x.price for x in corrected_vertices] == original_prices, \
+        'Marginal prices should not have changed.'
+    assert [x.quantity for x in corrected_vertices] == original_quantities, \
+        'Powers should not have changed.'
+
+    print('Case 2: One vertex exists at an active demand threshold.')
+    # Reset vertices for new test
+    test_vertices = [Vertex(price=-.2, cost=0, quantity=-100),
+                     Vertex(price=.1, cost=0, quantity=0),
+                     Vertex(price=0.2, cost=0, quantity=50),
+                     Vertex(price=0.3, cost=0, quantity=50),
+                     Vertex(price=0.3, cost=0, quantity=90),
+                     Vertex(price=0.4, cost=0, quantity=100)]
+    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices, archive=False)
+    threshold = 90  # test_vertices[4].quantity
+    test_neighbor.demand_rate = 10
+
+    try:
+        test_neighbor.include_demand_charges(sd_curve=sd_curve, threshold=threshold)
+        print('  - The test ran without errors.')
+    except RuntimeError as messages:
+        print('  - ERRORS WERE ENCOUNTERED: ' + str(messages))
+
+    corrected_vertices = list(sd_curve.vertices)
+    assert len(corrected_vertices) == 7, f'A new vertex should have been added (got {len(corrected_vertices)}).'
+    assert [x.price for x in corrected_vertices][0:5] == [-.2, .1, 0.2, 0.3, 0.3], \
+        'Marginal prices should not have changed for first 5.'
+    assert [x.price for x in corrected_vertices][5:7] == [10.3, 10.4], \
+            'Marginal prices 5 and 6 should have demand charges applied.'
+    assert [x.quantity for x in corrected_vertices][0:5] == [-100, 0, 50, 50, 90], \
+        'Powers should not have changed in the first five vertices.'
+    assert [x.quantity for x in corrected_vertices][5:7] == [90, 100], \
+        'Powers of the last two vertices should be at threshold and max.'
+
+    print('Case 3: Two (or more) vertices at an active demand threshold.')
+    test_vertices = [Vertex(price=-.2, cost=0, quantity=-100),
+                     Vertex(price=.1, cost=0, quantity=0),
+                     Vertex(price=0.2, cost=0, quantity=50),
+                     Vertex(price=0.3, cost=0, quantity=50),
+                     Vertex(price=0.3, cost=0, quantity=90),
+                     Vertex(price=0.4, cost=0, quantity=100)]
+    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices, archive=False)
+    threshold = 50
+
+    try:
+        test_neighbor.include_demand_charges(sd_curve=sd_curve, threshold=threshold)
+        print('  - The test ran without errors.')
+    except RuntimeError as messages:
+        print('  - ERRORS WERE ENCOUNTERED: ' + str(messages))
+
+    corrected_vertices = list(sd_curve.vertices)
+    assert len(corrected_vertices) == 6, f'No new vertices should have been added (got {len(corrected_vertices)}).'
+    assert [x.price for x in corrected_vertices][0:3] == [-.2, .1, 0.2], \
+        'Marginal prices should not have changed for first 3.'
+    assert [x.price for x in corrected_vertices][3:6] == [10.3, 10.3, 10.4], \
+            'Marginal prices should have demand charges applied to vertices above threshold.'
+    assert [x.quantity for x in corrected_vertices] == [-100, 0, 50, 50, 90, 100], \
+        'Powers should not have changed.'
+
+    print('Case 4: No vertex exists at an active demand threshold within the power range of the vertices.')
+    test_vertices = [Vertex(price=-.2, cost=0, quantity=-100),
+                     Vertex(price=.1, cost=0, quantity=0),
+                     Vertex(price=0.2, cost=0, quantity=50),
+                     Vertex(price=0.3, cost=0, quantity=50),
+                     Vertex(price=0.3, cost=0, quantity=90),
+                     Vertex(price=0.4, cost=0, quantity=100)]
+    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices, archive=False)
+    threshold = 95
+
+    try:
+        test_neighbor.include_demand_charges(sd_curve=sd_curve, threshold=threshold)
+        print('  - The test ran without errors.')
+    except RuntimeError as messages:
+        print('  - ERRORS WERE ENCOUNTERED: ' + str(messages))
+
+    corrected_vertices = list(sd_curve.vertices)
+    assert len(corrected_vertices) == 8, f'Two new vertices should have been added (got {len(corrected_vertices)}).'
+    # Check quantities - should have threshold vertices inserted
+    quantities = [x.quantity for x in corrected_vertices]
+    assert quantities == [-100, 0, 50, 50, 90, 95, 95, 100], \
+        f'Two new vertices should have been inserted at the threshold 95 (got {quantities}).'
+
+    print('Case 5: All vertex powers are above the threshold.')
+    test_vertices = [Vertex(price=-.2, cost=0, quantity=-100),
+                     Vertex(price=.1, cost=0, quantity=0),
+                     Vertex(price=0.2, cost=0, quantity=50),
+                     Vertex(price=0.3, cost=0, quantity=50),
+                     Vertex(price=0.3, cost=0, quantity=90),
+                     Vertex(price=0.4, cost=0, quantity=100)]
+    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices, archive=False)
+    threshold = -95  # This threshold is far below the vertices' powers.
+    # NOTE: The method resets this threshold to p=0. Sets of vertices that lie BOTH above and below p=0 may have another
+    # vertex creates at p=0.
+
+    try:
+        test_neighbor.include_demand_charges(sd_curve=sd_curve, threshold=threshold)
+        print('  - The test ran without errors.')
+    except RuntimeError as messages:
+        print('  - ERRORS WERE ENCOUNTERED: ' + str(messages))
+
+    corrected_vertices = list(sd_curve.vertices)
+    assert len(corrected_vertices) == 7, f'One new vertex should have been added (got {len(corrected_vertices)}).'
+    # Threshold should be reset to 0, creating vertices at p=0
+    assert sum([x.quantity==0 for x in corrected_vertices]) == 2, \
+                                                    'Two vertices should exist at the threshold 0.'
+
+    print('Case 6: One lone vertex input.')
+    single_vertex = Vertex(price=0.4, cost=0, quantity=100)
+    sd_curve = SDCurve(measurement=None, interval=None, vertices=[single_vertex], archive=False)
+    threshold = 95
+
+    try:
+        test_neighbor.include_demand_charges(sd_curve=sd_curve, threshold=threshold)
+        print('  - The test ran without errors.')
+    except RuntimeError as messages:
+        print('  - ERRORS WERE ENCOUNTERED: ' + str(messages))
+
+    corrected_vertices = list(sd_curve.vertices)
+    assert len(corrected_vertices) == 1, f'One vertex should remain (got {len(corrected_vertices)}).'
+    assert corrected_vertices[0].price == pytest.approx(0.4 + test_neighbor.demand_rate), \
+                                                                        'The vertex marginal price was not as expected.'
+    assert corrected_vertices[0].quantity == 100, \
+                                                    'The vertex power was not as expected.'
+
+    print('Test_include_demand_charges() ran to completion.\n')
+
+
+def test_include_marginal_losses():
+    print('Running test_include_marginal_losses().')
+    
+    # Set up dummy infrastructure for Neighbor
+    class DummyDataManager:
+        def archive_data(self, _records=None):
+            pass
+    
+    class DummyTransactiveNode:
+        def __init__(self, data_manager):
+            self.data_manager = data_manager
+        
+        def register_subscription(self, subscribe_key, callback):
+            pass
+    
+    from tent.containers.sd_curve import SDCurve
+    
+    data_manager = DummyDataManager()
+    tn = DummyTransactiveNode(data_manager)
+
+    print('- Test 1: Testing a range of load and supply vertices with positive and negative prices.')
+    test_neighbor = Neighbor(transactive_node=tn, cost_parameters=[])
+    test_neighbor.loss_factor = 0.01
+    test_neighbor.maximum_power = 20
+    test_vertices = [Vertex(price=-.1, cost=0, quantity=-10), Vertex(price=-0.1, cost=0, quantity=0), Vertex(price=-.1, cost=0, quantity=10),
+                     Vertex(price=0, cost=0, quantity=-10), Vertex(price=0, cost=0, quantity=0), Vertex(price=0, cost=0, quantity=10),
+                     Vertex(price=0.1, cost=0, quantity=-10), Vertex(price=0.1, cost=0, quantity=0), Vertex(price=0.1, cost=0, quantity=10)]
+
+    assert len(test_vertices) == 9, 'This test should start and end with nine vertices.'
+    assert test_neighbor.loss_factor == 0.01, 'In this case the full-load loss is 1%'
+
+    # Modern API: Create SDCurve and apply losses
+    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices, archive=False)
+    
+    try:
+        test_neighbor.include_marginal_losses(sd_curve=sd_curve)
+        print('  - the method ran without errors')
+    except RuntimeWarning:
+        print('  - ERRORS ENCOUNTERED')
+
+    new_vertices = list(sd_curve.vertices)
+    assert len(new_vertices) == 9, ' Expected 9 vertices returned. Got ' + str(len(new_vertices)) + '.'
+    
+    # Calculate expected values (only supply vertices with quantity>0 are modified)
+    expected_power = 10 * (1 - (10/test_neighbor.maximum_power) * test_neighbor.loss_factor)
+    expected_price = 0.1 / (1 - 2 * (10/test_neighbor.maximum_power) * test_neighbor.loss_factor)
+    
+    # Check supply vertices (indices 2, 5, 8 have quantity=10)
+    assert new_vertices[2].quantity == pytest.approx(expected_power), 'Power was not as expected for vertex 2'
+    assert new_vertices[5].quantity == pytest.approx(expected_power), 'Power was not as expected for vertex 5'
+    assert new_vertices[8].quantity == pytest.approx(expected_power), 'Power was not as expected for vertex 8'
+    assert new_vertices[2].price == pytest.approx(-expected_price), 'Price was not as expected for vertex 2'
+    assert new_vertices[5].price == pytest.approx(0), 'Price was not as expected for vertex 5'
+    assert new_vertices[8].price == pytest.approx(expected_price), 'Price was not as expected for vertex 8'
+    
+    # Check demand vertices (indices 0, 3, 6 have quantity=-10) - should be unchanged
+    assert new_vertices[0].quantity == -10, 'Demand vertex should be unchanged'
+    assert new_vertices[3].quantity == -10, 'Demand vertex should be unchanged'
+    assert new_vertices[6].quantity == -10, 'Demand vertex should be unchanged'
+
+    # TEST 2
+    print('- Test 2: First parameter is not a Vertex.')
+    test_neighbor = Neighbor(transactive_node=tn, cost_parameters=[])
+    test_neighbor.loss_factor = 0.01
+    test_neighbor.maximum_power = 10
+    
+    # Modern API doesn't accept mixed types in SDCurve - this test isn't applicable
+    # The SDCurve constructor will handle type validation
+    print('  - Test 2 skipped (modern API validates types in SDCurve constructor)')
+
+    # TEST 3
+    print('- Test 3: Unacceptable maximum power value.')
+    test_neighbor = Neighbor(transactive_node=tn, cost_parameters=[])
+    test_neighbor.maximum_power = None
+    test_vertices = [Vertex(price=0, cost=0, quantity=0)]
+    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices, archive=False)
+
+    try:
+        test_neighbor.include_marginal_losses(sd_curve=sd_curve)
+        print('  - the method ran without errors (warning logged)')
+    except RuntimeWarning as error:
+        print('  - ERRORS ENCOUNTERED: ', error)
+
+    # TEST 4
+    print('- Test 4: Bad loss factor.')
+    test_neighbor = Neighbor(transactive_node=tn, cost_parameters=[])
+    test_neighbor.maximum_power = 1000
+    test_neighbor.loss_factor = 'bad'
+    test_vertices = [Vertex(price=0, cost=0, quantity=0)]
+    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices, archive=False)
+
+    try:
+        test_neighbor.include_marginal_losses(sd_curve=sd_curve)
+        print('  - the method ran without errors (warning logged)')
+    except RuntimeWarning as error:
+        print('  - ERRORS ENCOUNTERED: ', error)
+
+    new_vertices = list(sd_curve.vertices)
+    assert len(new_vertices) == 1, 'An unexpected number of objects was returned.'
+    assert new_vertices[0].quantity == test_vertices[0].quantity, 'Power was not as expected'
+    assert new_vertices[0].price == test_vertices[0].price, 'Price was not as expected'
+
+    print('test_include_marginal_losses() ran to completion.\n')
+
+
+def test_remove_demand_charges():
+    print('Running test_remove_demand_charges().\n')
+    # 200806DJH: This test should be symmetrical to test_include_demand_charges().
+    
+    # Set up dummy infrastructure for Neighbor
+    class DummyDataManager:
+        def archive_data(self, _records=None):
+            pass
+    
+    class DummyTransactiveNode:
+        def __init__(self, data_manager):
+            self.data_manager = data_manager
+        
+        def register_subscription(self, subscribe_key, callback):
+            pass
+    
+    from tent.containers.sd_curve import SDCurve
+    
+    data_manager = DummyDataManager()
+    tn = DummyTransactiveNode(data_manager)
+
+    print('Case 1: The threshold is less than any of the vertex powers.')
+    test_vertices = [Vertex(price=-.2, cost=0, quantity=-190),  #0
+                     Vertex(price=.1, cost=0, quantity=-90),  #1
+                     Vertex(price=0.2, cost=0, quantity=-40),  #2
+                     Vertex(price=0.3, cost=0, quantity=-40),  #3
+                     Vertex(price=0.3, cost=0, quantity=0),  #4
+                     Vertex(price=0.4, cost=0, quantity=10)]  #5
+    threshold = -191
+    test_neighbor = Neighbor(transactive_node=tn, cost_parameters=[])
+    
+    # Modern API: Create SDCurve and apply removal
+    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices, archive=False)
+    original_prices = [v.price for v in sd_curve.vertices]
+    original_quantities = [v.quantity for v in sd_curve.vertices]
+    
+    try:
+        test_neighbor.remove_demand_charges(sd_curve=sd_curve, threshold=threshold)
+        print('  - The test ran without errors.')
+    except RuntimeError as messages:
+        print('  - ERRORS WERE ENCOUNTERED: ' + str(messages))
+
+    corrected_vertices = list(sd_curve.vertices)
+    assert [x.price for x in corrected_vertices] == original_prices, \
+        'Marginal prices should not have changed.'
+    assert [x.quantity for x in corrected_vertices] == original_quantities, \
+        'Powers should not have changed.'
+
+    print('Case 2: One vertex exists at an active demand threshold.')
+    test_vertices = [Vertex(price=-.2, cost=0, quantity=-190),
+                     Vertex(price=.1, cost=0, quantity=-90),
+                     Vertex(price=0.2, cost=0, quantity=-40),
+                     Vertex(price=0.3, cost=0, quantity=-40),
+                     Vertex(price=0.3, cost=0, quantity=0),
+                     Vertex(price=0.4, cost=0, quantity=10)]
+    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices, archive=False)
+    threshold = 0  # test_vertices[4].quantity
+    test_neighbor.demand_rate = 10
+
+    try:
+        test_neighbor.remove_demand_charges(sd_curve=sd_curve, threshold=threshold)
+        print('  - The test ran without errors.')
+    except RuntimeError as messages:
+        print('  - ERRORS WERE ENCOUNTERED: ' + str(messages))
+
+    corrected_vertices = list(sd_curve.vertices)
+    assert len(corrected_vertices) == 7, f'A new vertex should have been added (got {len(corrected_vertices)}).'
+    # Prices below/at threshold should have demand_rate removed, above threshold unchanged
+    expected_prices = [-.2 - 10, .1 - 10, 0.2 - 10, 0.3 - 10, 0.3 - 10, 0.3, 0.4]
+    assert [x.price for x in corrected_vertices] == expected_prices, \
+                                                             'Marginal prices are not as expected.'
+
+    print('Case 3: Two (or more) vertices at an active demand threshold.')
+    test_vertices = [Vertex(price=-.2, cost=0, quantity=-190),
+                     Vertex(price=.1, cost=0, quantity=-90),
+                     Vertex(price=0.2, cost=0, quantity=-40),
+                     Vertex(price=0.3, cost=0, quantity=-40),
+                     Vertex(price=0.3, cost=0, quantity=0),
+                     Vertex(price=0.4, cost=0, quantity=10)]
+    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices, archive=False)
+    threshold = -40
+
+    try:
+        test_neighbor.remove_demand_charges(sd_curve=sd_curve, threshold=threshold)
+        print('  - The test ran without errors.')
+    except RuntimeError as messages:
+        print('  - ERRORS WERE ENCOUNTERED: ' + str(messages))
+
+    corrected_vertices = list(sd_curve.vertices)
+    assert len(corrected_vertices) == 6, f'No new vertices should have been added (got {len(corrected_vertices)}).'
+    # Vertices at or below -40 should have demand_rate removed
+    expected_prices = [-.2 - 10, .1 - 10, 0.2 - 10, 0.3, 0.3, 0.4]
+    assert [x.price for x in corrected_vertices] == expected_prices, \
+                                                                            'Marginal prices are not as expected.'
+    assert [x.quantity for x in corrected_vertices] == [-190, -90, -40, -40, 0, 10], \
+                                                    'Powers are not as expected.'
+
+    print('Case 4: No vertex exists at an active demand threshold within the power range of the vertices.')
+    test_vertices = [Vertex(price=-.2, cost=0, quantity=-190),
+                     Vertex(price=.1, cost=0, quantity=-90),
+                     Vertex(price=0.2, cost=0, quantity=-40),
+                     Vertex(price=0.3, cost=0, quantity=-40),
+                     Vertex(price=0.3, cost=0, quantity=0),
+                     Vertex(price=0.4, cost=0, quantity=10)]
+    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices, archive=False)
+    threshold = -140
+
+    try:
+        test_neighbor.remove_demand_charges(sd_curve=sd_curve, threshold=threshold)
+        print('  - The test ran without errors.')
+    except RuntimeError as messages:
+        print('  - ERRORS WERE ENCOUNTERED: ' + str(messages))
+
+    corrected_vertices = list(sd_curve.vertices)
+    assert len(corrected_vertices) == 8, f'Two new vertices should have been added (got {len(corrected_vertices)}).'
+    # Check that vertices were inserted at threshold
+    quantities = [x.quantity for x in corrected_vertices]
+    assert quantities == [-190, -140, -140, -90, -40, -40, 0, 10], \
+                                                'The powers were not as expected.'
+
+    print('Case 5: All vertex powers are below the threshold.')
+    test_vertices = [Vertex(price=-.2, cost=0, quantity=-190),
+                     Vertex(price=.1, cost=0, quantity=-90),
+                     Vertex(price=0.2, cost=0, quantity=-40),
+                     Vertex(price=0.3, cost=0, quantity=-40),
+                     Vertex(price=0.3, cost=0, quantity=0),
+                     Vertex(price=0.4, cost=0, quantity=10)]
+    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices, archive=False)
+    threshold = 11  # This threshold is just above the vertices' powers.
+    # NOTE: The method resets this threshold to p=0. Sets of vertices that lie BOTH above and below p=0 may have another
+    # vertex creates at p=0.
+
+    try:
+        test_neighbor.remove_demand_charges(sd_curve=sd_curve, threshold=threshold)
+        print('  - The test ran without errors.')
+    except RuntimeError as messages:
+        print('  - ERRORS WERE ENCOUNTERED: ' + str(messages))
+
+    corrected_vertices = list(sd_curve.vertices)
+    assert len(corrected_vertices) == 7, f'One new vertex should have been added (got {len(corrected_vertices)}).'
+    # Threshold should be reset to 0, vertices at/below 0 get demand_rate removed
+    assert sum([x.quantity==0 for x in corrected_vertices]) == 2, \
+                                                    'Two vertices should exist at the threshold 0.'
+
+    print('Case 6: One lone vertex input.')
+    single_vertex = Vertex(price=-.2, cost=0, quantity=-190)
+    sd_curve = SDCurve(measurement=None, interval=None, vertices=[single_vertex], archive=False)
+    threshold = -150
+
+    try:
+        test_neighbor.remove_demand_charges(sd_curve=sd_curve, threshold=threshold)
+        print('  - The test ran without errors.')
+    except RuntimeError as messages:
+        print('  - ERRORS WERE ENCOUNTERED: ' + str(messages))
+
+    corrected_vertices = list(sd_curve.vertices)
+    assert len(corrected_vertices) == 1, f'One vertex should remain (got {len(corrected_vertices)}).'
+    assert corrected_vertices[0].price == pytest.approx(-.2 - test_neighbor.demand_rate), \
+                                                                        'The vertex marginal price was not as expected.'
+    assert corrected_vertices[0].quantity == -190, \
+                                                    'The vertex power was not as expected.'
+
+    print('test_remove_demand_charges() ran to completion.\n')
+
+
+def test_remove_marginal_losses():
+    """Test the remove_marginal_losses method using modern SDCurve API."""
+    print('Running test_remove_marginal_losses().')
+
+    # Create dummy infrastructure for the Neighbor
+    class DummyDataManager:
+        def archive_data(self, *args, **kwargs):
+            pass
+    
+    class DummyTransactiveNode:
+        def __init__(self):
+            self.data_manager = DummyDataManager()
+        
+        def register_subscription(self, *args, **kwargs):
+            pass
+
+    # Test 1: Testing a range of load and supply vertices with positive and negative prices.
+    print('- Test 1: Testing a range of load and supply vertices with positive and negative prices.')
+    
+    tn = DummyTransactiveNode()
+    test_neighbor = Neighbor(transactive_node=tn, cost_parameters=[])
+    test_neighbor.loss_factor = 0.01
+    test_neighbor.maximum_power = 20
+    
+    # Create test vertices using modern API: Vertex(price, cost, quantity)
+    # Note: Only demand vertices (quantity<0) should be modified by remove_marginal_losses
+    test_vertices = [
+        Vertex(price=-.1, cost=0, quantity=-10),   # Demand vertex - should be modified
+        Vertex(price=-0.1, cost=0, quantity=0),    # Neutral vertex - no change
+        Vertex(price=-.1, cost=0, quantity=10),    # Supply vertex - no change
+        Vertex(price=0, cost=0, quantity=-10),     # Demand vertex - should be modified
+        Vertex(price=0, cost=0, quantity=0),       # Neutral vertex - no change
+        Vertex(price=0, cost=0, quantity=10),      # Supply vertex - no change
+        Vertex(price=0.1, cost=0, quantity=-10),   # Demand vertex - should be modified
+        Vertex(price=0.1, cost=0, quantity=0),     # Neutral vertex - no change
+        Vertex(price=0.1, cost=0, quantity=10)     # Supply vertex - no change
+    ]
+
+    assert len(test_vertices) == 9, 'This test should start and end with nine vertices.'
+    assert test_neighbor.loss_factor == 0.01, 'In this case the full-load loss is 1%'
+
+    # Create SDCurve and call remove_marginal_losses (modifies in place)
+    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices, archive=False)
+    
+    try:
+        test_neighbor.remove_marginal_losses(sd_curve=sd_curve)
+        print('  - the method ran without errors')
+    except RuntimeWarning:
+        print('  - ERRORS ENCOUNTERED')
+
+    # Extract modified vertices
+    new_vertices = list(sd_curve.vertices)
+
+    assert len(new_vertices) == 9, f'Expected 9 vertices returned. Got {len(new_vertices)}.'
+    
+    # Calculate expected values for demand vertices (quantity<0)
+    # Formula from neighbor/__init__.py remove_marginal_losses:
+    # power = -(self.maximum_power / (2 * self.loss_factor)) * 
+    #         (1 - (1 - 4 * (-vertex.quantity / self.maximum_power) * self.loss_factor) ** 0.5)
+    # price = vertex.price * (1 + 4 * self.loss_factor * vertex.quantity / self.maximum_power) ** 0.5
+    
+    expected_power = -(0.5 * test_neighbor.maximum_power / test_neighbor.loss_factor) * \
+                     (1 - (1 - 4 * (10/test_neighbor.maximum_power) * test_neighbor.loss_factor) ** 0.5)
+    expected_price = 0.1 * (1 - 2 * (-expected_power / test_neighbor.maximum_power) * test_neighbor.loss_factor)
+    
+    # Check that only demand vertices (quantity<0) were modified
+    # Vertices at indices 0, 3, 6 are demand vertices (original quantity=-10)
+    assert new_vertices[0].quantity == pytest.approx(expected_power), f'Power was not as expected for vertex 0'
+    assert new_vertices[3].quantity == pytest.approx(expected_power), f'Power was not as expected for vertex 3'
+    assert new_vertices[6].quantity == pytest.approx(expected_power), f'Power was not as expected for vertex 6'
+    
+    assert new_vertices[0].price == pytest.approx(-expected_price), f'Price was not as expected for vertex 0'
+    assert new_vertices[3].price == pytest.approx(0), f'Price was not as expected for vertex 3'
+    assert new_vertices[6].price == pytest.approx(expected_price), f'Price was not as expected for vertex 6'
+    
+    # Check that supply and neutral vertices were NOT modified
+    assert new_vertices[1].quantity == 0 and new_vertices[1].price == -0.1, 'Vertex 1 should be unchanged'
+    assert new_vertices[2].quantity == 10 and new_vertices[2].price == -.1, 'Vertex 2 should be unchanged'
+    assert new_vertices[4].quantity == 0 and new_vertices[4].price == 0, 'Vertex 4 should be unchanged'
+    assert new_vertices[5].quantity == 10 and new_vertices[5].price == 0, 'Vertex 5 should be unchanged'
+    assert new_vertices[7].quantity == 0 and new_vertices[7].price == 0.1, 'Vertex 7 should be unchanged'
+    assert new_vertices[8].quantity == 10 and new_vertices[8].price == 0.1, 'Vertex 8 should be unchanged'
+
+    print('test_remove_marginal_losses() ran to completion.\n')
+
+
 
