@@ -134,10 +134,14 @@ class SDCurve(Archivable):
 
     @staticmethod
     def _parse_vertices(vertices):
+        # Handle empty vertex list
+        if not vertices:
+            return []
         if all([isinstance(vertex, Vertex) for vertex in vertices]):
             return vertices
         elif all([isinstance(vertex, list) for vertex in vertices]):
-            return [Vertex(*[float(i) for i in vertex]) for vertex in vertices]
+            # Filter out empty lists
+            return [Vertex(*[float(i) for i in vertex]) for vertex in vertices if vertex]
         elif all([isinstance(vertex, dict) for vertex in vertices]):
             return [Vertex(**vertex) for vertex in vertices]
         else:
@@ -489,7 +493,7 @@ class SDMeasurement(Measurement):
                value: SDCurve | list[Vertex] | Vertex | list[list[float]] | list[dict],
                archive: bool = True, replace: bool = False):
         if isinstance(value, SDCurve):
-            processed_value = value.vertices
+            processed_value = list(value.vertices)  # Convert SortedSet to list
         elif isinstance(value, Vertex):
             processed_value = [value]
         else:
