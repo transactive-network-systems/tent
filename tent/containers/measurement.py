@@ -79,6 +79,17 @@ class MeasurementValue(Archivable):
     def __mul__(self, other):
         return self.value * self._get_numeric_value(other)
 
+    # Reverse operators needed for when MeasurementValue is on right side of operation
+    # e.g., float * MeasurementValue in: marginal_price * scheduled_power * duration
+    def __rmul__(self, other):
+        return self._get_numeric_value(other) * self.value
+
+    def __radd__(self, other):
+        return self._get_numeric_value(other) + self.value
+
+    def __rsub__(self, other):
+        return self._get_numeric_value(other) - self.value
+
     def __floordiv__(self, other):
         return self.value // self._get_numeric_value(other)
 

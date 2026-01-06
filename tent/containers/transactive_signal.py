@@ -144,8 +144,10 @@ class TransactiveSignal(SDMeasurement):
                 return  # TODO: Should we raise on bad market or neighbor and let the caller handle it?
             if not (neighbor := tn.get_neighbor_by_name(message['neighbor'])):
                 _log.warning(f'Unable to find valid neighbor "{neighbor}" from received transactive signal.')
+            # Parse ISO format string to datetime object
+            signal_time = datetime.fromisoformat(message['signal_time']) if message.get('signal_time') else None
             signal = cls(market=market, neighbor=neighbor, direction='received',
-                         signal_time=message['signal_time'], measurement_unit=message['unit'])
+                         signal_time=signal_time, measurement_unit=message['unit'])
         except KeyError as e:
             _log.warning(f'Missing required field in transactive signal: {e}.')
             return

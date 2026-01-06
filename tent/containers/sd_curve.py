@@ -42,7 +42,7 @@ class SDCurve(Archivable):
                                                 ) if measurement else None
         # TODO: This is a rather different default than is used in Entity.default_vertices....
         self.vertices: SortedSet = SortedSet()
-        if vertices:
+        if vertices is not None:
             self.vertices.update(self._parse_vertices(vertices))
         else:
             self.vertices.add(Vertex(price=0.0, quantity=0.0, continuity=False, curve=self))
@@ -101,16 +101,21 @@ class SDCurve(Archivable):
     # TODO: Min an max quantity methods are attempting to compare floats and vertices.
     #  These really need to work with one or the other.  There can be a second function that works with the other.
     def max_quantity(self, limit: float = None) -> float:
-        default = limit if limit is not None else 0.0 # TODO: Limit is a float, but default should be a Vertex or (possibly?) None.
-        # TODO: max_vertex_quantity is a vertex, not a quantity. (BUG -> unless default is used -- then it is a float).
-        max_vertex_quantity =  max(self.vertices, key=lambda v: v.quantity, default=default).quantity
+        default = limit if limit is not None else 0.0
+        # Handle empty vertices list
+        if not self.vertices:
+            return default
+        max_vertex_quantity = max(self.vertices, key=lambda v: v.quantity).quantity
         # The upper operational constraint must be less than or equal to the object's hard physical constraint.
         constrained_quantity = min(limit, max_vertex_quantity) if limit is not None else max_vertex_quantity
         return constrained_quantity
 
     def min_quantity(self, limit: float = None) -> float:
         default = limit if limit is not None else 0.0
-        min_vertex_quantity =  min(self.vertices, key=lambda v: v.quantity, default=default).quantity
+        # Handle empty vertices list
+        if not self.vertices:
+            return default
+        min_vertex_quantity = min(self.vertices, key=lambda v: v.quantity).quantity
         # The upper operational constraint must be less than or equal to the object's hard physical constraint.
         constrained_quantity = max(limit, min_vertex_quantity) if limit is not None else min_vertex_quantity
         return constrained_quantity

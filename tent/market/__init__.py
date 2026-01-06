@@ -609,7 +609,7 @@ class Market(Component):
         """
         for time_interval in self.time_intervals:
             # Call the utility sum_vertices to recreate the aggregate vertices in the indexed time interval.
-            self.active_vertices.update(time_interval, self.sum_vertices(self.tn, time_interval), replace=True)
+            self.active_vertices.update(time_interval, self.sum_vertices(time_interval), replace=True)
 
     def balance(self, k=1):
         """
@@ -819,7 +819,7 @@ class Market(Component):
             sd_curve = entity.active_vertices.get_by_interval(time_interval)
             if sd_curve is None or sd_curve.empty:
                 continue
-                marginal_price_list.update([float("inf")] if len(sd_curve) == 1 else sd_curve.prices)  # [$/kWh]
+            marginal_price_list.update([float("inf")] if len(sd_curve) == 1 else sd_curve.prices)  # [$/kWh]
 
         # Keep only two (near) duplicates of any marginal price.
         #   Where there are two instances of a price, offset one by a small number so the SDCurve remains a function.
@@ -832,9 +832,9 @@ class Market(Component):
             marginal_price_set.discard(float('inf'))
 
         # A clean set of marginal prices has been created. Create vertices at the marginal prices.
-        summed_curve = SDCurve(None, time_interval)
+        summed_curve = SDCurve(None, time_interval, vertices=[])
         # Index through the cleaned list of marginal prices
-        for mp in marginal_price_list:
+        for mp in marginal_price_set:
             # Create a vertex at the indexed marginal price value
             vertex = Vertex(mp, 0, 0)
 

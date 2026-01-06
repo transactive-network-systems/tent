@@ -42,6 +42,8 @@ class MockTN(TransactiveNode):
         self._lock = threading.Lock()
         # Slice-assignable list of markets used by Market.events() when removing expired markets
         self.markets: list = []
+        # Mock data_manager to avoid archiving errors in tests
+        self._data_manager = type('MockDataManager', (), {'archive_data': lambda self, records: None})()
 
     def register_recipient(self, recipient: str, callback: Callable):
         """Register a callback function to receive signals sent to a recipient."""
