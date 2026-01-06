@@ -1671,7 +1671,6 @@ def test_update_vertices():
     
     print('test_update_vertices() ran to completion.\n')
 
-
 def test_include_demand_charges():
     print('Running test_include_demand_charges().')
     
@@ -1840,7 +1839,6 @@ def test_include_demand_charges():
 
     print('Test_include_demand_charges() ran to completion.\n')
 
-
 def test_include_marginal_losses():
     print('Running test_include_marginal_losses().')
     
@@ -1944,7 +1942,6 @@ def test_include_marginal_losses():
     assert new_vertices[0].price == test_vertices[0].price, 'Price was not as expected'
 
     print('test_include_marginal_losses() ran to completion.\n')
-
 
 def test_remove_demand_charges():
     print('Running test_remove_demand_charges().\n')
@@ -2109,7 +2106,6 @@ def test_remove_demand_charges():
                                                     'The vertex power was not as expected.'
 
     print('test_remove_demand_charges() ran to completion.\n')
-
 
 def test_remove_marginal_losses():
     """Test the remove_marginal_losses method using modern SDCurve API."""
