@@ -65,6 +65,11 @@ class Timer(object):
             ratio = 3600 / cls.sim_one_hr_in_sec
             time_diff = now - cls.created_time
             simulation_time_diff = time_diff * ratio
-            now = cls.sim_start_time + simulation_time_diff
+            try:
+                now = cls.sim_start_time + simulation_time_diff
+            except OverflowError:
+                # If simulation time overflows, clamp to datetime.max
+                # This can happen if simulation runs too long or ratio is too high
+                now = datetime.max.replace(tzinfo=tz) if tz else datetime.max
 
         return now
