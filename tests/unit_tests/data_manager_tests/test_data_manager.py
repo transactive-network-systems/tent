@@ -220,7 +220,7 @@ class TestVolttronDataManagerUnits:
         )
         
         assert vdm.parent == self.mock_tn
-        assert vdm.tn == self.mock_tn  # Storage for tests/internal methods
+        # Note: VolttronDataManager stores 'parent', not 'tn'
         assert vdm.historian_topic == 'Custom/Archive'
         assert vdm.historian_vip == 'custom.historian'
         

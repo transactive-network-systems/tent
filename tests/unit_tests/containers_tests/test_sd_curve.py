@@ -29,6 +29,7 @@ class DummySource:
 	def __init__(self, name="SRC"):
 		self.name = name
 		self.tn = DummyTN()
+		self.id = 1  # Real sources inherit from Archivable which has id
 
 
 class DummyMeasurement:
@@ -139,8 +140,12 @@ def test_rationality_fix_up(measurement, interval):
 def test_get_vertices_at_quantity(measurement, interval):
 	c = make_curve(measurement, interval, [Vertex(10, quantity=1), Vertex(20, quantity=1), Vertex(30, quantity=3)])
 	sub = c.get_vertices_at_quantity(1)
-	# Duplicate quantities collapse under current simplified init (SortedSet) -> expect single representative
-	assert len(sub.vertices) == 1
+	# Two vertices with same quantity=1 but different prices (10 and 20)
+	# Vertices are distinct objects (not collapsed) because they differ in price
+	assert len(sub.vertices) == 2
+	assert all(v.quantity == 1 for v in sub.vertices)
+	prices = sorted(v.price for v in sub.vertices)
+	assert prices == [10, 20]
 
 
 def test_update_add_list(measurement, interval):

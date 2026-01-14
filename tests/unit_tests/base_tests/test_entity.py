@@ -264,9 +264,12 @@ class TestEntity:
         entity = ConcreteEntity(**params)
         
         # Single vertex should have price adjusted to infinity
-        assert entity.default_vertices[0].price == float('inf')
-        assert entity.default_vertices[0].quantity == 100.0
-        assert entity.default_vertices[0].cost == 10.0
+        # default_vertices is an SDCurve, access vertices through .vertices attribute
+        vertices_list = list(entity.default_vertices.vertices)
+        assert len(vertices_list) == 1
+        assert vertices_list[0].price == float('inf')
+        assert vertices_list[0].quantity == 100.0
+        assert vertices_list[0].cost == 10.0
 
     def test_multiple_vertices_no_price_adjustment(self):
         """Test that multiple vertices keep their original prices"""
@@ -280,8 +283,11 @@ class TestEntity:
         entity = ConcreteEntity(**params)
         
         # Multiple vertices should keep original prices
-        assert entity.default_vertices[0].price == 50.0
-        assert entity.default_vertices[1].price == 60.0
+        # default_vertices is an SDCurve, access vertices through .vertices attribute
+        vertices_list = list(entity.default_vertices.vertices)
+        assert len(vertices_list) == 2
+        assert vertices_list[0].price == 50.0
+        assert vertices_list[1].price == 60.0
 
     def test_cost_parameters_type_conversion(self):
         """Test that cost parameters are converted to floats"""
