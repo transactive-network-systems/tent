@@ -20,7 +20,7 @@ from unittest.mock import patch, Mock
 
 from tests.mock_tn import MockTN
 from tent.utils.timer import Timer
-from tests.integration.fixtures.sample_weather_data import write_weather_csv
+from tests.integration_tests.fixtures.sample_weather_data import write_weather_csv
 
 
 def test_weather_forecast_impacts_market():
