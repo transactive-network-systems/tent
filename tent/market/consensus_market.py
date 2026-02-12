@@ -58,6 +58,12 @@ class ConsensusMarket(Market):
         # Almost all consensus balancing activities will occur while the market is in its negotiation state.
         # This method replaces Market.while_in_negotiation().
 
+        # If already converged from a prior call, signal completion and return immediately.
+        # This prevents re-running the full iteration loop on every events() tick after convergence.
+        if self.converged:
+            self._stateIsCompleted = True
+            return
+
         # Clean up or initialize marginal prices. This should not be repeated in process iterations.
         self.check_marginal_prices()
 
@@ -184,6 +190,9 @@ class ConsensusMarket(Market):
             k = k + 1
             if k == 100:
                 self.converged = True
+
+        # Signal that negotiation work is complete so the state machine can transition.
+        self._stateIsCompleted = True
 
     def transition_from_negotiation_to_market_lead(self):
         # This is an opportunity to wrap up any loose negotiation ends before the market fully closes.
