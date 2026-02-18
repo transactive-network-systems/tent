@@ -172,7 +172,13 @@ class Market(Component):
         # If the expiration time has passed, force the market to Expired regardless of its current state.
         # This prevents markets from hanging indefinitely in intermediate states (e.g., waiting for signals
         # that never arrive) and leaking memory.
-        if (self.market_state not in (MarketState.Initial, MarketState.Expired)
+        #
+        # MarketState.Delivery is excluded because when duration_reconciliation == 0,
+        # expiration_start == reconciliation_start. A market legitimately in Delivery at that moment
+        # is NOT stuck — it is about to enter Reconcile on this same tick via the normal
+        # Delivery→Reconcile transition. The Delivery soft timeout below handles any genuinely
+        # stuck Delivery state, making the backstop exclusion safe.
+        if (self.market_state not in (MarketState.Initial, MarketState.Delivery, MarketState.Expired)
                 and current_time >= self.transition_times.expiration):
             _log.warning(
                 f'MARKET: {self.name} force-expired from state {self.market_state.name}. '
