@@ -147,11 +147,9 @@ class Auction(Market):
         missing_report = []
         # Index through the downstream agents.
         for downstream_agent in downstream_agents:
-            # Establish a list for the time intervals for which records have been received by this downstream agent.
-            received_time_interval_names = []
-
-            for received_record in downstream_agent.received_signal:
-                received_time_interval_names.append(received_record.time_interval)
+            # Check which time intervals have been received from this downstream agent.
+            received_signal = downstream_agent.last_received_signals.get(self)
+            received_time_interval_names = [ti.name for ti, _ in received_signal.all] if received_signal else []
 
             # Seek any active market time intervals that were not among the received transactive records.
             missing_interval_names = [x.name for x in self.time_intervals
@@ -223,16 +221,12 @@ class Auction(Market):
         upstream_agent = upstream_agents[0]
 
         if upstream_agent.transactive is True:
-            # Create a list of the time interval names among the received transactive signal:
-            received_time_intervals = []
-
-            # TODO: Consider using property "converged" as a flag for upstream agents that have received their \
-            #  transactive signals. The flag must be set false in the transition to this state.
-            for received_record in upstream_agent.received_signal:
-                received_time_intervals.append(received_record.time_interval)
+            # Check which time intervals have been received from the upstream agent.
+            received_signal = upstream_agent.last_received_signals.get(self)
+            received_time_interval_names = [ti.name for ti, _ in received_signal.all] if received_signal else []
 
             # Check whether any active market time intervals are not among the received record intervals.
-            missing_time_intervals = [x.name for x in self.time_intervals if x.name not in received_time_intervals]
+            missing_time_intervals = [x.name for x in self.time_intervals if x.name not in received_time_interval_names]
 
             # If time intervals are missing among the upstream agent's transactive records,
             if missing_time_intervals:

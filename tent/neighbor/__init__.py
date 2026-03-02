@@ -42,11 +42,8 @@ under Contract DE-AC05-76RL01830
 """
 import json
 import logging
-from dataclasses import dataclass
-
 from copy import deepcopy
 from datetime import datetime
-from itertools import chain
 from typing import Union
 from weakref import WeakKeyDictionary
 
@@ -58,15 +55,6 @@ from tent.utils.helpers import validate_bool
 from tent.utils.timer import Timer
 
 _log = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True)
-class _LegacySignalRecord:
-    """Shim object providing backward-compatible access to received signals."""
-    time_interval: str
-    marginal_price: float | None
-    power: float | None
-    market_name: str | None = None
 
 
 class Neighbor(Entity):
@@ -137,74 +125,6 @@ class Neighbor(Entity):
 
         transactive_node.register_subscription(subscribe_key=f'{self.name}_incoming_transactive_signal',
                                                callback=self.receive_transactive_signal)
-
-    @property
-    def received_signal(self):
-        """Backward-compatible view of received signals as iterable records.
-
-        Legacy auction workflows expect Neighbor.received_signal to be iterable with
-        objects exposing a ``time_interval`` attribute (string name), along with
-        optional pricing metadata. This shim reconstructs that interface using the
-        parsed ``TransactiveSignal`` instances stored in ``last_received_signals``.
-        """
-
-        legacy_records: list[_LegacySignalRecord] = []
-        for market, signal in list(self.last_received_signals.items()):
-            if signal is None:
-                continue
-            market_name = getattr(market, 'name', None)
-            for time_interval, sd_curve in signal.all:
-                balance_vertex = signal.balance_point(time_interval)
-                if balance_vertex is not None:
-                    legacy_records.append(
-                        _LegacySignalRecord(
-                            time_interval=time_interval.name,
-                            marginal_price=getattr(balance_vertex, 'price', None),
-                            power=getattr(balance_vertex, 'quantity', None),
-                            market_name=market_name
-                        )
-                    )
-                    continue
-
-                # Fall back to using the first vertex from the curve if no balance point exists.
-                first_vertex = next(iter(sd_curve.vertices), None)
-                legacy_records.append(
-                    _LegacySignalRecord(
-                        time_interval=time_interval.name,
-                        marginal_price=getattr(first_vertex, 'price', None),
-                        power=getattr(first_vertex, 'quantity', None),
-                        market_name=market_name
-                    )
-                )
-
-        if legacy_records:
-            return legacy_records
-
-        # No transactive signal has been received yet. Provide a synthetic record based on default vertices so that
-        # legacy auction workflows can continue to function prior to the first real message exchange.
-        default_vertex = next(iter(getattr(self.default_vertices, 'vertices', [])), None)
-        if default_vertex is None:
-            return legacy_records
-
-        market_iterables = []
-        if hasattr(self.tn, 'market_series'):
-            market_iterables.extend(getattr(series, 'markets', []) for series in self.tn.market_series)
-        else:
-            market_iterables.append(getattr(self.tn, 'markets', []))
-
-        for market in chain.from_iterable(market_iterables):
-            market_name = getattr(market, 'name', None)
-            for time_interval in getattr(market, 'time_intervals', []):
-                legacy_records.append(
-                    _LegacySignalRecord(
-                        time_interval=time_interval.name,
-                        marginal_price=getattr(default_vertex, 'price', None),
-                        power=getattr(default_vertex, 'quantity', None),
-                        market_name=market_name
-                    )
-                )
-
-        return legacy_records
 
     def check_for_convergence(self, market):
         # Qualifies state of convergence with a transactive Neighbor object by active time interval and globally.

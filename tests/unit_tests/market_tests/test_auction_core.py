@@ -60,9 +60,9 @@ def test_while_in_negotiation_not_converged():
 
 def test_while_in_market_lead_assigns_unassigned_and_requires_single_upstream():
     tn = Mock()
-    up = Mock(); up.up_or_down = Direction.upstream; up.transactive=True; up.received_signal=[]
-    down = Mock(); down.up_or_down = Direction.downstream; down.received_signal=[]
-    unassigned = Mock(); unassigned.up_or_down = None; unassigned.received_signal=[]
+    up = Mock(); up.up_or_down = Direction.upstream; up.transactive=True; up.last_received_signals={}
+    down = Mock(); down.up_or_down = Direction.downstream; down.last_received_signals={}
+    unassigned = Mock(); unassigned.up_or_down = None; unassigned.last_received_signals={}
     tn.neighbors = [up, down, unassigned]
     tn.local_assets = []
     auc = build_auction(tn)
