@@ -218,6 +218,7 @@ class Measurement(Archivable):
 
     def update(self, time_interval: TimeInterval, value: Any, archive: bool = True, replace: bool = False):
         # TODO: Is replace used and/or necessary?
+        # TODO: create batch_update method which uses the same record time for all values to archive all values. 
         if time_interval in self._data and not replace:
             # Receiving datatype, here, must handle all its own transformations from allowed input types.
             self._data[time_interval].update(value, archive)

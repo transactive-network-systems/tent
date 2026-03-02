@@ -35,6 +35,7 @@ class SDCurve(Archivable):
                  vertices: list | None = None,
                  archive: bool = True
                  ):
+        # TODO logic should be here. check out the before and after comparison. 
         super(SDCurve, self).__init__()
         self.__interval: TimeInterval = proxy(interval, safe_weak_proxy_callback(self, 'interval')
                                               ) if interval else None
@@ -125,7 +126,7 @@ class SDCurve(Archivable):
 
     def get_vertices_at_quantity(self, quantity: float):  # -> SDCurve (annotated dynamically for py<3.11)
         # Return an SDCurve containing the Vertex objects that match the given quantity.
-        interval = self.interval if not isinstance(self.interval, ProxyType) else None
+        interval = self.interval if not isinstance(self.interval, ProxyType) else None # making it none is a sidestep. not good. change this back to. 
         matching_vertices = [v for v in self.vertices if v.quantity == quantity]
         result = SDCurve(None, interval, matching_vertices)
         if not matching_vertices:

@@ -873,9 +873,9 @@ class Market(Component):
                 continue
 
             sd_curve = entity.active_vertices.get_by_interval(time_interval)
-            if sd_curve is None or sd_curve.empty:
-                continue
-            marginal_price_list.update([float("inf")] if len(sd_curve) == 1 else sd_curve.prices)  # [$/kWh]
+
+            if not sd_curve.empty:
+                marginal_price_list.update([float("inf")] if len(sd_curve) == 1 else sd_curve.prices)  # [$/kWh]
 
         # Keep only two (near) duplicates of any marginal price.
         #   Where there are two instances of a price, offset one by a small number so the SDCurve remains a function.
@@ -888,6 +888,8 @@ class Market(Component):
             marginal_price_set.discard(float('inf'))
 
         # A clean set of marginal prices has been created. Create vertices at the marginal prices.
+        # TODO: Reevaluate passing vertices=[] here. Without it, SDCurve defaults to a dummy (0,0) vertex.
+        #  Is it worth creating an SDCurve with empty vertices, or should we handle the no-prices case earlier?
         summed_curve = SDCurve(None, time_interval, vertices=[])
         # Index through the cleaned list of marginal prices
         for mp in marginal_price_set:

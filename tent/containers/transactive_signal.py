@@ -102,6 +102,7 @@ class TransactiveSignal(SDMeasurement):
         for ti, sd in self.all:
             # Build flexibility records from the SDCurve's vertices
             flexibility = {}
+            # TODO: why have this []? that should never happen in prod. double check that. 
             for i, v in enumerate(getattr(sd, 'vertices', [])):
                 flexibility[i] = {
                     'marginal_price': v.price,
