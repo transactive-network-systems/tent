@@ -68,10 +68,7 @@ class Timer(object):
             try:
                 now = cls.sim_start_time + simulation_time_diff
             except OverflowError:
-                # If simulation time overflows, use a safe max datetime that leaves room for additions
-                # (datetime.max minus 1 year to allow for market operations)
-                from datetime import timedelta
-                max_safe = datetime.max.replace(tzinfo=tz) if tz else datetime.max
-                now = max_safe - timedelta(days=365)
+                _log.critical(f"Simulation time overflowed (year 10000+). Congrats, you made it.")
+                raise
 
         return now
