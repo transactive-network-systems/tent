@@ -61,7 +61,7 @@ def test_calculate_reserve_margin():
     test_mkt.time_intervals = [ti]
 
     # Set initial scheduled power (modern API: use .update() instead of list assignment)
-    test_model.scheduled_powers.update(ti, 0.0, archive=False)
+    test_model.scheduled_powers.update(ti, 0.0)
 
     # TEST 1: Use maximum power (no vertices exist)
     print('    TEST 1: Use maximum power')
@@ -98,7 +98,7 @@ def test_calculate_reserve_margin():
 
     # TEST 2.4: Scheduled power greater than maximum vertex (overcommitted)
     print('    TEST 2.4: Scheduled power greater than maximum vertex')
-    test_model.scheduled_powers.update(ti, 20.0, archive=False)
+    test_model.scheduled_powers.update(ti, 20.0)
     test_model.maximum_power = 500.0
     test_model.calculate_reserve_margin(test_mkt)
     
@@ -191,14 +191,14 @@ def test_check_for_convergence():
     # Create matching signals (sent exports +100, received imports -100)
     sent_signal = TransactiveSignal(test_market, test_model, signal_time=dt, direction='sent')
     sent_vertex = Vertex(price=0.05, quantity=100.0, cost=0.0)
-    sent_signal.update(time_interval, [sent_vertex], archive=False)
+    sent_signal.update(time_interval, [sent_vertex])
     # Mark the vertex as the balance point
     sent_signal._TransactiveSignal__balance_vertices[time_interval] = sent_vertex
     test_model.last_sent_signals[test_market] = sent_signal
     
     received_signal = TransactiveSignal(test_market, test_model, signal_time=dt + one_hour, direction='received')
     received_vertex = Vertex(price=0.05, quantity=-100.0, cost=0.0)
-    received_signal.update(time_interval, [received_vertex], archive=False)
+    received_signal.update(time_interval, [received_vertex])
     # Mark the vertex as the balance point  
     received_signal._TransactiveSignal__balance_vertices[time_interval] = received_vertex
     test_model.last_received_signals[test_market] = received_signal
@@ -255,7 +255,7 @@ def test_check_for_convergence():
     # Prepared signal matches sent (no conditions changed)
     prepared_signal = TransactiveSignal(test_market, test_model)
     prepared_vertex = Vertex(price=0.05, quantity=100.0, cost=0.0)
-    prepared_signal.update(time_interval, [prepared_vertex], archive=False)
+    prepared_signal.update(time_interval, [prepared_vertex])
     prepared_signal._TransactiveSignal__balance_vertices[time_interval] = prepared_vertex
     test_model.prepared_signals[test_market] = prepared_signal
     
@@ -277,13 +277,13 @@ def test_check_for_convergence():
         Vertex(price=0.049, quantity=90.0, cost=0.0),
         Vertex(price=0.051, quantity=110.0, cost=0.0)
     ]
-    multi_sent.update(time_interval, multi_vertices, archive=False)
+    multi_sent.update(time_interval, multi_vertices)
     multi_sent._TransactiveSignal__balance_vertices[time_interval] = balance_vertex
     test_model.last_sent_signals[test_market] = multi_sent
     
     # Prepared signal matches sent
     multi_prepared = TransactiveSignal(test_market, test_model)
-    multi_prepared.update(time_interval, multi_vertices, archive=False)
+    multi_prepared.update(time_interval, multi_vertices)
     multi_prepared._TransactiveSignal__balance_vertices[time_interval] = balance_vertex
     test_model.prepared_signals[test_market] = multi_prepared
     
@@ -309,7 +309,7 @@ def test_check_for_convergence():
         Vertex(price=0.049, quantity=85.0, cost=0.0),  # Changed from 90
         Vertex(price=0.051, quantity=110.0, cost=0.0)
     ]
-    diff_prepared.update(time_interval, diff_vertices, archive=False)
+    diff_prepared.update(time_interval, diff_vertices)
     diff_prepared._TransactiveSignal__balance_vertices[time_interval] = diff_balance_vertex
     test_model.prepared_signals[test_market] = diff_prepared
     
@@ -344,7 +344,7 @@ def test_marginal_price_from_vertices():
 
     # Create an SDCurve with these vertices
     # SDCurve requires measurement and interval, but we can pass None for this test
-    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices, archive=False)
+    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices)
 
     # Test 1: Power less than leftmost vertex
     print('  Test 1: power less than leftmost Vertex')
@@ -528,14 +528,14 @@ def test_prep_transactive_signal():
     print('- Test 2: The trans. Neighbor is offered no flexibility')
     
     test_model.transactive = True
-    test_model.scheduled_powers.update(time_interval, 200.0, archive=False)
+    test_model.scheduled_powers.update(time_interval, 200.0)
     test_model.maximum_power = 200.0
     test_model.minimum_power = -200.0
     test_model.loss_factor = 0
     
     # Asset has single vertex (no flexibility)
     asset_vertex = Vertex(price=0.2, cost=0, quantity=-37.5)
-    test_asset_model.active_vertices.update(time_interval, asset_vertex, archive=False)
+    test_asset_model.active_vertices.update(time_interval, asset_vertex)
     
     test_model.prep_transactive_signal(test_market)
     
@@ -551,7 +551,7 @@ def test_prep_transactive_signal():
     print('- Test 3: The trans. Neighbor imports from local system')
     
     # Neighbor imports (takes negative power from local perspective)
-    test_model.scheduled_powers.update(time_interval, -50.0, archive=False)
+    test_model.scheduled_powers.update(time_interval, -50.0)
     test_model.maximum_power = -10.0
     test_model.minimum_power = -100.0
     
@@ -576,7 +576,7 @@ def test_prep_transactive_signal():
     print('- Test 4: The trans. Neighbor exports to local system')
     
     # Neighbor exports (provides positive power from local perspective) 
-    test_model.scheduled_powers.update(time_interval, 50.0, archive=False)
+    test_model.scheduled_powers.update(time_interval, 50.0)
     test_model.maximum_power = 100.0
     test_model.minimum_power = 10.0
     
@@ -600,7 +600,7 @@ def test_prep_transactive_signal():
     # TEST 5: Extra vertex exists within flexibility range
     print('- Test 5: There is an extra Vertex in the range')
     
-    test_model.scheduled_powers.update(time_interval, 50.0, archive=False)
+    test_model.scheduled_powers.update(time_interval, 50.0)
     test_model.maximum_power = 100.0
     test_model.minimum_power = 10.0
     
@@ -882,11 +882,11 @@ def test_schedule_power():
     )
     
     # Create and store a marginal price for the time interval
-    test_market.marginal_prices.update(time_interval, 0.1, archive=False)
+    test_market.marginal_prices.update(time_interval, 0.1)
     
     # Create and store a simple active Vertex for the test neighbor
     test_vertex = Vertex(price=0.1, cost=0, quantity=100)
-    test_neighbor.active_vertices.update(time_interval, test_vertex, archive=False)
+    test_neighbor.active_vertices.update(time_interval, test_vertex)
     
     # TEST 1: scheduled power does not exist yet
     print('    Test 1: scheduled power does not exist yet')
@@ -999,7 +999,7 @@ def test_send_transactive_signal():
 
     # Prepare a signal (should not actually send since non-transactive)
     test_signal = TransactiveSignal(test_market, test_model)
-    test_signal.update(time_interval, [Vertex(price=0.1, quantity=0, cost=0)], archive=False)
+    test_signal.update(time_interval, [Vertex(price=0.1, quantity=0, cost=0)])
     test_model.prepared_signals[test_market] = test_signal
 
     # Try to send - should return early for non-transactive neighbor
@@ -1021,7 +1021,7 @@ def test_send_transactive_signal():
         Vertex(price=0.1, quantity=0, cost=0),
         Vertex(price=0.2, quantity=100, cost=0)
     ]
-    prepared_signal.update(time_interval, test_vertices, archive=False)
+    prepared_signal.update(time_interval, test_vertices)
     test_model.prepared_signals[test_market] = prepared_signal
     
     # Register a recipient to capture the sent signal
@@ -1141,8 +1141,8 @@ def test_update_dc_threshold():
     print('  Test 1: No meter, scheduled power below threshold')
     
     # Set scheduled powers in prior market (below threshold)
-    test_neighbor.scheduled_powers.update(prior_interval_1, 900.0, archive=False)
-    test_neighbor.scheduled_powers.update(prior_interval_2, 900.0, archive=False)
+    test_neighbor.scheduled_powers.update(prior_interval_1, 900.0)
+    test_neighbor.scheduled_powers.update(prior_interval_2, 900.0)
     
     test_neighbor.demand_threshold = 1000.0
     test_neighbor.demand_month = dt.month
@@ -1162,8 +1162,8 @@ def test_update_dc_threshold():
     print('  Test 2: No meter, scheduled power exceeds threshold')
     
     # Update one scheduled power to exceed threshold
-    test_neighbor.scheduled_powers.update(prior_interval_1, 1100.0, archive=False)
-    test_neighbor.scheduled_powers.update(prior_interval_2, 900.0, archive=False)
+    test_neighbor.scheduled_powers.update(prior_interval_1, 1100.0)
+    test_neighbor.scheduled_powers.update(prior_interval_2, 900.0)
     
     try:
         test_neighbor.update_dc_threshold(test_market)
@@ -1191,8 +1191,8 @@ def test_update_dc_threshold():
     
     # Reset threshold and scheduled powers
     test_neighbor.demand_threshold = 1000.0
-    test_neighbor.scheduled_powers.update(prior_interval_1, 900.0, archive=False)
-    test_neighbor.scheduled_powers.update(prior_interval_2, 900.0, archive=False)
+    test_neighbor.scheduled_powers.update(prior_interval_1, 900.0)
+    test_neighbor.scheduled_powers.update(prior_interval_2, 900.0)
     
     try:
         test_neighbor.update_dc_threshold(test_market)
@@ -1234,8 +1234,8 @@ def test_update_dc_threshold():
     test_neighbor.meter_points = []  # Remove meter for this test
     
     # Set low scheduled powers so they don't affect the result
-    test_neighbor.scheduled_powers.update(prior_interval_1, 900.0, archive=False)
-    test_neighbor.scheduled_powers.update(prior_interval_2, 900.0, archive=False)
+    test_neighbor.scheduled_powers.update(prior_interval_1, 900.0)
+    test_neighbor.scheduled_powers.update(prior_interval_2, 900.0)
     
     try:
         test_neighbor.update_dc_threshold(test_market)
@@ -1290,7 +1290,7 @@ def test_update_dual_costs():
         
         def update(self, interval, value, archive=True):
             """Store marginal price for a time interval"""
-            self._prices[interval] = MeasurementValue(self._measurement, interval, value, archive=False)
+            self._prices[interval] = MeasurementValue(self._measurement, interval, value)
         
         def get_by_interval(self, interval):
             """Get marginal price MeasurementValue for a time interval"""
@@ -1321,7 +1321,7 @@ def test_update_dual_costs():
     tn.markets.append(test_market)
 
     # Create and store a marginal price for the time interval
-    test_market.marginal_prices.update(time_interval, 0.1, archive=False)
+    test_market.marginal_prices.update(time_interval, 0.1)
 
     # Create test Neighbor
     test_neighbor = Neighbor(
@@ -1334,10 +1334,10 @@ def test_update_dual_costs():
     tn.neighbors.append(test_neighbor)
 
     # Create and store a scheduled power in the active time interval
-    test_neighbor.scheduled_powers.update(time_interval, 100.0, archive=False)
+    test_neighbor.scheduled_powers.update(time_interval, 100.0)
 
     # Create and store a production cost in the active time interval
-    test_neighbor.production_costs.update(time_interval, 1000.0, archive=False)
+    test_neighbor.production_costs.update(time_interval, 1000.0)
 
     # TEST 1: First calculation of a dual cost
     print('  Test 1: First calculation of a dual cost')
@@ -1365,7 +1365,7 @@ def test_update_dual_costs():
     print('  Test 2: Reassignment of an existing dual cost')
     
     # Configure the test by modifying the marginal price value
-    test_market.marginal_prices.update(time_interval, 0.2, archive=False)
+    test_market.marginal_prices.update(time_interval, 0.2)
     
     try:
         test_neighbor.update_dual_costs(test_market)
@@ -1701,7 +1701,7 @@ def test_include_demand_charges():
     
     # Modern API: Create SDCurve from vertices
     from tent.containers.sd_curve import SDCurve
-    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices, archive=False)
+    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices)
     original_prices = [v.price for v in sd_curve.vertices]
     original_quantities = [v.quantity for v in sd_curve.vertices]
     
@@ -1726,7 +1726,7 @@ def test_include_demand_charges():
                      Vertex(price=0.3, cost=0, quantity=50),
                      Vertex(price=0.3, cost=0, quantity=90),
                      Vertex(price=0.4, cost=0, quantity=100)]
-    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices, archive=False)
+    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices)
     threshold = 90  # test_vertices[4].quantity
     test_neighbor.demand_rate = 10
 
@@ -1754,7 +1754,7 @@ def test_include_demand_charges():
                      Vertex(price=0.3, cost=0, quantity=50),
                      Vertex(price=0.3, cost=0, quantity=90),
                      Vertex(price=0.4, cost=0, quantity=100)]
-    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices, archive=False)
+    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices)
     threshold = 50
 
     try:
@@ -1779,7 +1779,7 @@ def test_include_demand_charges():
                      Vertex(price=0.3, cost=0, quantity=50),
                      Vertex(price=0.3, cost=0, quantity=90),
                      Vertex(price=0.4, cost=0, quantity=100)]
-    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices, archive=False)
+    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices)
     threshold = 95
 
     try:
@@ -1802,7 +1802,7 @@ def test_include_demand_charges():
                      Vertex(price=0.3, cost=0, quantity=50),
                      Vertex(price=0.3, cost=0, quantity=90),
                      Vertex(price=0.4, cost=0, quantity=100)]
-    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices, archive=False)
+    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices)
     threshold = -95  # This threshold is far below the vertices' powers.
     # NOTE: The method resets this threshold to p=0. Sets of vertices that lie BOTH above and below p=0 may have another
     # vertex creates at p=0.
@@ -1821,7 +1821,7 @@ def test_include_demand_charges():
 
     print('Case 6: One lone vertex input.')
     single_vertex = Vertex(price=0.4, cost=0, quantity=100)
-    sd_curve = SDCurve(measurement=None, interval=None, vertices=[single_vertex], archive=False)
+    sd_curve = SDCurve(measurement=None, interval=None, vertices=[single_vertex])
     threshold = 95
 
     try:
@@ -1871,7 +1871,7 @@ def test_include_marginal_losses():
     assert test_neighbor.loss_factor == 0.01, 'In this case the full-load loss is 1%'
 
     # Modern API: Create SDCurve and apply losses
-    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices, archive=False)
+    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices)
     
     try:
         test_neighbor.include_marginal_losses(sd_curve=sd_curve)
@@ -1914,7 +1914,7 @@ def test_include_marginal_losses():
     test_neighbor = Neighbor(transactive_node=tn, cost_parameters=[])
     test_neighbor.maximum_power = None
     test_vertices = [Vertex(price=0, cost=0, quantity=0)]
-    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices, archive=False)
+    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices)
 
     try:
         test_neighbor.include_marginal_losses(sd_curve=sd_curve)
@@ -1928,7 +1928,7 @@ def test_include_marginal_losses():
     test_neighbor.maximum_power = 1000
     test_neighbor.loss_factor = 'bad'
     test_vertices = [Vertex(price=0, cost=0, quantity=0)]
-    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices, archive=False)
+    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices)
 
     try:
         test_neighbor.include_marginal_losses(sd_curve=sd_curve)
@@ -1975,7 +1975,7 @@ def test_remove_demand_charges():
     test_neighbor = Neighbor(transactive_node=tn, cost_parameters=[])
     
     # Modern API: Create SDCurve and apply removal
-    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices, archive=False)
+    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices)
     original_prices = [v.price for v in sd_curve.vertices]
     original_quantities = [v.quantity for v in sd_curve.vertices]
     
@@ -1998,7 +1998,7 @@ def test_remove_demand_charges():
                      Vertex(price=0.3, cost=0, quantity=-40),
                      Vertex(price=0.3, cost=0, quantity=0),
                      Vertex(price=0.4, cost=0, quantity=10)]
-    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices, archive=False)
+    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices)
     threshold = 0  # test_vertices[4].quantity
     test_neighbor.demand_rate = 10
 
@@ -2022,7 +2022,7 @@ def test_remove_demand_charges():
                      Vertex(price=0.3, cost=0, quantity=-40),
                      Vertex(price=0.3, cost=0, quantity=0),
                      Vertex(price=0.4, cost=0, quantity=10)]
-    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices, archive=False)
+    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices)
     threshold = -40
 
     try:
@@ -2047,7 +2047,7 @@ def test_remove_demand_charges():
                      Vertex(price=0.3, cost=0, quantity=-40),
                      Vertex(price=0.3, cost=0, quantity=0),
                      Vertex(price=0.4, cost=0, quantity=10)]
-    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices, archive=False)
+    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices)
     threshold = -140
 
     try:
@@ -2070,7 +2070,7 @@ def test_remove_demand_charges():
                      Vertex(price=0.3, cost=0, quantity=-40),
                      Vertex(price=0.3, cost=0, quantity=0),
                      Vertex(price=0.4, cost=0, quantity=10)]
-    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices, archive=False)
+    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices)
     threshold = 11  # This threshold is just above the vertices' powers.
     # NOTE: The method resets this threshold to p=0. Sets of vertices that lie BOTH above and below p=0 may have another
     # vertex creates at p=0.
@@ -2089,7 +2089,7 @@ def test_remove_demand_charges():
 
     print('Case 6: One lone vertex input.')
     single_vertex = Vertex(price=-.2, cost=0, quantity=-190)
-    sd_curve = SDCurve(measurement=None, interval=None, vertices=[single_vertex], archive=False)
+    sd_curve = SDCurve(measurement=None, interval=None, vertices=[single_vertex])
     threshold = -150
 
     try:
@@ -2149,7 +2149,7 @@ def test_remove_marginal_losses():
     assert test_neighbor.loss_factor == 0.01, 'In this case the full-load loss is 1%'
 
     # Create SDCurve and call remove_marginal_losses (modifies in place)
-    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices, archive=False)
+    sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices)
     
     try:
         test_neighbor.remove_marginal_losses(sd_curve=sd_curve)

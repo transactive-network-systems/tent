@@ -95,7 +95,7 @@ def test_calculate_reserve_margin():
         Vertex(0, 0, -10),
         Vertex(0, 0, 10)
     ]
-    sd_curve = SDCurve(measurement=None, interval=ti, vertices=vertices, archive=False)
+    sd_curve = SDCurve(measurement=None, interval=ti, vertices=vertices)
     test_model.active_vertices.update(ti, sd_curve)
 
     print("  Case 2: Test with maximum power greater than maximum vertex")
@@ -672,7 +672,7 @@ def test_update_production_costs():
         Vertex(0.1, 1000, 0),
         Vertex(0.2, 1015, 100)
     ]
-    sd_curve = SDCurve(measurement=None, interval=time_interval, vertices=vertices, archive=False)
+    sd_curve = SDCurve(measurement=None, interval=time_interval, vertices=vertices)
     test_model.active_vertices.update(time_interval, sd_curve)
 
     # TEST 1

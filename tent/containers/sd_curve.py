@@ -33,14 +33,17 @@ class SDCurve(Archivable):
                  measurement,
                  interval: TimeInterval | None,
                  vertices: list | None = None,
-                 archive: bool = True
                  ):
-        # TODO logic should be here. check out the before and after comparison. 
         super(SDCurve, self).__init__()
-        self.__interval: TimeInterval = proxy(interval, safe_weak_proxy_callback(self, 'interval')
-                                              ) if interval else None
-        self.__measurement: Measurement = proxy(measurement, safe_weak_proxy_callback(self, 'measurement')
-                                                ) if measurement else None
+        # Guard against double-wrapping: if the object is already a weakref proxy, use it as-is.
+        if interval and not isinstance(interval, ProxyType):
+            self.__interval: TimeInterval = proxy(interval, safe_weak_proxy_callback(self, 'interval'))
+        else:
+            self.__interval = interval
+        if measurement and not isinstance(measurement, ProxyType):
+            self.__measurement: Measurement = proxy(measurement, safe_weak_proxy_callback(self, 'measurement'))
+        else:
+            self.__measurement = measurement
         # TODO: This is a rather different default than is used in Entity.default_vertices....
         self.vertices: SortedSet = SortedSet()
         if vertices is not None:
@@ -126,12 +129,7 @@ class SDCurve(Archivable):
 
     def get_vertices_at_quantity(self, quantity: float):  # -> SDCurve (annotated dynamically for py<3.11)
         # Return an SDCurve containing the Vertex objects that match the given quantity.
-        interval = self.interval if not isinstance(self.interval, ProxyType) else None # making it none is a sidestep. not good. change this back to. 
-        matching_vertices = [v for v in self.vertices if v.quantity == quantity]
-        result = SDCurve(None, interval, matching_vertices)
-        if not matching_vertices:
-            result.vertices.clear()
-        return result
+        return SDCurve(None, self.interval, [v for v in self.vertices if v.quantity == quantity])
 
     @staticmethod
     def _parse_vertices(vertices):
@@ -181,8 +179,8 @@ class SDCurve(Archivable):
             # TODO: Does this correctly identify the neighbor when called from prep_transactive_signal?
             #  The SDCurve was created by a Market.sum_vertices()...
             owner_name = getattr(getattr(self.measurement, 'source', None), 'name', 'unknown')
-            _log.error('Unexpected flexibility logic while bounding SDCurve in %s. '
-                       'Maximum and minimum power are the same, but in separate vertices.', owner_name)
+            _log.error(f'Unexpected flexibility logic while bounding SDCurve in {owner_name}. '
+                       f'Maximum and minimum power are the same, but in separate vertices.')
 
         # Trim the list of vertices to remove any that are outside the soft flexibility range.
         # Preserve the SortedSet type to keep downstream set-like operations working.
@@ -416,6 +414,10 @@ class SDCurve(Archivable):
 
     def update(self, value: Vertex | dict | list[float|int] | list[Vertex] | list[list[float|int]] | list[dict], archive: bool = True):
         # TODO: Should this have a default value like in the constructor?
+        # TODO: Add a batch_update method that defers archiving until a batch of updates is complete.
+        #  Currently each update() call triggers archive(), which is wasteful when updating many intervals
+        #  in a loop (e.g. during scheduling). A batch_update should accept a list of (time_interval, value)
+        #  pairs, update all of them, then archive once at the end.
         if isinstance(value, (Vertex, dict)) or all(isinstance(v, (int, float)) for v in value):
             value = [value]
         new_vertices = self._parse_vertices(value)

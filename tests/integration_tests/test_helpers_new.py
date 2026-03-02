@@ -228,7 +228,7 @@ def test_production():
     ]
 
     # Assign activeVertices using SDCurve
-    sd_curve = SDCurve(measurement=None, interval=ti, vertices=av, archive=False)
+    sd_curve = SDCurve(measurement=None, interval=ti, vertices=av)
     test_object.active_vertices.update(ti, sd_curve)
 
     # CASE: Various marginal prices when there is more than one vertex
@@ -253,7 +253,7 @@ def test_production():
         print('- the production cost was correctly calculated')
 
     # CASE: One vertex (inelastic case, a constant)
-    sd_curve_single = SDCurve(measurement=None, interval=ti, vertices=[av[2]], archive=False)
+    sd_curve_single = SDCurve(measurement=None, interval=ti, vertices=[av[2]])
     test_object.active_vertices.update(ti, sd_curve_single)
 
     for i in range(5):
@@ -409,7 +409,7 @@ def test_prod_cost_from_vertices():
     ]
 
     # Create and store the activeVertices using SDCurve
-    sd_curve = SDCurve(measurement=None, interval=ti, vertices=av, archive=False)
+    sd_curve = SDCurve(measurement=None, interval=ti, vertices=av)
     test_object.active_vertices.update(ti, sd_curve)
 
     # CASE: Various signed powers when there is more than one vertex
@@ -431,7 +431,7 @@ def test_prod_cost_from_vertices():
         print('- the production cost was correctly calculated')
 
     # CASE: One vertex (inelastic case, a constant)
-    sd_curve_single = SDCurve(measurement=None, interval=ti, vertices=[av[0]], archive=False)
+    sd_curve_single = SDCurve(measurement=None, interval=ti, vertices=[av[0]])
     test_object.active_vertices.update(ti, sd_curve_single)
 
     pc = []
