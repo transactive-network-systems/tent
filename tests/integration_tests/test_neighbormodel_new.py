@@ -1304,7 +1304,10 @@ def test_update_dual_costs():
             self.data_manager = data_manager
             self.time_intervals = []
             # Create a dummy measurement object for marginal prices
-            self._marginal_price_measurement = type('Measurement', (), {})()
+            self._marginal_price_measurement = type('Measurement', (), {
+                'id': 'dummy_measurement_id',
+                'source': type('Source', (), {'data_manager': data_manager})()
+            })()
             self.marginal_prices = DummyMarginalPrices(self._marginal_price_measurement)
 
     Timer.simulation = False

@@ -33,6 +33,7 @@ class SDCurve(Archivable):
                  measurement,
                  interval: TimeInterval | None,
                  vertices: list | None = None,
+                 archive: bool = True
                  ):
         super(SDCurve, self).__init__()
         # Guard against double-wrapping: if the object is already a weakref proxy, use it as-is.
@@ -50,6 +51,8 @@ class SDCurve(Archivable):
             self.vertices.update(self._parse_vertices(vertices))
         else:
             self.vertices.add(Vertex(price=0.0, quantity=0.0, continuity=False, curve=self))
+        if archive and self.__measurement is not None:
+            self.archive()
 
     @property
     def empty(self):

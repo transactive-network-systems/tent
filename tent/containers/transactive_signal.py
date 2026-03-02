@@ -45,12 +45,7 @@ import logging
 from datetime import datetime
 from math import sqrt
 from weakref import WeakKeyDictionary
-try:
-    # Python 3.11+ provides typing.Self
-    from typing import Self, TYPE_CHECKING
-except Exception:  # pragma: no cover - fallback for older Python versions
-    from typing import TYPE_CHECKING
-    from typing_extensions import Self
+from typing import Self, TYPE_CHECKING
 
 from tent.containers import SDCurve, SDMeasurement, TimeInterval, Vertex
 from tent.utils.timer import Timer
@@ -100,24 +95,20 @@ class TransactiveSignal(SDMeasurement):
         self.archive()
         intervals = {}
         for ti, sd in self.all:
-            # Build flexibility records from the SDCurve's vertices
-            flexibility = {}
-            # TODO: why have this []? that should never happen in prod. double check that. 
-            for i, v in enumerate(getattr(sd, 'vertices', [])):
-                flexibility[i] = {
+            flexibility = {
+                i: {
                     'marginal_price': v.price,
                     'quantity': v.quantity,
                     'cost': v.cost,
                     'continuity': v.continuity,
                     'uncertainty': v.uncertainty
-                }
-
+                } for i, v in enumerate(sd.vertices)
+            }
             bp = self.balance_point(ti)
             intervals[ti.start_time.isoformat()] = {
                 'balance_point': bp.record if bp is not None else None,
                 'flexibility': flexibility
             }
-
         return {
             'market': self.market.name,
             'neighbor': self.neighbor.tn.name,
@@ -145,7 +136,6 @@ class TransactiveSignal(SDMeasurement):
                 return  # TODO: Should we raise on bad market or neighbor and let the caller handle it?
             if not (neighbor := tn.get_neighbor_by_name(message['neighbor'])):
                 _log.warning(f'Unable to find valid neighbor "{neighbor}" from received transactive signal.')
-            # Parse ISO format string to datetime object
             signal_time = datetime.fromisoformat(message['signal_time']) if message.get('signal_time') else None
             signal = cls(market=market, neighbor=neighbor, direction='received',
                          signal_time=signal_time, measurement_unit=message['unit'])
