@@ -10,7 +10,7 @@ class Archivable(abc.ABC):
     def __init__(self):
         self.__id: UUID = uuid7()
         self.__real_time_created: datetime = datetime.now(timezone.utc).astimezone()
-        self.__is_archived: bool = False
+        self.__last_archived_record: dict | None = None
 
     @property
     def id(self) -> UUID:
@@ -30,20 +30,25 @@ class Archivable(abc.ABC):
     def table_name(self):
         raise NotImplementedError
 
-    def archive(self, records: list[dict] | None = None):
-        archive_records = list(records) if records else []
+    def archive(self, records: list[dict] = None):
+        records = records if records else []
 
-        if not self.__is_archived:
-            archive_records.append({
-                'table_name': self.table_name,
-                'data': self.get_record()
-            })
-            self.__is_archived = True
-        elif not archive_records:
-            # No additional records to persist and base record already stored.
-            return
+        base_record = {
+            'table_name': self.table_name,
+            'data': self.get_record()
+        }
 
-        self.data_manager.archive_data(archive_records)
+        # Warn if this exact record (same id, same data) was already archived.
+        if self.__last_archived_record is not None and base_record == self.__last_archived_record:
+            _log.warning(f'Duplicate archive: {self.table_name} (id={self.id}) archived with identical data.')
+
+        records.append(base_record)
+        self.__last_archived_record = base_record
+
+        try:
+            self.data_manager.archive_data(records)
+        except Exception:
+            _log.exception(f'Failed to archive {self.table_name} (id={self.id}).')
 
     @abc.abstractmethod
     def get_record(self) -> dict:
