@@ -53,7 +53,7 @@ def _patched_order_init(self,
     from weakref import ProxyType
     _original_sdcurve_init = SDCurve.__init__
     
-    def _temp_sdcurve_init(sd_self, interval=None, vertices=None, measurement=None):
+    def _temp_sdcurve_init(sd_self, interval=None, vertices=None, measurement=None, archive=True):
         if measurement is None:
             measurement = market._order_measurement
         # Handle proxy objects (from copy operations)
@@ -63,7 +63,7 @@ def _patched_order_init(self,
                 interval = interval.__repr__.__self__
             except:
                 pass  # Keep as proxy if we can't unwrap
-        _original_sdcurve_init(sd_self, interval=interval, vertices=vertices, measurement=measurement)
+        _original_sdcurve_init(sd_self, interval=interval, vertices=vertices, measurement=measurement, archive=False)
     
     SDCurve.__init__ = _temp_sdcurve_init
     
