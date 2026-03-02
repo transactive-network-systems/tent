@@ -794,7 +794,7 @@ class Market(Component):
            Market.defaultPrice.
 
         OUTPUTS:
-           populates list of active marginal prices (see class IntervalValue)
+           populates list of active marginal prices (see Measurement)
         """
 
         for time_interval in self.time_intervals:

@@ -319,7 +319,7 @@ class Neighbor(Entity):
                 market - Market object
 
             OUTPUTS:
-                Updates self.activeVertices - an array of IntervalValues that contain Vertex() structs
+                Updates self.active_vertices - an SDMeasurement mapping TimeIntervals to SDCurves
         """
 
         # Recall the current demand threshold that applies to this neighbor in this month, and assign it to the active

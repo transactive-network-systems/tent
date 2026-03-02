@@ -49,8 +49,6 @@ under Contract DE-AC05-76RL01830
 
 import pandas as pd
 
-# from tent.containers import IntervalValue
-from tent.enumerations import MeasurementType
 from tent.meter_point.pull_meter_point import PullMeterPoint
 
 

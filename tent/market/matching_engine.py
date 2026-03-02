@@ -111,8 +111,8 @@ class MatchingEngine(Market):
             negotiation_lead_time=negotiation_lead_time,
             prior_market_in_series=prior_market_in_series
         )  # Note: Before market_order was moved up to the MarketSeries, this class had a default of 2.
-        self.orderList: list or Order or IntervalValue = []  # List of standing orders not yet matched
-        self.matchList: list or Order or IntervalValue = []  # List of orders successfully matched
+        self.orderList: list[Order] = []  # List of standing orders not yet matched
+        self.matchList: list[Order] = []  # List of orders successfully matched
         if matching_strategy:
             self.__matchingStrategy__: list = matching_strategy
         else:

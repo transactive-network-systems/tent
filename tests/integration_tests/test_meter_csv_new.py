@@ -46,7 +46,6 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 from tent.meter_point.csv_meter_point import CSVMeterPoint
-from tent.containers.interval_value import IntervalValue
 from tent.market import Market
 from tent.market.market_series import MarketSeries
 from tests.mock_tn import MockTN
@@ -114,39 +113,34 @@ def test_csv_meter(test_csv_path, mock_tn):
         transactive_node=mock_tn,
         name="TestCSVMeter"
     )
-    # Add meter_intervals property to collect IntervalValue objects
-    meter.meter_intervals = []
     return meter
 
 def test_case1(test_csv_meter, test_market, test_df, test_csv_length):
     """
-    Read data from csv.
+    Read data from csv and verify values are stored via set_meter_value (buffer).
     """
     print("\nCASE 1: Read from CSV file")
-    # Verify nothing is stored in meter_intervals
-    assert len(test_csv_meter.meter_intervals) == 0
+    # Verify buffer is empty before reading
+    assert len(test_csv_meter.buffer) == 0
     # Read in all values in csv
     test_csv_meter.read_meter(test_market)
     # Verify that all values have been read in.
     # This value should be one less than the length of the csv file (intervals)
-    assert len(test_csv_meter.meter_intervals) == (test_csv_length - 1)
-    
-    for x in range(test_csv_length-1):
-        # Verify that all values are IntervalValues
-        assert isinstance(test_csv_meter.meter_intervals[x], IntervalValue)
-        # Verify that timestamps match csv
-        assert test_csv_meter.meter_intervals[x].interval.start_time == test_df["Timestamp"][x]
-        # Verify that values match csv value intervals
-        assert test_csv_meter.meter_intervals[x].value == (test_df["energy (kW)"][x+1] - test_df["energy (kW)"][x])
+    assert len(test_csv_meter.buffer) == (test_csv_length - 1)
+
+    readings = test_csv_meter.buffer.get()
+    for x in range(test_csv_length - 1):
+        expected_value = test_df["energy (kW)"][x + 1] - test_df["energy (kW)"][x]
+        assert readings[x].value == pytest.approx(expected_value * test_csv_meter.scale_factor)
 
 def test_case2(test_csv_meter, test_market, test_df, test_csv_length, mock_tn, test_date):
     """
     Read data from csv when the time_interval does not line up with all values from csv.
     """
     print("\nCASE 2: Read from CSV with unequal timestamps")
-    # Verify nothing is stored in meter_intervals
-    assert len(test_csv_meter.meter_intervals) == 0
-    
+    # Verify buffer is empty before reading
+    assert len(test_csv_meter.buffer) == 0
+
     # Create new market with one more interval
     market_series = MarketSeries(
         transactive_node=mock_tn,
@@ -159,20 +153,17 @@ def test_case2(test_csv_meter, test_market, test_df, test_csv_length, mock_tn, t
         market_series=market_series,
         transition_times=timings
     )
-    
+
     # Read in all values in csv
     test_csv_meter.read_meter(test_market_mismatch)
     # Verify that all values have been read in.
-    # This value should be one less than the length of the csv file (intervals)
-    assert len(test_csv_meter.meter_intervals) == (test_csv_length - 1)
-    
-    for x in range(test_csv_length-1):
-        # Verify that all values are IntervalValues
-        assert isinstance(test_csv_meter.meter_intervals[x], IntervalValue)
-        # Verify that timestamps match csv
-        assert test_csv_meter.meter_intervals[x].interval.start_time == test_df["Timestamp"][x]
-        # Verify that values match csv value intervals
-        assert test_csv_meter.meter_intervals[x].value == (test_df["energy (kW)"][x+1] - test_df["energy (kW)"][x])
+    # The last interval falls outside the CSV data, so only csv_length-1 readings
+    assert len(test_csv_meter.buffer) == (test_csv_length - 1)
+
+    readings = test_csv_meter.buffer.get()
+    for x in range(test_csv_length - 1):
+        expected_value = test_df["energy (kW)"][x + 1] - test_df["energy (kW)"][x]
+        assert readings[x].value == pytest.approx(expected_value * test_csv_meter.scale_factor)
 
 
 if __name__ == '__main__':
