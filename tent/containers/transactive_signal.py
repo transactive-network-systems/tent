@@ -45,7 +45,12 @@ import logging
 from datetime import datetime
 from math import sqrt
 from weakref import WeakKeyDictionary
-from typing import Self, TYPE_CHECKING
+from typing import TYPE_CHECKING
+
+try:
+    from typing import Self
+except ImportError:
+    from typing_extensions import Self
 
 from tent.containers import SDCurve, SDMeasurement, TimeInterval, Vertex
 from tent.utils.timer import Timer

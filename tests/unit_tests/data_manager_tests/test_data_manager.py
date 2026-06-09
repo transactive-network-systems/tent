@@ -1,6 +1,8 @@
 import pytest
 from unittest.mock import Mock, patch
 from collections import deque
+from datetime import datetime
+from uuid import uuid4
 
 from tent.data_manager.local_data_manager import LocalDataManager, VolttronDataManager
 
@@ -202,6 +204,75 @@ class TestLocalDataManagerUnits:
             # Should set ready flag and call archive_data
             assert ldm.archive_ready is True
             ldm.archive_data.assert_called_once()
+
+    def test_upsert_and_query_data(self, tmp_path):
+        ldm = LocalDataManager(self.mock_parent, {'url': f'sqlite:///{tmp_path / "data.sqlite"}'})
+        ldm.add_tables([{
+            'name': 'topics',
+            'columns': [
+                {'name': 'topic_id', 'type': 'Integer',
+                 'kwargs': {'primary_key': True, 'autoincrement': True}},
+                {'name': 'topic_name', 'type': 'String', 'kwargs': {'unique': True}},
+                {'name': 'metadata', 'type': 'Text'},
+            ],
+        }])
+        ldm.init_archive()
+
+        inserted = ldm.upsert_data(
+            'topics',
+            {'topic_name': 'record/example', 'metadata': '{}'},
+            ['topic_name'],
+        )
+        updated = ldm.upsert_data(
+            'topics',
+            {'topic_id': inserted['topic_id'], 'topic_name': 'record/example', 'metadata': '{"units":"kW"}'},
+            ['topic_id'],
+        )
+
+        assert updated['topic_id'] == inserted['topic_id']
+        assert ldm.query_data('topics', {'topic_name': 'record/example'}) == [updated]
+
+    def test_query_data_supports_ranges_order_and_pagination(self, tmp_path):
+        ldm = LocalDataManager(self.mock_parent, {'url': f'sqlite:///{tmp_path / "data.sqlite"}'})
+        ldm.add_tables([{
+            'name': 'readings',
+            'columns': [
+                {'name': 'id', 'type': 'Integer', 'kwargs': {'primary_key': True}},
+                {'name': 'ts', 'type': 'DateTime'},
+            ],
+        }])
+        ldm.init_archive()
+        ldm.archive_data([
+            {'table_name': 'readings', 'data': {'id': 1, 'ts': '2026-06-09T01:00:00+00:00'}},
+            {'table_name': 'readings', 'data': {'id': 2, 'ts': '2026-06-09T02:00:00+00:00'}},
+            {'table_name': 'readings', 'data': {'id': 3, 'ts': '2026-06-09T03:00:00+00:00'}},
+        ])
+
+        rows = ldm.query_data(
+            'readings',
+            {'ts': {'gte': '2026-06-09T01:00:00+00:00', 'lt': '2026-06-09T04:00:00+00:00'}},
+            order_by=[('ts', 'desc')],
+            limit=1,
+            offset=1,
+        )
+
+        assert rows[0]['id'] == 2
+        assert isinstance(rows[0]['ts'], datetime)
+
+    def test_archive_data_normalizes_transport_uuid(self, tmp_path):
+        ldm = LocalDataManager(self.mock_parent, {'url': f'sqlite:///{tmp_path / "data.sqlite"}'})
+        ldm.add_tables([{
+            'name': 'entities',
+            'columns': [
+                {'name': 'id', 'type': 'Uuid', 'kwargs': {'primary_key': True}},
+            ],
+        }])
+        ldm.init_archive()
+        entity_id = uuid4()
+
+        ldm.archive_data({'table_name': 'entities', 'data': {'id': str(entity_id)}})
+
+        assert ldm.query_data('entities')[0]['id'] == entity_id
 
 
 class TestVolttronDataManagerUnits:
