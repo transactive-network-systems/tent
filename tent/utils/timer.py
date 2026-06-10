@@ -43,6 +43,7 @@ under Contract DE-AC05-76RL01830
 import logging
 
 from datetime import datetime, timezone, tzinfo
+from zoneinfo import ZoneInfo
 
 _log = logging.getLogger(__name__)
 
@@ -68,3 +69,16 @@ class Timer(object):
             now = cls.sim_start_time + simulation_time_diff
 
         return now
+
+    @classmethod
+    def set(cls, sim_one_hr_in_sec=None, sim_start_time=None, simulation=False, tz=None):
+        # TODO: This could guard against stopped simulation after restart
+        #  by tracking the current and simulation times while simulating and comparing on set.
+        #  Is this worthwhile? too much overhead? May need the agent to provide an asynchronous event system.
+        cls.tz = tz if tz else cls.tz
+        cls.created_time = datetime.now(timezone.utc).astimezone(ZoneInfo(cls.tz))
+        cls.simulation = simulation
+        if simulation and (not sim_one_hr_in_sec or not sim_start_time):
+            raise ValueError("sim_one_hr_in_sec and sim_start_time must be provided when simulation is True")
+        cls.sim_one_hr_in_sec = sim_one_hr_in_sec
+        cls.sim_start_time = sim_start_time
