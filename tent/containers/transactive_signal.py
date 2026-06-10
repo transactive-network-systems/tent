@@ -45,7 +45,12 @@ import logging
 from datetime import datetime
 from math import sqrt
 from weakref import WeakKeyDictionary
-from typing import Self, TYPE_CHECKING
+from typing import TYPE_CHECKING
+
+try:
+    from typing import Self
+except ImportError:
+    from typing_extensions import Self
 
 from tent.containers import SDCurve, SDMeasurement, TimeInterval, Vertex
 from tent.utils.timer import Timer
@@ -61,12 +66,12 @@ class TransactiveSignal(SDMeasurement):
     PROTOCOL_VERSION = 1.0
 
     def __init__(self, market, neighbor, direction=None, signal_time=None, **kwargs):
-        super(TransactiveSignal, self).__init__(source=neighbor, **kwargs)
         self.market: Market = market
         self.neighbor: Neighbor = neighbor
         self.direction = direction
         self.signal_time: datetime | None = signal_time
         self.__balance_vertices: WeakKeyDictionary[TimeInterval, Vertex] = WeakKeyDictionary()
+        super(TransactiveSignal, self).__init__(source=neighbor, **kwargs)
 
     def balance_point(self, time_interval: TimeInterval) -> Vertex | None:
         """Get the balance point vertex for the specified time interval."""
@@ -93,26 +98,29 @@ class TransactiveSignal(SDMeasurement):
         self.signal_time = Timer.now()
         self.direction = 'sent'
         self.archive()
+        intervals = {}
+        for ti, sd in self.all:
+            flexibility = {
+                i: {
+                    'marginal_price': v.price,
+                    'quantity': v.quantity,
+                    'cost': v.cost,
+                    'continuity': v.continuity,
+                    'uncertainty': v.uncertainty
+                } for i, v in enumerate(sd.vertices)
+            }
+            bp = self.balance_point(ti)
+            intervals[ti.start_time.isoformat()] = {
+                'balance_point': bp.record if bp is not None else None,
+                'flexibility': flexibility
+            }
         return {
             'market': self.market.name,
             'neighbor': self.neighbor.tn.name,
             'protocol_version': self.PROTOCOL_VERSION,
             'signal_time': self.signal_time.isoformat(),
             'unit': self.unit,
-            'intervals': {
-                ti.start_time.isoformat(): {
-                    'balance_point': self.balance_point(ti).record,
-                    'flexibility': {
-                        i: {
-                            'marginal_price': v.marginal_price,
-                            'quantity': v.quantity,
-                            'cost': v.cost,
-                            'continuity': v.continuity,
-                            'uncertainty': v.uncertainty
-                        }
-                    }
-                } for ti, sd in self.all for i, v in enumerate(sd.curves)
-            }
+            'intervals': intervals
         }
 
     @classmethod
@@ -133,8 +141,9 @@ class TransactiveSignal(SDMeasurement):
                 return  # TODO: Should we raise on bad market or neighbor and let the caller handle it?
             if not (neighbor := tn.get_neighbor_by_name(message['neighbor'])):
                 _log.warning(f'Unable to find valid neighbor "{neighbor}" from received transactive signal.')
+            signal_time = datetime.fromisoformat(message['signal_time']) if message.get('signal_time') else None
             signal = cls(market=market, neighbor=neighbor, direction='received',
-                         signal_time=message['signal_time'], measurement_unit=message['unit'])
+                         signal_time=signal_time, measurement_unit=message['unit'])
         except KeyError as e:
             _log.warning(f'Missing required field in transactive signal: {e}.')
             return

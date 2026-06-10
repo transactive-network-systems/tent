@@ -93,6 +93,10 @@ class MarketSeries(Component):
         self.next_clearing_time: datetime = self.duration.get_first_clearing_time()
         self.spawn()
 
+    def __iter__(self):
+        """Allow iteration over the series' markets."""
+        return iter(self.markets)
+
     @property
     def intervals_to_clear(self):
         return self.duration.intervals_to_clear

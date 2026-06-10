@@ -168,6 +168,25 @@ class Market(Component):
         """
         current_time = Timer.now()
 
+        # ── HARD EXPIRATION BACKSTOP ─────────────────────────────────────────────────────────────────────────────────────
+        # If the expiration time has passed, force the market to Expired regardless of its current state.
+        # This prevents markets from hanging indefinitely in intermediate states (e.g., waiting for signals
+        # that never arrive) and leaking memory.
+        #
+        # MarketState.Delivery is excluded because when duration_reconciliation == 0,
+        # expiration_start == reconciliation_start. A market legitimately in Delivery at that moment
+        # is NOT stuck — it is about to enter Reconcile on this same tick via the normal
+        # Delivery→Reconcile transition. The Delivery soft timeout below handles any genuinely
+        # stuck Delivery state, making the backstop exclusion safe.
+        if (self.market_state not in (MarketState.Initial, MarketState.Delivery, MarketState.Expired)
+                and current_time >= self.transition_times.expiration):
+            _log.warning(
+                f'MARKET: {self.name} force-expired from state {self.market_state.name}. '
+                f'Expiration time {self.transition_times.expiration} has passed.')
+            self.market_state = MarketState.Expired
+            self._stateIsCompleted = False
+            # Fall through to the Expired handler at the bottom of this method.
+
         # EVENT 0: % FIRST INSTANTIATION OF A MARKET SERIES ************************************************************
         # First time setup of a new market series.
         if self.market_state == MarketState.Initial:
@@ -209,6 +228,11 @@ class Market(Component):
             #            completed in this next method or its replacements.
             self.while_in_active()
 
+            # ── SOFT TIMEOUT: Active state ──
+            if self._stateIsCompleted is not True and current_time >= self.transition_times.negotiation:
+                _log.warning(f'MARKET: {self.name} Active state timed out, forcing completion.')
+                self._stateIsCompleted = True
+
         # EVENT 2A: TRANSITION FROM ACTIVE TO NEGOTIATION STATE ********************************************************
         # This is the transition from "Active" to "Negotiation" market states. Market state "Negotiation" begins at a
         # time specified before an upcoming market clearing of a market object. Specifically, it begins a specified
@@ -241,6 +265,12 @@ class Market(Component):
             #            completed in this next method or its replacements.
             self.while_in_negotiation()
 
+            # ── SOFT TIMEOUT: Negotiation state ──
+            if self._stateIsCompleted is not True and current_time >= self.transition_times.market_lead:
+                _log.warning(f'MARKET: {self.name} Negotiation state timed out, forcing completion.')
+                self.converged = True
+                self._stateIsCompleted = True
+
         # EVENT 3A: TRANSITION FROM NEGOTIATION TO MARKET LEAD STATE ***************************************************
         # This is the transition from "Negotiation" to "MarketLead" market states.
         # The transition occurs at a time relative to the market object's market clearing time. Specifically, it starts
@@ -270,6 +300,11 @@ class Market(Component):
             #            completed in this next method or its replacements.
             self.while_in_market_lead()
 
+            # ── SOFT TIMEOUT: MarketLead state ──
+            if self._stateIsCompleted is not True and current_time >= self.transition_times.delivery_lead:
+                _log.warning(f'MARKET: {self.name} MarketLead state timed out, forcing completion.')
+                self._stateIsCompleted = True
+
         # EVENT 4A: TRANSITION FROM MARKET LEAD TO DELIVERY LEAD STATE *************************************************
         # This is the transition from "MarketLead" to "DeliveryLead" market states.
         if self.market_state == MarketState.MarketLead and self._stateIsCompleted is True:
@@ -294,6 +329,11 @@ class Market(Component):
             # 210118DJH: NOTE: Flag "_stateIsComplete" must be set true after the market's responsibilities have been
             #            completed in this next method or its replacements.
             self.while_in_delivery_lead()
+
+            # ── SOFT TIMEOUT: DeliveryLead state ──
+            if self._stateIsCompleted is not True and current_time >= self.transition_times.delivery:
+                _log.warning(f'MARKET: {self.name} DeliveryLead state timed out, forcing completion.')
+                self._stateIsCompleted = True
 
         # EVENT 5A: TRANSITION FROM DELIVERY LEAD TO DELIVERY **********************************************************
         # This is the transition from "DeliveryLead" to "Delivery" market states. The start of market state "Delivery"
@@ -322,6 +362,11 @@ class Market(Component):
             # 210118DJH: NOTE: Flag "_stateIsComplete" must be set true after the market's responsibilities have been
             #            completed in this next method or its replacements.
             self.while_in_delivery()
+
+            # ── SOFT TIMEOUT: Delivery state ──
+            if self._stateIsCompleted is not True and current_time >= self.transition_times.reconciliation:
+                _log.warning(f'MARKET: {self.name} Delivery state timed out, forcing completion.')
+                self._stateIsCompleted = True
 
         # EVENT 6A: TRANSITION FROM DELIVERY TO RECONCILE **************************************************************
         # This is the transition from "Delivery" to "Reconcile" market states. The "Reconcile" market state begins at a
@@ -353,6 +398,12 @@ class Market(Component):
             #            completed in this next method or its replacements.
             self.while_in_reconcile()
 
+            # ── SOFT TIMEOUT: Reconcile state ──
+            if self._stateIsCompleted is not True and current_time >= self.transition_times.expiration:
+                _log.warning(f'MARKET: {self.name} Reconcile state timed out, forcing completion.')
+                self.reconciled = True
+                self._stateIsCompleted = True
+
         # EVENT 7A: TRANSITION FROM RECONCILE TO EXPIRED ***************************************************************
         # This is the transition from "Reconcile" to "Expired" market states.
         # 210118DJH: Adding flag. No state transition should be allowed unless the prior state is completed.
@@ -381,9 +432,14 @@ class Market(Component):
             # Delete market intervals that are defined by this market object.
             self.time_intervals.destroy()
 
-            # Remove the expired market.
+            # Remove the expired market from the transactive node's flat list.
             self.tn.markets[:] = [x for x in self.tn.markets if x != self]
-            # NOTE: We let garbage collection finally delete the object once it is entirely out of scope.
+
+            # Mark completed so this block is not re-entered on subsequent events() calls.
+            # NOTE: Removal from series.markets is NOT done here because events() may be called
+            # during iteration over series.markets. The series should prune expired markets
+            # separately (e.g., in MarketSeries or _state_machine_iteration).
+            self._stateIsCompleted = True
 
     def transition_from_initial_to_inactive(self):
         """
@@ -609,7 +665,7 @@ class Market(Component):
         """
         for time_interval in self.time_intervals:
             # Call the utility sum_vertices to recreate the aggregate vertices in the indexed time interval.
-            self.active_vertices.update(time_interval, self.sum_vertices(self.tn, time_interval), replace=True)
+            self.active_vertices.update(time_interval, self.sum_vertices(time_interval), replace=True)
 
     def balance(self, k=1):
         """
@@ -738,7 +794,7 @@ class Market(Component):
            Market.defaultPrice.
 
         OUTPUTS:
-           populates list of active marginal prices (see class IntervalValue)
+           populates list of active marginal prices (see Measurement)
         """
 
         for time_interval in self.time_intervals:
@@ -819,6 +875,7 @@ class Market(Component):
                 continue
 
             sd_curve = entity.active_vertices.get_by_interval(time_interval)
+
             if not sd_curve.empty:
                 marginal_price_list.update([float("inf")] if len(sd_curve) == 1 else sd_curve.prices)  # [$/kWh]
 
@@ -833,9 +890,11 @@ class Market(Component):
             marginal_price_set.discard(float('inf'))
 
         # A clean set of marginal prices has been created. Create vertices at the marginal prices.
-        summed_curve = SDCurve(None, time_interval)
+        # TODO: Reevaluate passing vertices=[] here. Without it, SDCurve defaults to a dummy (0,0) vertex.
+        #  Is it worth creating an SDCurve with empty vertices, or should we handle the no-prices case earlier?
+        summed_curve = SDCurve(None, time_interval, vertices=[])
         # Index through the cleaned list of marginal prices
-        for mp in marginal_price_list:
+        for mp in marginal_price_set:
             # Create a vertex at the indexed marginal price value
             vertex = Vertex(mp, 0, 0)
 

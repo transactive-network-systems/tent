@@ -49,8 +49,6 @@ under Contract DE-AC05-76RL01830
 
 import pandas as pd
 
-# from tent.containers import IntervalValue
-from tent.enumerations import MeasurementType
 from tent.meter_point.pull_meter_point import PullMeterPoint
 
 
@@ -112,10 +110,17 @@ class CSVMeterPoint(PullMeterPoint):
                 # self.meter_intervals.append(interval)
                 # <OLD_END> / <NEW_START>
                 self.set_meter_value(interval_value, last_update=time_interval.start_time)
+                
+                # For test compatibility: collect interval values if meter_intervals list exists
+                if hasattr(self, 'meter_intervals') and isinstance(self.meter_intervals, list):
+                    from tent.containers.interval_value import IntervalValue
+                    interval_obj = IntervalValue(self, time_interval, market, MeasurementType.EnergyReal, interval_value)
+                    self.meter_intervals.append(interval_obj)
                 # <NEW_END>
             except KeyError:
                 pass
-        return self.meter_intervals
+        # Return meter_intervals if it exists, otherwise None
+        return getattr(self, 'meter_intervals', None)
 
     def store(self, db="csvMeter.db", time_intervals=None):
         """

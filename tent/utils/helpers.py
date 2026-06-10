@@ -62,7 +62,17 @@ def safe_weak_proxy_callback(obj: object, attribute: str):
     """ Safe Weak Proxy Callback
         Provides a callback function that will return a variable used by WeakRef Proxy to None if the reference dies."""
     def back_to_none(_):  # A Weak Reference is passed in, but it is dead, and therefore useless, so using "_".
-        setattr(obj, attribute, None)
+        try:
+            setattr(obj, attribute, None)
+        except (AttributeError, TypeError) as e:
+            # It's possible the attribute is read-only (property without setter) or the object is a frozen dataclass.
+            # This can happen during interpreter shutdown or when objects have restrictions on setting attributes.
+            # Swallow the exception and log at debug level to avoid noisy tracebacks during weakref callbacks.
+            try:
+                _log.debug('safe_weak_proxy_callback: could not set %s on %r: %s', attribute, obj, e)
+            except Exception:
+                # Avoid any errors from logging during teardown.
+                pass
     return back_to_none
 
 

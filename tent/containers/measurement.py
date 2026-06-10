@@ -66,41 +66,56 @@ class MeasurementValue(Archivable):
         if archive:
             self.archive()
 
+    def _get_numeric_value(self, other):
+        """Extract numeric value from MeasurementValue or plain numeric type."""
+        return other.value if hasattr(other, 'value') else other
+
     def __add__(self, other):
-        return self.value + other.value
+        return self.value + self._get_numeric_value(other)
 
     def __sub__(self, other):
-        return self.value - other.value
+        return self.value - self._get_numeric_value(other)
 
     def __mul__(self, other):
-        return self.value * other.value
+        return self.value * self._get_numeric_value(other)
+
+    # Reverse operators needed for when MeasurementValue is on right side of operation
+    # e.g., float * MeasurementValue in: marginal_price * scheduled_power * duration
+    def __rmul__(self, other):
+        return self._get_numeric_value(other) * self.value
+
+    def __radd__(self, other):
+        return self._get_numeric_value(other) + self.value
+
+    def __rsub__(self, other):
+        return self._get_numeric_value(other) - self.value
 
     def __floordiv__(self, other):
-        return self.value // other.value
+        return self.value // self._get_numeric_value(other)
 
     def __truediv__(self, other):
-        return self.value / other.value
+        return self.value / self._get_numeric_value(other)
 
     def __mod__(self, other):
-        return self.value % other.value
+        return self.value % self._get_numeric_value(other)
 
     def __eq__(self, other):
-        return self.value == other.value
+        return self.value == self._get_numeric_value(other)
 
     def __ne__(self, other):
-        return self.value != other.value
+        return self.value != self._get_numeric_value(other)
 
     def __lt__(self, other):
-        return self.value < other.value
+        return self.value < self._get_numeric_value(other)
 
     def __gt__(self, other):
-        return self.value > other.value
+        return self.value > self._get_numeric_value(other)
 
     def __le__(self, other):
-        return self.value <= other.value
+        return self.value <= self._get_numeric_value(other)
 
     def __ge__(self, other):
-        return self.value >= other.value
+        return self.value >= self._get_numeric_value(other)
 
 
     @property
@@ -203,6 +218,7 @@ class Measurement(Archivable):
 
     def update(self, time_interval: TimeInterval, value: Any, archive: bool = True, replace: bool = False):
         # TODO: Is replace used and/or necessary?
+        # TODO: create batch_update method which uses the same record time for all values to archive all values. 
         if time_interval in self._data and not replace:
             # Receiving datatype, here, must handle all its own transformations from allowed input types.
             self._data[time_interval].update(value, archive)

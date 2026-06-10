@@ -115,7 +115,7 @@ class OpenLoopLoadPredictor(LocalAsset):
             else:
                 # An appropriate information service was found.
                 # Get the temperature that corresponds to the indexed time interval.
-                interval_value = self.temperature_forecaster.predictedValues.get_by_interval(time_interval)
+                interval_value = self.temperature_forecaster.predicted_values.get_by_interval(time_interval)
                 temp = interval_value.value  if interval_value and interval_value.value else self.default_temperature
 
             # Determine the dow_intercept.

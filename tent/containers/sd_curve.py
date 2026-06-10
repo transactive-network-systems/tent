@@ -6,7 +6,7 @@ try:  # Python <3.11 compatibility
 except ImportError:  # pragma: no cover
     from typing import TypeVar
     Self = TypeVar("Self")
-from weakref import proxy
+from weakref import ProxyType, proxy
 
 from tent.base import Archivable, Component
 from tent.containers.measurement import Measurement
@@ -36,13 +36,23 @@ class SDCurve(Archivable):
                  archive: bool = True
                  ):
         super(SDCurve, self).__init__()
-        self.__interval: TimeInterval = proxy(interval, safe_weak_proxy_callback(self, 'interval')
-                                              ) if interval else None
-        self.__measurement: Measurement = proxy(measurement, safe_weak_proxy_callback(self, 'measurement')
-                                                ) if measurement else None
+        # Guard against double-wrapping: if the object is already a weakref proxy, use it as-is.
+        if interval and not isinstance(interval, ProxyType):
+            self.__interval: TimeInterval = proxy(interval, safe_weak_proxy_callback(self, 'interval'))
+        else:
+            self.__interval = interval
+        if measurement and not isinstance(measurement, ProxyType):
+            self.__measurement: Measurement = proxy(measurement, safe_weak_proxy_callback(self, 'measurement'))
+        else:
+            self.__measurement = measurement
         # TODO: This is a rather different default than is used in Entity.default_vertices....
-        self.vertices: SortedSet = SortedSet(self._parse_vertices(vertices) if vertices
-                                             else [Vertex(price=0.0, quantity=0.0, continuity=False, curve=self)])
+        self.vertices: SortedSet = SortedSet()
+        if vertices is not None:
+            self.vertices.update(self._parse_vertices(vertices))
+        else:
+            self.vertices.add(Vertex(price=0.0, quantity=0.0, continuity=False, curve=self))
+        if archive and self.__measurement is not None:
+            self.archive()
 
     @property
     def empty(self):
@@ -98,16 +108,21 @@ class SDCurve(Archivable):
     # TODO: Min an max quantity methods are attempting to compare floats and vertices.
     #  These really need to work with one or the other.  There can be a second function that works with the other.
     def max_quantity(self, limit: float = None) -> float:
-        default = limit if limit is not None else 0.0 # TODO: Limit is a float, but default should be a Vertex or (possibly?) None.
-        # TODO: max_vertex_quantity is a vertex, not a quantity. (BUG -> unless default is used -- then it is a float).
-        max_vertex_quantity =  max(self.vertices, key=lambda v: v.quantity, default=default).quantity
+        default = limit if limit is not None else 0.0
+        # Handle empty vertices list
+        if not self.vertices:
+            return default
+        max_vertex_quantity = max(self.vertices, key=lambda v: v.quantity).quantity
         # The upper operational constraint must be less than or equal to the object's hard physical constraint.
         constrained_quantity = min(limit, max_vertex_quantity) if limit is not None else max_vertex_quantity
         return constrained_quantity
 
     def min_quantity(self, limit: float = None) -> float:
         default = limit if limit is not None else 0.0
-        min_vertex_quantity =  min(self.vertices, key=lambda v: v.quantity, default=default).quantity
+        # Handle empty vertices list
+        if not self.vertices:
+            return default
+        min_vertex_quantity = min(self.vertices, key=lambda v: v.quantity).quantity
         # The upper operational constraint must be less than or equal to the object's hard physical constraint.
         constrained_quantity = max(limit, min_vertex_quantity) if limit is not None else min_vertex_quantity
         return constrained_quantity
@@ -116,14 +131,19 @@ class SDCurve(Archivable):
         return bool(next(filter(lambda v: v.quantity == quantity, self.vertices), False))
 
     def get_vertices_at_quantity(self, quantity: float):  # -> SDCurve (annotated dynamically for py<3.11)
-        return SDCurve(None, self.interval, [v.quantity for v in  self.vertices if v.quantity == quantity])
+        # Return an SDCurve containing the Vertex objects that match the given quantity.
+        return SDCurve(None, self.interval, [v for v in self.vertices if v.quantity == quantity])
 
     @staticmethod
     def _parse_vertices(vertices):
+        # Handle empty vertex list
+        if not vertices:
+            return []
         if all([isinstance(vertex, Vertex) for vertex in vertices]):
             return vertices
         elif all([isinstance(vertex, list) for vertex in vertices]):
-            return [Vertex(*[float(i) for i in vertex]) for vertex in vertices]
+            # Filter out empty lists
+            return [Vertex(*[float(i) for i in vertex]) for vertex in vertices if vertex]
         elif all([isinstance(vertex, dict) for vertex in vertices]):
             return [Vertex(**vertex) for vertex in vertices]
         else:
@@ -158,14 +178,17 @@ class SDCurve(Archivable):
                 self.update(Vertex(price=(self.price_from_vertices(max_power)), cost=0, quantity=max_power))
         elif len(self.vertices) == 1:
             self.vertices[0].price = float('inf')
-            self.vertices[0].record = 0
-        else:  # TODO: Does this correctly identify the neighbor when called from prep_transactive_signal?
-               #  The SDCurve was created by a Market.sum_vertices()...
-            _log.error(f'Unexpected flexibility logic in while bounding SDCurve in {self.measurement.source.name}. '
+        else:
+            # TODO: Does this correctly identify the neighbor when called from prep_transactive_signal?
+            #  The SDCurve was created by a Market.sum_vertices()...
+            owner_name = getattr(getattr(self.measurement, 'source', None), 'name', 'unknown')
+            _log.error(f'Unexpected flexibility logic while bounding SDCurve in {owner_name}. '
                        f'Maximum and minimum power are the same, but in separate vertices.')
 
         # Trim the list of vertices to remove any that are outside the soft flexibility range.
-        self.vertices = [x for x in self.vertices if min_power <= x.quantity <= max_power]
+        # Preserve the SortedSet type to keep downstream set-like operations working.
+        self.vertices = SortedSet([x for x in self.vertices if min_power <= x.quantity <= max_power])
+        return None
 
     def check_rationality(self, action="None"):
         """The check_rationality method checks whether a list of vertices is rational, meaning that signed power is a
@@ -392,12 +415,19 @@ class SDCurve(Archivable):
     def __len__(self):
         return len(self.vertices)
 
-    def update(self, value: Vertex | dict | list[float|int] | list[Vertex] | list[list[float|int]] | list[dict]):
+    def update(self, value: Vertex | dict | list[float|int] | list[Vertex] | list[list[float|int]] | list[dict], archive: bool = True):
         # TODO: Should this have a default value like in the constructor?
+        # TODO: Add a batch_update method that defers archiving until a batch of updates is complete.
+        #  Currently each update() call triggers archive(), which is wasteful when updating many intervals
+        #  in a loop (e.g. during scheduling). A batch_update should accept a list of (time_interval, value)
+        #  pairs, update all of them, then archive once at the end.
         if isinstance(value, (Vertex, dict)) or all(isinstance(v, (int, float)) for v in value):
             value = [value]
         new_vertices = self._parse_vertices(value)
-        return self.vertices.update(new_vertices)
+        result = self.vertices.update(new_vertices)
+        if archive and self.measurement is not None:
+            self.archive()
+        return result
 
     @property
     def data_manager(self):
@@ -466,7 +496,12 @@ class SDMeasurement(Measurement):
         raise NotImplementedError
 
     def update(self, time_interval: TimeInterval,
-               value: SDCurve | list[Vertex] | list[list[float]] | list[dict],
+               value: SDCurve | list[Vertex] | Vertex | list[list[float]] | list[dict],
                archive: bool = True, replace: bool = False):
-        value = value.vertices if isinstance(value, SDCurve) else value
-        super(SDMeasurement, self).update(time_interval, value, archive, replace)
+        if isinstance(value, SDCurve):
+            processed_value = list(value.vertices)  # Convert SortedSet to list
+        elif isinstance(value, Vertex):
+            processed_value = [value]
+        else:
+            processed_value = value
+        super(SDMeasurement, self).update(time_interval, processed_value, archive, replace)

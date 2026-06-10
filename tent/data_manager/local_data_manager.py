@@ -1,8 +1,12 @@
 import json
 import logging
 
-from sqlalchemy import create_engine
+from datetime import datetime
+from uuid import UUID
+
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.sqltypes import DateTime, Uuid
 from typing import Mapping, Sequence
 
 from tent.data_manager import DataManager
@@ -27,9 +31,11 @@ class LocalDataManager(DataManager):
     def archive_data(self, records: Mapping|Sequence = None):
         # TODO: Would it be better to move db write logic into a periodic and always append here to the archival_queue?
         records = records if records else []
+        records = [records] if isinstance(records, Mapping) else records
         if not self.archive_ready:
             self.archival_queue.extend(records)
             return
+
         def _add_to_session(sess, rec):
             table_name = rec['table_name']
             table_orm = self.orm.get(table_name)
@@ -38,17 +44,104 @@ class LocalDataManager(DataManager):
                 # Early return so we don't attempt to call a NoneType (regression fix for unit test failure)
                 return
             _log.debug(rec['data'])
-            record_object = table_orm(**rec['data'])
+            record_object = table_orm(**self._normalize_data(table_name, rec['data']))
             sess.add(record_object)
 
         with Session(self.engine) as session:
             while self.archival_queue:
                 _add_to_session(session, self.archival_queue.pop())
-            records = [records] if isinstance(records, Mapping) else records
             for record in records:
                 _add_to_session(session, record)
             # TODO: Error handling, if this fails we should end up with everything still in the archival_queue.
             session.commit()
+
+    def upsert_data(self, table_name: str, data: Mapping, match_columns: Sequence[str]) -> dict:
+        """Insert a row or update the row identified by match_columns."""
+        table_orm = self._get_orm(table_name)
+        normalized = self._normalize_data(table_name, data)
+        filters = {column: normalized[column] for column in match_columns}
+
+        with Session(self.engine) as session:
+            record = session.execute(select(table_orm).filter_by(**filters)).scalar_one_or_none()
+            if record is None:
+                record = table_orm(**normalized)
+                session.add(record)
+            else:
+                for key, value in normalized.items():
+                    setattr(record, key, value)
+            session.commit()
+            session.refresh(record)
+            return self._record_to_dict(table_name, record)
+
+    def query_data(self, table_name: str, conditions: Mapping = None, order_by: Sequence = None,
+                   limit: int = None, offset: int = None) -> list[dict]:
+        """Query a registered table using simple equality and range conditions."""
+        table_orm = self._get_orm(table_name)
+        table = self.tables[table_name]
+        statement = select(table_orm)
+
+        for column_name, condition in (conditions or {}).items():
+            column = table.c[column_name]
+            if isinstance(condition, Mapping):
+                for operator, value in condition.items():
+                    value = self._normalize_value(column, value)
+                    comparisons = {
+                        'eq': lambda: column == value,
+                        'ne': lambda: column != value,
+                        'gt': lambda: column > value,
+                        'gte': lambda: column >= value,
+                        'lt': lambda: column < value,
+                        'lte': lambda: column <= value,
+                    }
+                    try:
+                        statement = statement.where(comparisons[operator]())
+                    except KeyError as exc:
+                        raise ValueError(f'Unsupported query operator: {operator}') from exc
+            else:
+                statement = statement.where(column == self._normalize_value(column, condition))
+
+        for item in order_by or []:
+            column_name, direction = item if isinstance(item, (list, tuple)) else (item, 'asc')
+            column = table.c[column_name]
+            statement = statement.order_by(column.desc() if str(direction).lower() == 'desc' else column.asc())
+        if offset:
+            statement = statement.offset(offset)
+        if limit is not None:
+            statement = statement.limit(limit)
+
+        with Session(self.engine) as session:
+            return [self._record_to_dict(table_name, row) for row in session.scalars(statement)]
+
+    def _get_orm(self, table_name: str):
+        table_orm = self.orm.get(table_name)
+        if table_orm is None:
+            raise KeyError(f'Unknown table: {table_name}')
+        return table_orm
+
+    def _normalize_data(self, table_name: str, data: Mapping) -> dict:
+        table = self.tables.get(table_name)
+        if table is None:
+            return dict(data)
+        return {
+            key: self._normalize_value(table.c[key], value)
+            for key, value in data.items()
+        }
+
+    @staticmethod
+    def _normalize_value(column, value):
+        if value is None:
+            return None
+        if isinstance(column.type, DateTime) and isinstance(value, str):
+            return datetime.fromisoformat(value.replace('Z', '+00:00'))
+        if isinstance(column.type, Uuid) and isinstance(value, str):
+            return UUID(value)
+        return value
+
+    def _record_to_dict(self, table_name: str, record) -> dict:
+        return {
+            column.name: getattr(record, column.name)
+            for column in self.tables[table_name].columns
+        }
 
 
 # TODO: Move to TransactiveNodeAgent.
@@ -84,7 +177,5 @@ class VolttronDataManager(DataManager):
 #     dm.add_tables(definitions)
 #     dm.init_archive()
 #     return dm
-
-
 
 

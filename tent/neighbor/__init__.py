@@ -42,7 +42,6 @@ under Contract DE-AC05-76RL01830
 """
 import json
 import logging
-
 from copy import deepcopy
 from datetime import datetime
 from typing import Union
@@ -121,6 +120,8 @@ class Neighbor(Entity):
         self.prepared_signals: WeakKeyDictionary[Market, TransactiveSignal] = WeakKeyDictionary()  # Current signal, ready to send.
         self.last_received_signals: WeakKeyDictionary[Market, TransactiveSignal] = WeakKeyDictionary()  # Last records received.
         self.last_sent_signals: WeakKeyDictionary[Market, TransactiveSignal] = WeakKeyDictionary()  # Last records sent.
+    # Internal guards to avoid repeated noisy warnings
+        self._loss_warning_reported = False
 
         transactive_node.register_subscription(subscribe_key=f'{self.name}_incoming_transactive_signal',
                                                callback=self.receive_transactive_signal)
@@ -156,21 +157,22 @@ class Neighbor(Entity):
 
             # Find the TransactiveSignals in this indexed active time interval.
             sent_time = self.last_sent_signals[market].signal_time
-            sent_signal = self.last_sent_signals[market].get_by_interval(time_interval)
+            sent_signal_curve = self.last_sent_signals[market].get_by_interval(time_interval)
             received_time = self.last_received_signals[market].signal_time
-            received_signal = self.last_received_signals[market].get_by_interval(time_interval)
-            prepared_signal = self.prepared_signals[market].get_by_interval(time_interval)
+            received_signal_curve = self.last_received_signals[market].get_by_interval(time_interval)
+            prepared_signal_curve = self.prepared_signals[market].get_by_interval(time_interval)
 
             # Now, work through the convergence criteria.
-            if not sent_signal:
+            if not sent_signal_curve:
                 # No signal has been sent in this time interval. This is the first convergence requirement.
                 # Set the convergence flag false.
                 _log.debug(f"Signal for time interval {time_interval.name}. Enable send flag.")
                 flag = False
 
             # received and received AFTER last sent and there is a big diff b/w sent_signal and received_signal
-            elif (len(received_signal) > 0 and received_time > sent_time
-                  and TransactiveSignal.balance_points_differ(sent_signal, received_signal, time_interval,
+            elif (received_signal_curve is not None and len(received_signal_curve) > 0 and received_time > sent_time
+                  and TransactiveSignal.balance_points_differ(self.last_sent_signals[market], 
+                                                              self.last_received_signals[market], time_interval,
                                                               self.convergence_threshold)):
                 # One or more TransactiveRecord objects has been received in the indexed time interval, and it has been
                 # received AFTER the last time a message was sent. These are preconditions for the second convergence
@@ -182,7 +184,8 @@ class Neighbor(Entity):
             # TODO: Find out why the timing does not work with t_threshold.
             # elif dt - sent_time >= t_threshold and conditions_have_changed(prepared_signal, sent_signal,
             #                                                                self.convergenceThreshold, self.name):
-            elif TransactiveSignal.conditions_have_changed(prepared_signal, sent_signal, time_interval,
+            elif TransactiveSignal.conditions_have_changed(self.prepared_signals[market], 
+                                                           self.last_sent_signals[market], time_interval,
                                                            self.convergence_threshold):
                 # Delay 5 min after last send AND More than 5 minutes have passed since the last time a signal was sent.
                 # This is a precondition to the third convergence criterion.
@@ -197,7 +200,7 @@ class Neighbor(Entity):
         # If any of the convergence flags in active time intervals is false, the overall convergence flag should be set
         # false, too. Otherwise, true, meaning the coordination sub-problem is converged with this Neighbor.
         # TODO: This works but is ugly. Measurement should be an Iterator to allow "any(self.convergent_flags)".
-        self.converged = False if any(self.convergence_flags.values) else True
+        self.converged = all(self.convergence_flags.values)
 
         _log.debug(f"Convergence flags for {self.name} are {self.convergence_flags.log_report}")
         _log.debug(f"Convergence flag for {self.name} is {self.converged}.")
@@ -268,10 +271,16 @@ class Neighbor(Entity):
             #  mtr.current_measurement (or maybe max in its buffer), and prior_market_powers?
             #  If the prior market had a higher power than the meter, we would want to know that, right?
             # No appropriate MeterPoint was found. The demand threshold must be inferred.
-            prior_market = market.prior_market_in_series
+            prior_market_ref = market.prior_market_in_series
+            if prior_market_ref is None:
+                return
+            if callable(prior_market_ref):
+                prior_market = prior_market_ref()
+            else:
+                prior_market = prior_market_ref
             if prior_market is None:
                 return
-            prior_mkt_pwrs = [v.value for k, v in self.scheduled_powers.all if k.market == prior_market()]
+            prior_mkt_pwrs = [v.value for k, v in self.scheduled_powers.all if k.market == prior_market]
             self.demand_threshold = max([0.0, self.demand_threshold, *prior_mkt_pwrs]) if prior_mkt_pwrs else float('inf')
             # TODO: Why do we go to inf if there are not prior market powers. There could still be a demand_threshold,
             #  and the logic seems rather different than maxing that with 0....
@@ -310,7 +319,7 @@ class Neighbor(Entity):
                 market - Market object
 
             OUTPUTS:
-                Updates self.activeVertices - an array of IntervalValues that contain Vertex() structs
+                Updates self.active_vertices - an SDMeasurement mapping TimeIntervals to SDCurves
         """
 
         # Recall the current demand threshold that applies to this neighbor in this month, and assign it to the active
@@ -598,16 +607,20 @@ class Neighbor(Entity):
         #            "Addressing the Marginal Value of Transport Losses."
 
         if self.maximum_power is None or self.maximum_power <= 0:
-            print('WARNING: Method Neighbor.include_losses requires that a full maximum power value > 0 be assigned. '
-                                 'No losses were applied.')
+            if not getattr(self, '_loss_warning_reported', False):
+                _log.warning('Method Neighbor.include_losses requires that a full maximum power value > 0 be '
+                             'assigned for neighbor %s. No losses were applied.', getattr(self, 'name', 'unknown'))
+                self._loss_warning_reported = True
             return
 
         if type(self.loss_factor) != float or self.loss_factor <= 0:
-            print('WARNING: Property lossFactor must be a small positive float. No losses were applied.')
+            _log.warning('Property loss_factor must be a small positive float for neighbor %s. No losses were applied.',
+                         getattr(self, 'name', 'unknown'))
             return
 
         if not isinstance(sd_curve, SDCurve):
-            print(f'WARNING: This method acts on SDCurve objects. Received {type(sd_curve)}. No losses were applied.')
+            _log.warning('This method acts on SDCurve objects. Received %s for neighbor %s. No losses were applied.',
+                         type(sd_curve), getattr(self, 'name', 'unknown'))
             return
 
         # Get on with the business of reviewing and correcting the input vertices.

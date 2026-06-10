@@ -66,7 +66,11 @@ class Timer(object):
             ratio = 3600 / cls.sim_one_hr_in_sec
             time_diff = now - cls.created_time
             simulation_time_diff = time_diff * ratio
-            now = cls.sim_start_time + simulation_time_diff
+            try:
+                now = cls.sim_start_time + simulation_time_diff
+            except OverflowError:
+                _log.critical(f"Simulation time overflowed (year 10000+). Congrats, you made it.")
+                raise
 
         return now
 

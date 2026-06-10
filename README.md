@@ -13,3 +13,20 @@ Important base classes:
     -	Auction
     -	Consensus
 
+
+Development
+-----------
+
+This project now uses Poetry for dependency management. For development, run:
+
+1. Start an interactive Poetry shell:
+
+    poetry shell
+
+2. Install project dependencies:
+
+    poetry install
+
+A backup of the old `requirements.txt` is kept at `requirements.txt.bak`.
+
+
