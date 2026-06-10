@@ -52,7 +52,7 @@ from zoneinfo import ZoneInfo
 from tent.base import Archivable
 import tent.containers as containers
 from tent.market.market_series import MarketSeries
-from tent.utils.helpers import get_class_from_spec
+from tent.utils.helpers import get_class_from_spec, validate_bool
 from tent.utils.timer import Timer
 
 _log = logging.getLogger(__name__)
@@ -134,7 +134,7 @@ class TransactiveNode(Archivable):
 
     def _setup_timer(self, config):
         # Simulation Configurations:
-        self.simulation = bool(config.get('simulation', self.simulation))
+        self.simulation = validate_bool(config.get('simulation', self.simulation))
         if self.simulation:
             self.simulation_start_time = parser.parse(config.get('simulation_start_time', self.simulation_start_time)
                                                       ).replace(tzinfo=ZoneInfo(self.tz))
