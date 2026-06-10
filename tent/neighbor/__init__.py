@@ -526,14 +526,13 @@ class Neighbor(Entity):
         # Return transactive records to allow further processing by subclasses.
         return prepared_signal
 
-    def receive_transactive_signal(self, serialized_signal: str):
+    def receive_transactive_signal(self, signal_dict: dict):
         """Receive and save transactive records from a transactive Neighbor."""
         if not self.transactive:
             _log.warning('Transactive signals are not expected to be received from non-transactive neighbors. '
                          'No signal is read.')
             return
 
-        signal_dict = json.loads(serialized_signal)
         parsed_signal = TransactiveSignal.parse_signal(self.tn, signal_dict)
         self.last_received_signals[parsed_signal.market] = parsed_signal
 
