@@ -20,7 +20,7 @@ def see_net_curve(market, time_interval=None, show=True):
     if time_interval is None:
         time_interval = market.time_intervals[0]
 
-    sd_curve = deepcopy(market.active_vertices.get_by_interval(time_interval))
+    sd_curve = market.active_vertices.get_by_interval(time_interval)
     min_vertex = sd_curve.min_price_vertex
     max_vertex = sd_curve.max_price_vertex
 
@@ -39,7 +39,7 @@ def see_net_curve(market, time_interval=None, show=True):
         sd_curve.update(Vertex(max_vertex.price + price_extension, 0, max_vertex.quantity))
 
     fig, ax = plt.subplots()
-    ax.plot(sd_curve.prices, sd_curve.powers)
+    ax.plot(sd_curve.prices, sd_curve.quantities)
 
     ax.set(xlabel='marginal price [$/kWh]',
            ylabel='average power [kW]',
