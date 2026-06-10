@@ -171,9 +171,8 @@ ehthumbs.db
 Thumbs.db
 
 # Project-specific files
-*.csv
-/unit_tests/CSV_DATA/
-/Market_Data/
+*/unit_tests/CSV_DATA/
+*/Market_Data/
 volttron.log
 *.sqlite
 *.db
