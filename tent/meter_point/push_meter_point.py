@@ -1,17 +1,19 @@
 import logging
 
+from typing import Callable
+
 from tent.meter_point import MeterPoint
 
 _log = logging.getLogger(__name__)
 
 
 class PushMeterPoint(MeterPoint):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, subscribe_key: str, callback: Callable, *args, **kwargs):
         super(PushMeterPoint, self).__init__(*args, **kwargs)
 
-        self.tn.register_subscription()
+        self.tn.register_subscription(subscribe_key=subscribe_key, callback=callback)
 
-    def set_up_subscription(self):
+    def handle_subscription(self):
         # Subscribe to pushed meter readings.
         #
         # MeterPoints are updated when pushes are received.
