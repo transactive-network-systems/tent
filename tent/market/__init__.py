@@ -788,6 +788,8 @@ class Market(Component):
         (2) converge to system balance using sub-gradient search.
 
         """
+        # TODO: This method no longer appears to be used, at least in the base market class.
+        #  Should it be used or removed?
         # Call each local asset to schedule itself.
         for local_asset in self.tn.local_assets:
             local_asset.schedule(self)

@@ -328,6 +328,10 @@ class Neighbor(Entity):
                 #  or desirable to override this update_vertices method or make default_vertices a property.
                 self.active_vertices.update(time_interval, self.default_vertices, archive=False, replace=True)
                 if self.transactive:
+                    # TODO: It appears that this will fire many times until the signal is received.
+                    #  The warning should only be triggered if the time for the next state is reached without
+                    #  the signal having arrived. That condition is unknown here, so it would need to happen in the
+                    #  market. Do we need have that information there, or do we need a flag to be set?
                     # No records for an interval should be an abnormal condition except on startup of iterative markets.
                     _log.warning(f'No received transactive signal was found for transactive neighbor {self.name}'
                                  f' in time interval {time_interval.name}')
