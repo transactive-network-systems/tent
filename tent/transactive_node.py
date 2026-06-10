@@ -140,13 +140,11 @@ class TransactiveNode(Archivable):
                                                       ).replace(tzinfo=ZoneInfo(self.tz))
             self.simulation_one_hour_in_seconds = int(config.get('simulation_one_hour_in_seconds',
                                                                  self.simulation_one_hour_in_seconds))
-        # TODO: If the TN is started repeatedly many times, the created time will change unexplainably.
-        #  It may help to have a class method that guards changes in items like "created_time".
-        Timer.created_time = Timer.now(timezone.utc).astimezone(ZoneInfo(self.tz))
-        Timer.simulation = self.simulation
-        Timer.sim_start_time = self.simulation_start_time
-        Timer.sim_one_hr_in_sec = self.simulation_one_hour_in_seconds
-        Timer.tz = ZoneInfo(self.tz)
+        Timer.set(sim_one_hr_in_sec=self.simulation_one_hour_in_seconds,
+                  sim_start_time=self.simulation_start_time,
+                  simulation=self.simulation,
+                  tz=ZoneInfo(self.tz)
+        )
 
     def _setup_component_objects(self, config):
         # Configure TransactiveNode Component Classes
