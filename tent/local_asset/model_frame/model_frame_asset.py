@@ -30,7 +30,7 @@ class ModelFrameAsset(LocalAsset, ModelFrame):
 
         # Initialize Scheduler
         if occupancy_manager:  # TODO: Implement default behavior if occupancy_manager is not specified (make an always occupied base class).
-            om_class = get_class_from_spec(occupancy_manager, 'OccupancyManager', 'transactive_node.local_asset')
+            om_class = get_class_from_spec(occupancy_manager, 'OccupancyManager', 'tent.local_asset.occupancy_manager')
             self.occupancy_manager: OccupancyManager = om_class(**occupancy_manager)
 
         for device_topic in self.models:
@@ -44,7 +44,7 @@ class ModelFrameAsset(LocalAsset, ModelFrame):
                 # TODO: The default module_prefix doesn't quite work with the default class.
                 #  Need better detection logic in the helper function.
                 am_class = get_class_from_spec(actuation_manager, 'ActuationManager', transactive_node=self.tn,
-                                               default_module_prefix='transactive_node.local_asset.actuation_manager')
+                                               default_module_prefix='tent.local_asset.actuation_manager')
                 self.actuation_manager = am_class(parent=self, occupancy_manager=self.occupancy_manager,
                                                   **actuation_manager)
 

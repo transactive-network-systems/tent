@@ -42,8 +42,8 @@ class ActuationManager(metaclass=ABCMeta):
 
     @abstractmethod
     def actuate(self, mkt):
-        start_time = mkt.marketClearingTime + mkt.deliveryLeadTime
-        end_time = start_time + mkt.intervalDuration
+        start_time = mkt.transition_times.delivery
+        end_time = mkt.transition_times.reconciliation
         ocm = self.occupancy_manager() if self.occupancy_manager else self.occupancy_manager
         if ocm and ocm.check_schedule(start_time) and ocm.check_schedule(end_time) and self.actuation_allowed:
             self.actuation_active = True

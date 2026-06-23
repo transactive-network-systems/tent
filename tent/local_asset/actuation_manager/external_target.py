@@ -1,4 +1,4 @@
-from transactive_node.local_asset.actuation_manager import ActuationManager
+from . import ActuationManager
 
 
 class ExternalTargetActuationManager(ActuationManager):

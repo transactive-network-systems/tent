@@ -60,7 +60,7 @@ class ModelFrame(object):
         if not config:
             return
         self.demand_curve_points = config.get('demand_curve_points', 2)
-        base_module = "transactive_node.model_frame."
+        base_module = "tent.local_asset.model_frame.models."
         for model in config['models']:
             try:
                 topic = model["topic"]

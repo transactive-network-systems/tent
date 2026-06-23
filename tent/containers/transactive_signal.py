@@ -40,6 +40,7 @@ PACIFIC NORTHWEST NATIONAL LABORATORY
 operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
+import json
 import logging
 
 from datetime import datetime
@@ -124,17 +125,19 @@ class TransactiveSignal(SDMeasurement):
         }
 
     @classmethod
-    def parse_signal(cls, tn, message: dict) -> Self | None:
-        """Parse a transactive signal dictionary and update the SDMeasurement."""
+    def parse_signal(cls, tn, message) -> 'Self | None':
+        """Parse a transactive signal dictionary (or JSON string) and update the SDMeasurement."""
         # TODO: Currently assumes signal is being received from a remote.
         #  If there is another reason to parse a signal, an "on_receipt" flag should be added to signature.
         try:
+            if isinstance(message, str):
+                message = json.loads(message)
+            if not isinstance(message, dict):
+                raise ValueError("Signal must be a dictionary or JSON string.")
             # TODO: Should we allow a range of supported protocol_versions?
             if message['protocol_version'] != cls.PROTOCOL_VERSION:
                 raise ValueError(f"Unsupported protocol version: {message['protocol_version']}."
                                  f" Expected: {cls.PROTOCOL_VERSION}.")
-            if not isinstance(message, dict):
-                raise ValueError("Signal must be a dictionary.")
             # TODO: This won't work yet, since the function to get market by name does not currently exist.
             if not (market := tn.get_market_by_name(message['market'])):
                 _log.warning(f'Unable to find valid market "{market}" from received transactive signal.')

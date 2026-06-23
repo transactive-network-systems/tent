@@ -123,7 +123,7 @@ class LocalDataManager(DataManager):
         if table is None:
             return dict(data)
         return {
-            key: self._normalize_value(table.c[key], value)
+            key: self._normalize_value(table.c[key], value) if key in table.c else value
             for key, value in data.items()
         }
 

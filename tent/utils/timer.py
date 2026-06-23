@@ -80,7 +80,8 @@ class Timer(object):
         #  by tracking the current and simulation times while simulating and comparing on set.
         #  Is this worthwhile? too much overhead? May need the agent to provide an asynchronous event system.
         cls.tz = tz if tz else cls.tz
-        cls.created_time = datetime.now(timezone.utc).astimezone(ZoneInfo(cls.tz))
+        tz_info = cls.tz if isinstance(cls.tz, tzinfo) else ZoneInfo(cls.tz)
+        cls.created_time = datetime.now(timezone.utc).astimezone(tz_info)
         cls.simulation = simulation
         if simulation and (not sim_one_hr_in_sec or not sim_start_time):
             raise ValueError("sim_one_hr_in_sec and sim_start_time must be provided when simulation is True")

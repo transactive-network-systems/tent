@@ -134,7 +134,7 @@ class TransactiveNode(Archivable):
 
     def _setup_timer(self, config):
         # Simulation Configurations:
-        self.simulation = validate_bool(config.get('simulation', self.simulation))
+        self.simulation = validate_bool(config.get('simulation', self.simulation), 'simulation')
         if self.simulation:
             self.simulation_start_time = parser.parse(config.get('simulation_start_time', self.simulation_start_time)
                                                       ).replace(tzinfo=ZoneInfo(self.tz))
