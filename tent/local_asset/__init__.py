@@ -349,7 +349,7 @@ class LocalAsset(Entity):
             # Get the marginal prices from the latest similar market.
 
             # Find any market prices from the corrected market to add to the price horizon
-            for time_interval, marginal_price in market.prior_market_in_series.marginal_prices:
+            for time_interval, marginal_price in market.prior_market_in_series.marginal_prices.all:
                 if time_interval.end_time > end_of_calculated_horizon:
                     # TODO: This should probably be creating/updating an interval for this market with the same time.
                     price_horizon.update(time_interval, marginal_price)
