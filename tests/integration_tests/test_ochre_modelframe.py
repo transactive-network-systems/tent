@@ -359,7 +359,7 @@ def ochre_dwelling():
         "name": "TentHouse",
         "start_time": dt.datetime(2018, 7, 1, 0, 0),     # summer → cooling is active
         "time_res": dt.timedelta(minutes=15),
-        "duration": dt.timedelta(hours=6),
+        "duration": dt.timedelta(hours=24),   # 24 market cycles × 4 steps × 15 min = 24 h
         "initialization_time": dt.timedelta(days=1),     # warm up to steady state
         "verbosity": 6,   # exposes all 4 status-dict keys we need
         "hpxml_file": os.path.join(
@@ -560,7 +560,8 @@ class TestOchreModelFrameAsset:
         dwelling = ochre_dwelling
         tn, market, asset = tent_node
 
-        N_STEPS = 5
+        N_STEPS = 24   # one market cycle per hour × 24 hours
+        OCHRE_STEPS_PER_MARKET = 4   # 4 × 15 min = 1 hour per market cycle
         setpoints_written = []
         prices_cleared = []
 
@@ -568,11 +569,12 @@ class TestOchreModelFrameAsset:
         csp_command = 22.0
 
         for i in range(N_STEPS):
-            # ── 1. Advance OCHRE, commanding last cycle's setpoint ──────
+            # ── 1. Advance OCHRE one market interval (1 hour = 4 × 15-min steps) ──
             # The control signal must be re-sent every step or OCHRE reverts to schedule.
-            status = dwelling.update(
-                control_signal={"HVAC Cooling": {"Setpoint": csp_command}}
-            )
+            for _ in range(OCHRE_STEPS_PER_MARKET):
+                status = dwelling.update(
+                    control_signal={"HVAC Cooling": {"Setpoint": csp_command}}
+                )
             oat_c = status["Temperature - Outdoor (C)"]
             tin_c = status["Temperature - Indoor (C)"]
             csp_c = status["HVAC Cooling Setpoint (C)"]
@@ -588,7 +590,7 @@ class TestOchreModelFrameAsset:
                 )
 
             # ── 2. Push state into TENT ────────────────────────────────
-            now = datetime(2018, 7, 1, i, 0, tzinfo=timezone.utc)
+            now = datetime(2018, 7, 1, i % 24, 0, tzinfo=timezone.utc)
             asset.new_model_data({
                 "datetime": now,
                 "data": {
@@ -634,8 +636,7 @@ class TestOchreModelFrameAsset:
             print(
                 f"\n  Step {i+1}/{N_STEPS}: "
                 f"OAT={oat_c:.2f}°C  TIN={tin_c:.2f}°C  CSP_reported={csp_c:.2f}°C  "
-                f"cleared_price=${cleared_price:.5f}/kWh  "
-                f"→ new_CSP={csp_command:.2f}°C"
+                f"price=${cleared_price:.5f}/kWh  → new_CSP={csp_command:.2f}°C"
             )
 
         # ── Verify price→setpoint mapping is monotone ─────────────────

@@ -27,6 +27,6 @@ This project now uses Poetry for dependency management. For development, run:
 
     poetry install
 
-A backup of the old `requirements.txt` is kept at `requirements.txt.bak`.
+A backup of the old `requirements.txt` is kept at `requirements.txt.bak`
 
 

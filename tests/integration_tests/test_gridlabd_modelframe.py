@@ -545,21 +545,23 @@ class TestGridLabDModelFrameAsset:
         gld, house = gld_house
         tn, market, asset = tent_node
 
-        N_STEPS = 5
+        N_STEPS = 24
+        GLD_STEPS_PER_MARKET = 3600  # 1-second GLD timestep × 3600 = 1 hour per market cycle
         setpoints_written = []
         prices_cleared = []
 
         for i in range(N_STEPS):
-            # ── 1. Advance GridLAB-D ────────────────────────────────────
-            code, sim_time = gld.step()
-            assert code == 0, f"Step {i}: GLD failed (code={code})"
+            # ── 1. Advance GridLAB-D one market interval (1 hour) ──────
+            for _ in range(GLD_STEPS_PER_MARKET):
+                code, sim_time = gld.step()
+                assert code == 0, f"Step {i}: GLD failed (code={code})"
 
             oat_f = _parse_gld_float(gld.get_property(house, "outdoor_temperature")[1])
             tin_f = _parse_gld_float(gld.get_property(house, "air_temperature")[1])
             csp_f = _parse_gld_float(gld.get_property(house, "cooling_setpoint")[1])
 
             # ── 2. Push state into TENT ────────────────────────────────
-            now = datetime(2001, 5, 5, 10 + i, 0, tzinfo=timezone.utc)
+            now = datetime(2001, 5, 5, (5 + i) % 24, 0, tzinfo=timezone.utc)
             asset.new_model_data({
                 "datetime": now,
                 "data": {

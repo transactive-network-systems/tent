@@ -437,8 +437,9 @@ class Market(Component):
 
             # Mark completed so this block is not re-entered on subsequent events() calls.
             # NOTE: Removal from series.markets is NOT done here because events() may be called
-            # during iteration over series.markets. The series should prune expired markets
-            # separately (e.g., in MarketSeries or _state_machine_iteration).
+            # during iteration over series.markets. Pruning is handled by
+            # MarketSeries.prune_expired(), called from _state_machine_iteration after the
+            # inner per-market loop completes.
             self._stateIsCompleted = True
 
     def transition_from_initial_to_inactive(self):

@@ -287,6 +287,82 @@ def test_market_convergence_blocking():
     print("\n🎉 Convergence blocking test complete!")
 
 
+def test_series_markets_stays_bounded():
+    """Regression test: series.markets does not grow unboundedly as markets expire.
+
+    Drives many market cycles (CYCLES iterations) and asserts that len(series.markets)
+    remains a small constant rather than growing with cycle count.  Without the prune
+    fix this would grow ~linearly (one new entry per cycle).
+    """
+    CYCLES = 25
+
+    tn = MockTN()
+    base_dir = Path(__file__).resolve().parent.parent.parent
+    config_path = base_dir / 'sample_configs' / 'tn.campus.json'
+    with open(config_path, encoding='utf-8') as f:
+        configs = json.load(f)
+
+    for ism in configs.get('information_service_models', []) or []:
+        wf = ism.get('weather_file_path')
+        if wf and not os.path.exists(wf):
+            ism['weather_file_path'] = None
+
+    with patch('tent.data_manager.local_data_manager.LocalDataManager.init_archive', Mock(return_value=None)):
+        tn.configure_node(configs)
+
+    if hasattr(tn, 'data_manager') and tn.data_manager:
+        tn.data_manager.archive_data = Mock(return_value=None)
+
+    assert tn.market_series, "Expected at least one market series"
+    series = list(tn.market_series)[0]
+    clearing_interval = series.duration.market_clearing_interval
+
+    # Find the earliest transition time to use as our clock anchor.
+    first_market = list(series)[0]
+    clock_base = first_market.transition_times.active
+
+    size_at_cycle_5 = None
+
+    for i in range(CYCLES):
+        # Advance the clock well past the current cycle's reconciliation so every
+        # market that can expire will do so.  Adding 3 clearing intervals gives
+        # plenty of headroom across all transition phases.
+        t = clock_base + clearing_interval * (i + 3)
+
+        # Mark all live markets as converged/reconciled so Negotiation and
+        # Reconcile states complete rather than blocking indefinitely.
+        for m in list(series):
+            m.converged = True
+            m.reconciled = True
+
+        with patch.object(Timer, 'now', return_value=t):
+            tn.step()
+
+        if i == 4:
+            size_at_cycle_5 = len(series.markets)
+
+    size_at_end = len(series.markets)
+
+    # The newest market must never be Expired (spawn invariant).
+    assert series.markets[-1].market_state != MarketState.Expired, (
+        "newest market should never be Expired")
+
+    # Without pruning, size grows linearly (~= CYCLES).  With pruning it stays small.
+    # Bound: allow up to 5 concurrently-live markets — generous for a single-interval
+    # series (steady state is 1–3), but strict enough to catch the old linear growth.
+    assert size_at_end <= 5, (
+        f"series.markets grew to {size_at_end} after {CYCLES} cycles — "
+        "expected a small constant (pruning not working?)")
+
+    # Steady-state check: size should not be growing between cycle 5 and the end.
+    if size_at_cycle_5 is not None:
+        assert size_at_end <= size_at_cycle_5 + 2, (
+            f"series.markets kept growing after cycle 5 "
+            f"({size_at_cycle_5} → {size_at_end}) — "
+            "expected roughly constant size once steady state is reached")
+
+
 if __name__ == "__main__":
     test_market_full_lifecycle()
     test_market_convergence_blocking()
+    test_series_markets_stays_bounded()
