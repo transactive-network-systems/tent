@@ -91,6 +91,13 @@ class Entity(Component, abc.ABC):
             scheduled_power = self.scheduled_powers.get_by_interval(time_interval)
             sd_curve = self.active_vertices.get_by_interval(time_interval)
 
+            # An asset that has not scheduled this interval has no meaningful
+            # margin to report. Skip rather than raising AttributeError on None.
+            if scheduled_power is None:
+                _log.warning(f'{self.name} has no scheduled power in {time_interval.name}; '
+                             f'skipping reserve margin for this interval.')
+                continue
+
             # Calculate the reserve margin in the indexed time interval. The reserve margin is the difference between
             #  the maximum operational power value in the interval and the scheduled power. The operational maximum
             #  should be less than the object's hard physical power constraint, so a check is in order. Start with the
@@ -98,7 +105,6 @@ class Entity(Component, abc.ABC):
             # Calculate the operational maximum constraint, which is the highest point on the supply/demand curve
             # (subject to physical limits) that represents the residual flexibility of the asset in the time interval.
             # If there are no active vertices, use the hard physical constraint (maximum power).
-            # TODO: max_quantity may currently be returning a vertex. This would require using *.quantity on the following line.
             operational_constraint = sd_curve.max_quantity(self.maximum_power) if sd_curve else self.maximum_power  # [avg.kW]
             reserve_margin = max(0, operational_constraint - scheduled_power.value)  # [avg. kW]
 
