@@ -379,9 +379,13 @@ class LocalAsset(Entity):
                 #            an object of class HourlyAveragePriceModel, but it is being made equivalent to the model
                 #            itself instead.
                 price = market.price_model.get(end_of_calculated_horizon)
-                # TODO: Why are we hard coding hours here?
-                start_time = end_of_calculated_horizon.replace(minute=0, second=0)
-                end_time = start_time + timedelta(hours=1)  # TODO: Why are we doing specifically hours now?
+                # Start where prices leave off, then align to the top of the next
+                # hour. Rounding the start time down instead would back-date the
+                # interval into time that is already priced, and because
+                # Measurement keys on TimeInterval identity that produces
+                # duplicate overlapping entries rather than updating one.
+                start_time = end_of_calculated_horizon
+                end_time = (start_time + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
                 duration = end_time - start_time
                 price_horizon.update(TimeInterval(market, duration, start_time), price[0])
                 end_of_calculated_horizon = end_time
