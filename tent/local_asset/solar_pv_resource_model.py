@@ -51,6 +51,21 @@ _log = logging.getLogger(__name__)
 
 
 class SolarPvResource(LocalAsset):
+    # DEPRECATED: Prefer DerAsset with der_interface's PvlibPvAdapter.
+    #
+    # This model approximates production as a cosine bump with sunrise fixed at
+    # 05:30 and sunset at 17:30, every day of the year, scaled by a hand-set
+    # cloud factor. It cannot represent latitude, solar declination, panel tilt
+    # or azimuth, module temperature derating, inverter clipping, or weather.
+    #
+    # For the 120 kW campus site in sample_configs/tn.campus.json the error is
+    # substantial: on 15 December this model reports ~722 kWh against pvlib's
+    # ~391 kWh, and it claims production at 07:00 and 17:00 when the sun is
+    # actually down.
+    #
+    # See tent/local_asset/der_asset.py and Analysis/reusable_model_layer.md.
+    # Retained for backward compatibility with existing configurations.
+    #
     # SolarPvResourceModel Subclass for renewable solar PV generation The Solar PV resource is treated here as a
     # must-take resource. This is unlike dispatchable resources in this regard. Production may be predicted. The main
     # features of this model are (1) the introduction of property cloudFactor, a Measurement, that allows us to
