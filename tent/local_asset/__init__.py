@@ -391,8 +391,9 @@ class LocalAsset(Entity):
         price = market.series.default_price
         while end_of_scheduling_horizon > end_of_calculated_horizon:
             start_time = end_of_calculated_horizon
-            end_time = start_time + timedelta(hours=1)  # TODO: Why are we doing hours here?
-            end_time.replace(minute=0, second=0, microsecond=0)
+            # Align to the top of the next hour. datetime is immutable, so the
+            # result of replace() must be assigned.
+            end_time = (start_time + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
             duration = end_time - start_time
             price_horizon.update(TimeInterval(market, duration, start_time), price)
             end_of_calculated_horizon = end_time
