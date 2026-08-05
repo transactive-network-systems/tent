@@ -260,18 +260,24 @@ class LocalAsset(Entity):
         # OUTPUTS:
         # Assigns values to self.transition_costs
 
-        # Index through all but the first time interval.
+        # Index through the active time intervals. The first interval of a market
+        # normally has no prior engagement state, and is treated as unchanged.
         for time_interval in market.time_intervals:
             # Find the current and prior engagement states based on the current indexed time interval
             current_engagement_state = self.engagement_schedule.get_by_interval(time_interval)
             prior_engagement_state = self.engagement_schedule.get_prior_by_interval(time_interval)
 
+            # Without a current engagement state there is no transition to price.
+            if current_engagement_state is None:
+                continue
+
             # Calculate the state transition
             # - -1:Disengaging
             # -  0:Unchanged
             # -  1:Engaging
-            # TODO: Is the calculation of transition cost is right for the first time interval?
-            #  Should it be unchanged or engaging?
+            # A missing prior state is treated as unchanged rather than as an
+            # engagement, so an asset is not charged an engagement cost merely
+            # because a market's first interval has no predecessor.
             dif = current_engagement_state - prior_engagement_state if prior_engagement_state is not None else 0
 
             # Assign the corresponding transition cost
