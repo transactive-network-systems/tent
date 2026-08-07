@@ -572,7 +572,7 @@ class Market(Component):
 
         # Tell Local Assets it is time to actuate.
         self._actuate_assets()
-        self.balanced_price_publish()
+        # self.balanced_price_publish() # TODO: Is this something that should still exist?
         return None
 
     def balanced_price_publish(self):  # TODO: Should this be replaced with archival functionality?
