@@ -447,7 +447,7 @@ class Neighbor(Entity):
 
         # An active threshold is initialized here and used during the assessment of demand charges.
         active_threshold = -self.demand_threshold
-
+        _log.info(f'@@@@@@@ IN PREP_TRANSACTIVE_SIGNAL @@@@@@@')
         for time_interval in market.time_intervals:
             _log.info(f'@@@@@@@@@ LOOKING AT TIME INTERVAL: {time_interval.name}')
             if market not in self.prepared_signals:
@@ -468,7 +468,9 @@ class Neighbor(Entity):
 
             # Apply the minimum and maximum power constraints to the vertices.
             # At this point, the vertices will include any flexibility, stated from the perspective of the local agent.
+            _log.info('BEFORE APPLY CONSTRAINTS AND BOUNDS IN NEIGHBOR')
             sd_curve.apply_constraints_and_bounds(self.minimum_power, self.maximum_power)
+            _log.info('AFTER APPLY CONSTRAINTS AND BOUNDS IN NEIGHBOR')
 
             # Remove the impacts of any demand charges that were included at the local node but are not relevant at the
             # remote agent location.
@@ -480,7 +482,9 @@ class Neighbor(Entity):
                 scheduled_power = self.scheduled_powers.get_by_interval(time_interval)
                 if scheduled_power:
                     active_threshold = min(active_threshold, scheduled_power)
+                _log.info('BEFORE REMOVE DEMAND CHARGES) IN NEIGHBOR')
                 self.remove_demand_charges(sd_curve=sd_curve, threshold=active_threshold)
+                _log.info('AFTER REMOVE DEMAND CHARGES) IN NEIGHBOR')
 
             # Remove the impacts of marginal losses to place the vertices into the perspective of the remote neighbor to
             # which a transactive signal will be sent.
@@ -535,6 +539,7 @@ class Neighbor(Entity):
         self.last_sent_signals[market] = prepared_signal
 
         # Save the newly sent transactive records.
+        _log.info('@@@@@@@@@@ ABOUT TO ARCHIVE LAST SENT SIGNALS.')
         self.last_sent_signals[market].archive()
 
         # Return transactive records to allow further processing by subclasses.

@@ -26,12 +26,18 @@ class LocalDataManager(DataManager):
         self.registry.metadata.create_all(self.engine, checkfirst=True)
         # TODO: Can we check if the database is actually successfully created and ready here?
         self.archive_ready = True
+        # arch_debug = []
+        # for i in self.archival_queue:
+        #     i['data'] = {k: str(v) for k, v in i['data'].items()}
+        #     arch_debug.append(i)
+        # _log.info(f'@@@@@ ARCHIVAL QUEUE HAS: {  arch_debug }')
         self.archive_data()
 
     def archive_data(self, records: Mapping|Sequence = None):
         # TODO: Would it be better to move db write logic into a periodic and always append here to the archival_queue?
         records = records if records else []
         records = [records] if isinstance(records, Mapping) else records
+        #_log.info(f'@@@@@@@ Archiving data: {records}')
         if not self.archive_ready:
             self.archival_queue.extend(records)
             return

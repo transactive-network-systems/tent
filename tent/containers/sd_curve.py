@@ -446,6 +446,7 @@ class SDCurve(Archivable):
             "time_interval_id": self.interval.id if self.interval else None,
             "timestamp": self.interval.start_time if self.interval else None
         })
+        _log.info(f'@@@@@@ GETTING RECORD FOR {self.measurement.source.name}, {self.measurement.type.name}, {self.interval.start_time}')
         return record
 
     @classmethod
@@ -499,6 +500,7 @@ class SDMeasurement(Measurement):
     def update(self, time_interval: TimeInterval,
                value: SDCurve | list[Vertex] | Vertex | list[list[float]] | list[dict],
                archive: bool = True, replace: bool = False):
+        _log.info(f'@@@@@@@@@ UPDATING SD CURVE FROM {self.source.name}, with archive: {archive} and replace: {replace}')
         if isinstance(value, SDCurve):
             processed_value = list(value.vertices)  # Convert SortedSet to list
         elif isinstance(value, Vertex):

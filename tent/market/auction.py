@@ -185,6 +185,7 @@ class Auction(Market):
                     upstream_agent.prep_transactive_signal(self)
 
                     # Send transactive signal (i.e., aggregated bid) to the upstream agent if it is a transactive agent.
+                    _log.info('@@@@@ SENDING TO UPSTREAM NEIGHBOR.')
                     upstream_agent.send_transactive_signal(self)
 
             # TODO: We don't have foolproof verification that the upstream agent was sent this signal,
@@ -266,6 +267,7 @@ class Auction(Market):
 
                 # Prepare aggregated offer for the downstream agent, and send it a transactive signal (i.e., an offer).
                 downstream_agent.prep_transactive_signal(self)
+                _log.info(f'@@@@@@@@@ SENDING TO DOWNSTREAM NEIGHBOR FROM {self.name}.')
                 downstream_agent.send_transactive_signal(self)
 
             self._stateIsCompleted = True

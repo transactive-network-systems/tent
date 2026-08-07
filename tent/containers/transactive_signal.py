@@ -129,6 +129,7 @@ class TransactiveSignal(SDMeasurement):
     @classmethod
     def parse_signal(cls, tn, message: dict) -> Self | None:
         """Parse a transactive signal dictionary and update the SDMeasurement."""
+        _log.info('@@@@@@@@@ PARSING TRANSACTIVE SIGNAL')
         # TODO: Currently assumes signal is being received from a remote.
         #  If there is another reason to parse a signal, an "on_receipt" flag should be added to signature.
         try:

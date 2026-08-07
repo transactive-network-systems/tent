@@ -665,9 +665,11 @@ class Market(Component):
           production cost / total production)).
         - power: system net power at the vertex (The system "clears" where system net power is zero.)
         """
+        _log.info("@@@@@@@@@@@ IN ASSIGN SYSTEM VERTICES.")
         for time_interval in self.time_intervals:
             # Call the utility sum_vertices to recreate the aggregate vertices in the indexed time interval.
             self.active_vertices.update(time_interval, self.sum_vertices(time_interval), replace=True)
+        _log.info("@@@@@@@@@@@ AFTER ASSIGN SYSTEM VERTICES.")
 
     def balance(self, k=1):
         """
@@ -871,7 +873,11 @@ class Market(Component):
         #    - Where there is one vertex, assign infinite marginal price because quantity is constant.
         #    - Where there are multiple vertices. Use the marginal price values from the vertices themselves.
         marginal_price_list = SortedList()
+        _log.info('@@@@ IN SUM_VERTICES.')
+        _log.info(f'@@@@ neighbors: {[n.name for n in self.tn.neighbors]}')
+        _log.info(f'@@@@ local_assets: {[a.name for a in self.tn.local_assets]}')
         for entity in self.tn.neighbors + self.tn.local_assets:
+            _log.info(f'@@@@@ FOR ENTITY: {entity.name}')
             # Jump out of this iteration if neighbor model happens to be the "object to exclude"
             if object_to_exclude is not None and entity == object_to_exclude:
                 continue
@@ -879,6 +885,7 @@ class Market(Component):
             sd_curve = entity.active_vertices.get_by_interval(time_interval)
 
             if not sd_curve.empty:
+                _log.info(f'@@@@ SDCURVE HAS {len(sd_curve.vertices)} vertices.')
                 marginal_price_list.update([float("inf")] if len(sd_curve) == 1 else sd_curve.prices)  # [$/kWh]
 
         # Keep only two (near) duplicates of any marginal price.
@@ -914,6 +921,7 @@ class Market(Component):
                 vertex.cost += entity_sd_curve.prod_cost_from_vertices(entity_production)
                 vertex.quantity += entity_production  # [avg.kW]
 
+            _log.info('@@@@@@@@ ABOUT TO UPDATE SUMMED CURVE.')
             # Append Vertex iv to the list of vertices
             summed_curve.update(vertex, archive=False)  # TODO: Set archive false to prevent second write on prep_signal. Does this change usage elsewhere?
             _log.info('@@@@@@@@ AFTER UPDATE SUMMED CURVE.')

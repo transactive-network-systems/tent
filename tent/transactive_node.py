@@ -172,9 +172,12 @@ class TransactiveNode(Archivable):
         Returns list of instantiated and configured components
         """
         components = []
+        _log.info(f'Configuring {component_type}')
         if not configs:
+            _log.info(f'No {component_type} configurations were provided.')
             return components
         for config in configs:
+            _log.info(f'Configuring {config.get("class_name")}: {config.get("name")}')
             component_class = get_class_from_spec(config, default_module_prefix='tent', transactive_node=self)
             self.data_manager.add_tables(component_class.get_archive_definitions())
             if issubclass(component_class, MarketSeries):
