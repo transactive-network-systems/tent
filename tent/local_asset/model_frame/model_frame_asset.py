@@ -99,13 +99,17 @@ class ModelFrameAsset(LocalAsset, ModelFrame):
         # - Updates self.scheduledPowers - the schedule of power consumed
 
         temperature_forecast = [x for x in self.information_services if x.name == self.temperature_forecast_name][0]
-        default_value = self.default_power
-
         for time_interval in market.time_intervals:
-            outside_air_temperature = temperature_forecast.predicted_values.get_by_interval(time_interval).value
+            outside_air_temperature = temperature_forecast.predicted_values.get_by_interval(time_interval)
             # Get new scheduled power value for this time interval:
-            modeled_value = self._get_scheduled_power_from_model(time_interval, outside_air_temperature)
-            value = modeled_value if modeled_value else default_value  # Use default if modeled values is not available.
+            if hasattr(outside_air_temperature, 'value'):
+                modeled_value = self._get_scheduled_power_from_model(time_interval, outside_air_temperature.value)
+            else:
+                modeled_value = self.default_power
+                # TODO: Should this use a default temp instead? Should the temp model return a default instead?
+                _log.warning(f'No outside air temperature found for interval {time_interval.name}.'
+                             f' Using default: ({self.default_power}) for scheduled power.')
+            value = modeled_value if modeled_value else self.default_power  # Use default if modeled values is not available.
 
             # Check whether a scheduled power already exists for the indexed time interval:
             self.scheduled_powers.update(time_interval, value)
@@ -118,8 +122,16 @@ class ModelFrameAsset(LocalAsset, ModelFrame):
         temperature_forecast = [x for x in self.information_services if x.name == self.temperature_forecast_name][0]
 
         for time_interval in market.time_intervals:
-            outside_air_temperature = temperature_forecast.predicted_values.get_by_interval(time_interval).value
-            power_flexibility = self._get_power_flexibility_from_model(time_interval, outside_air_temperature)
+            outside_air_temperature = temperature_forecast.predicted_values.get_by_interval(time_interval)
+            if hasattr(outside_air_temperature, 'value'):
+                power_flexibility = self._get_power_flexibility_from_model(time_interval, outside_air_temperature)
+            else:
+                # TODO: making power inflexible is probably a bad idea. What to do by default instead?
+                power_flexibility = [self.default_power, self.default_power]
+                # TODO: Should this use a default temp instead? Should the temp model return a default instead?
+                _log.warning(f'No outside air temperature found for interval {time_interval.name}.'
+                             f' Using default ({[self.default_power, self.default_power]}) for power flexibility.')
+
             price_flexibility = self._get_price_flexibility(time_interval, market)
             self.active_vertices.update(time_interval, self._create_vertices(power_flexibility, price_flexibility))
 
