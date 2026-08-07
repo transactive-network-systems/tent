@@ -179,10 +179,8 @@ class SDCurve(Archivable):
         elif len(self.vertices) == 1:
             self.vertices[0].price = float('inf')
         else:
-            # TODO: Does this correctly identify the neighbor when called from prep_transactive_signal?
-            #  The SDCurve was created by a Market.sum_vertices()...
             owner_name = getattr(getattr(self.measurement, 'source', None), 'name', 'unknown')
-            _log.error(f'Unexpected flexibility logic while bounding SDCurve in {owner_name}. '
+            _log.warning(f'Unexpected flexibility logic while bounding SDCurve in {owner_name}. '
                        f'Maximum and minimum power are the same, but in separate vertices.')
 
         # Trim the list of vertices to remove any that are outside the soft flexibility range.
