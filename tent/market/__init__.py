@@ -887,6 +887,8 @@ class Market(Component):
             if not sd_curve.empty:
                 _log.info(f'@@@@ SDCURVE HAS {len(sd_curve.vertices)} vertices.')
                 marginal_price_list.update([float("inf")] if len(sd_curve) == 1 else sd_curve.prices)  # [$/kWh]
+            else:
+                _log.warning(f'No vertices found for {entity.name} in time interval {time_interval.name}.')
 
         # Keep only two (near) duplicates of any marginal price.
         #   Where there are two instances of a price, offset one by a small number so the SDCurve remains a function.
