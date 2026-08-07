@@ -174,7 +174,8 @@ class Measurement(Archivable):
         # TODO: Tests are needed to be sure that garbage collection works to remove these.
         self._data: WeakKeyDictionary[TimeInterval, Measurement.DATA_TYPE] = WeakKeyDictionary()
 
-        self.archive()
+        if archive_now:
+            self.archive()
 
     @property
     def all(self):
@@ -243,8 +244,8 @@ class Measurement(Archivable):
         record = super(Measurement, self).get_record()
         record.update({
             "source_id": self.source.id,
-            "measurement_type": self.type,
-            "measurement_unit": self.unit
+            "measurement_type": self.type.name,
+            "measurement_unit": self.unit.name
         })
         return record
 
