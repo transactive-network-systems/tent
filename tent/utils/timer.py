@@ -79,8 +79,8 @@ class Timer(object):
         # TODO: This could guard against stopped simulation after restart
         #  by tracking the current and simulation times while simulating and comparing on set.
         #  Is this worthwhile? too much overhead? May need the agent to provide an asynchronous event system.
-        cls.tz = tz if tz else cls.tz
-        cls.created_time = datetime.now(timezone.utc).astimezone(ZoneInfo(cls.tz))
+        cls.tz = tz if isinstance(tz, ZoneInfo) else ZoneInfo(tz) if isinstance(tz, str) else cls.tz
+        cls.created_time = datetime.now(timezone.utc).astimezone(cls.tz)
         cls.simulation = simulation
         if simulation and (not sim_one_hr_in_sec or not sim_start_time):
             raise ValueError("sim_one_hr_in_sec and sim_start_time must be provided when simulation is True")
