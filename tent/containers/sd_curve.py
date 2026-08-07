@@ -472,13 +472,14 @@ class SDMeasurement(Measurement):
     def __init__(self,
                  source: Component,
                  measurement_type: MeasurementType = MeasurementType.Vertex,
-                 measurement_unit: MeasurementUnit = MeasurementUnit.kW):
+                 measurement_unit: MeasurementUnit = MeasurementUnit.kW,
+                 archive_now: bool = True):
                 # TODO: Adding vertex_unit: MeasurementUnit would allow SDCurves for quantities other than power.
                 #  This would require also adding the unit to the TransactiveSignal and making sure it is passed
                 #  everywhere it needs to be.
         if not 'Vertex' in measurement_type.name:
             raise ValueError('SDMeasurement must contain vertex-type objects.')
-        super(SDMeasurement, self).__init__(source, MeasurementType.Vertex, measurement_unit)
+        super(SDMeasurement, self).__init__(source, measurement_type, measurement_unit, archive_now)
 
     @property
     def empty(self):
