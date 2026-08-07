@@ -97,7 +97,7 @@ class TransactiveSignal(SDMeasurement):
             self._add_balance_vertices(scheduled_powers)
         self.signal_time = Timer.now()
         self.direction = 'sent'
-        self.archive()
+        # self.archive()
         intervals = {}
         for ti, sd in self.all:
             flexibility = {
@@ -119,7 +119,7 @@ class TransactiveSignal(SDMeasurement):
             'neighbor': self.neighbor.tn.name,
             'protocol_version': self.PROTOCOL_VERSION,
             'signal_time': self.signal_time.isoformat(),
-            'unit': self.unit,
+            'unit': self.unit.name,
             'intervals': intervals
         }
 
@@ -172,7 +172,7 @@ class TransactiveSignal(SDMeasurement):
                     # If this is the balance point, we need to store the index for later retrieval.
                     signal.__balance_vertices[time_interval] = vertex
 
-            signal.update(time_interval, vertices, archive=True)
+            signal.update(time_interval, vertices, archive=False, replace=True) #archive=True)
         signal.archive()
         return signal
 
