@@ -1,12 +1,12 @@
 import json
 import logging
 
-from datetime import datetime
+from datetime import datetime, time
 from uuid import UUID
 
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
-from sqlalchemy.sql.sqltypes import DateTime, Uuid
+from sqlalchemy.sql.sqltypes import DateTime, Uuid,  Boolean, Time
 from typing import Mapping, Sequence
 
 from tent.data_manager import DataManager
@@ -119,11 +119,12 @@ class LocalDataManager(DataManager):
         return table_orm
 
     def _normalize_data(self, table_name: str, data: Mapping) -> dict:
-        table = self.tables.get(table_name)
-        if table is None:
+        orm = self._get_orm(table_name)
+
+        if orm is None:
             return dict(data)
         return {
-            key: self._normalize_value(table.c[key], value)
+            key: self._normalize_value(getattr(orm, key), value)
             for key, value in data.items()
         }
 
@@ -131,6 +132,13 @@ class LocalDataManager(DataManager):
     def _normalize_value(column, value):
         if value is None:
             return None
+        if isinstance(column.type, Boolean):
+            if value in ['T', 'True', 't', 'true', 'TRUE', '1', '1.0', 1, 1.0, 'y', 'Y', 'yes', 'Yes', 'YES']:
+                return True
+            elif value in ['F', 'False', 'FALSE', 'f', 'false', '0', '0.0', 0, 0.0, 'no', 'No', 'NO']:
+                return False
+        if isinstance(column.type, Time) and isinstance(value, str):
+            return time.fromisoformat(value.replace('Z', '+00:00'))
         if isinstance(column.type, DateTime) and isinstance(value, str):
             return datetime.fromisoformat(value.replace('Z', '+00:00'))
         if isinstance(column.type, Uuid) and isinstance(value, str):
