@@ -449,14 +449,18 @@ class Neighbor(Entity):
         active_threshold = -self.demand_threshold
 
         for time_interval in market.time_intervals:
+            if market not in self.prepared_signals:
+                self.prepared_signals[market] = TransactiveSignal(market=market, neighbor=self, archive_now=False)
 
             # Create the vertices of the net supply or demand curve, EXCLUDING this transactive neighbor.
             #     This SDCurve should already be a deep copy of any vertices from which it was originated.
             #  NOTE: It is important that the transactive neighbor is excluded.
             sd_curve: SDCurve = market.sum_vertices(time_interval, object_to_exclude=self)
 
+            sd_curve: SDCurve = market.sum_vertices(time_interval, object_to_exclude=self,
+                                                    enclosing_measurement=self.prepared_signals[market])
             # This should be rare, Warn if no vertices are found.
-            if sd_curve is None:
+            if sd_curve.empty:
                 _log.warning(f'No summed vertices were found in method prep_transactive_signal for neighbor '
                              f'{self.name} in time interval {time_interval.name}')
                 return
@@ -489,6 +493,7 @@ class Neighbor(Entity):
             if market not in self.prepared_signals:
                 self.prepared_signals[market] = TransactiveSignal(market=market, neighbor=self)
             self.prepared_signals[market].update(time_interval, sd_curve)
+            self.prepared_signals[market].update(time_interval, sd_curve, archive=False, replace=True)
 
     def send_transactive_signal(self, market, include_schedule=False):
         # Send transactive records to a transactive neighbor.
