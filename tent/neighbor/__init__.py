@@ -449,16 +449,17 @@ class Neighbor(Entity):
         active_threshold = -self.demand_threshold
 
         for time_interval in market.time_intervals:
+            _log.info(f'@@@@@@@@@ LOOKING AT TIME INTERVAL: {time_interval.name}')
             if market not in self.prepared_signals:
                 self.prepared_signals[market] = TransactiveSignal(market=market, neighbor=self, archive_now=False)
 
             # Create the vertices of the net supply or demand curve, EXCLUDING this transactive neighbor.
             #     This SDCurve should already be a deep copy of any vertices from which it was originated.
             #  NOTE: It is important that the transactive neighbor is excluded.
-            sd_curve: SDCurve = market.sum_vertices(time_interval, object_to_exclude=self)
-
+            _log.info('BEFORE SUM VERTICES IN NEIGHBOR')
             sd_curve: SDCurve = market.sum_vertices(time_interval, object_to_exclude=self,
                                                     enclosing_measurement=self.prepared_signals[market])
+            _log.info('AFTER SUM VERTICES IN NEIGHBOR')
             # This should be rare, Warn if no vertices are found.
             if sd_curve.empty:
                 _log.warning(f'No summed vertices were found in method prep_transactive_signal for neighbor '
@@ -490,10 +491,9 @@ class Neighbor(Entity):
 
             # The vertices are now suitable for creating transactive records representing the remote agent perspective.
             #  Store the corrected vertices in prepared_signals, where they are ready to send to the remote neighbor.
-            if market not in self.prepared_signals:
-                self.prepared_signals[market] = TransactiveSignal(market=market, neighbor=self)
-            self.prepared_signals[market].update(time_interval, sd_curve)
+            _log.info('BEFORE PREPARE SIGNAL UPDATE IN NEIGHBOR')
             self.prepared_signals[market].update(time_interval, sd_curve, archive=False, replace=True)
+            _log.info('AFTER PREPARE SIGNAL UPDATE IN NEIGHBOR')
 
     def send_transactive_signal(self, market, include_schedule=False):
         # Send transactive records to a transactive neighbor.
@@ -655,7 +655,11 @@ class Neighbor(Entity):
         # the transactive signal and its transactive records from the neighbor's active vertices. By practice,
         # transactive signals should always be sent and received using the remote neighbor's perspective. Impacts exist
         # only among vertices with demand (i.e., p < 0).
-
+        if self.maximum_power == 0:
+            return  # TODO: There is an issue if maximum power is 0.
+                    #  This needs to be fixed. Then this guard should be removed.
+                    #  Is this supposed to be minimum_power?
+                    #  Are max & min power supposed to always be positive?
         for vertex in sd_curve.vertices:
             if vertex.quantity < 0:
                 # ASSUMPTIONS:
