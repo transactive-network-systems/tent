@@ -22,7 +22,7 @@ class ActuationManager(metaclass=ABCMeta):
         self.active_onstart = active_onstart
         self.control_interval = control_interval
         # self.outputs = outputs if outputs else []
-        self.parent = parent if parent else LocalAsset()  # TODO: This needs a transactive node.
+        self.parent = parent if parent else LocalAsset(transactive_node)
         # TODO: Does this really need to be a weak reference? Should probably be a proxy if it does.
         self.occupancy_manager = None if occupancy_manager is None else weakref.ref(occupancy_manager)
         self.tn = None if transactive_node is None else weakref.ref(transactive_node)
