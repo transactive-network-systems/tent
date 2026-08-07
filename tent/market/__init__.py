@@ -915,8 +915,8 @@ class Market(Component):
                 vertex.quantity += entity_production  # [avg.kW]
 
             # Append Vertex iv to the list of vertices
-            summed_curve.update(vertex)
-
+            summed_curve.update(vertex, archive=False)  # TODO: Set archive false to prevent second write on prep_signal. Does this change usage elsewhere?
+            _log.info('@@@@@@@@ AFTER UPDATE SUMMED CURVE.')
         return summed_curve
 
     def update_costs(self):
