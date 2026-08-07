@@ -140,6 +140,6 @@ class BulkSupplierDC(Neighbor):
                 active_threshold = self._get_new_threshold(sd_curve, active_threshold, market, time_interval)
 
             # Update active vertices for the indexed time interval.
-            self.active_vertices.update(time_interval, sd_curve)
+            self.active_vertices.update(time_interval, sd_curve, archive=False, replace=True)
 
-        self.active_vertices.archive()
+        #self.active_vertices.archive()
