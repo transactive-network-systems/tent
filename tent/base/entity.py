@@ -205,11 +205,11 @@ class Entity(Component, abc.ABC):
     def archive(self, records: list[dict] = None):
         records = records if records else []
         records.extend([
-            {'table_name': 'entity_meter_point', 'data': {'component': self.id, 'meter_point_id': m.id}}
+            {'table_name': 'entity_meter_point', 'data': {'entity_id': self.id, 'meter_point_id': m.id}}
             for m in self.meter_points
         ])
         records.extend([
-            {'table_name': 'entity_information_service', 'data': {'component': self.id, 'information_service_id': i.id}}
+            {'table_name': 'entity_information_service', 'data': {'entity_id': self.id, 'information_service_id': i.id}}
             for i in self.information_services
         ])
         super(Entity, self).archive(records)
