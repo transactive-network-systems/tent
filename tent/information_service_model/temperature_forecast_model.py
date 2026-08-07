@@ -82,12 +82,12 @@ class TemperatureForecastModel(InformationServiceModel):
             # invalid or placeholder paths (e.g., the string 'None').
             if os.path.exists(self.weather_file_path):
                 self.init_weather_data()
-                self.location = None
-                self.max_gap_time = None
-                self.oat_point_name = None
             else:
                 # If the provided path doesn't exist, treat as if no weather file was provided.
                 self.weather_file_path = None
+            self.location = None
+            self.max_gap_time = None
+            self.oat_point_name = None
         else:
             self.location = [dict(location)] if location else []
             self.max_gap_time = max_gap_time if isinstance(max_gap_time, timedelta) else \
