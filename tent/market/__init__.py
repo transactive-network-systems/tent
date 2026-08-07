@@ -856,7 +856,7 @@ class Market(Component):
         for neighbor in self.tn.neighbors:
             neighbor.schedule(self)
 
-    def sum_vertices(self, time_interval, object_to_exclude=None):
+    def sum_vertices(self, time_interval, object_to_exclude=None, enclosing_measurement: Measurement | None = None):
         """
         Create system vertices with system information for a single time interval. An optional argument allows the
         exclusion of a transactive neighbor object, which is useful for transactive records and their corresponding
@@ -894,7 +894,10 @@ class Market(Component):
         # A clean set of marginal prices has been created. Create vertices at the marginal prices.
         # TODO: Reevaluate passing vertices=[] here. Without it, SDCurve defaults to a dummy (0,0) vertex.
         #  Is it worth creating an SDCurve with empty vertices, or should we handle the no-prices case earlier?
-        summed_curve = SDCurve(None, time_interval, vertices=[])
+
+        # TODO: Added archive=False here to avoid second write when sending transactive signals.
+        #  Do other areas of code need to handle archival now?
+        summed_curve = SDCurve(enclosing_measurement, time_interval, vertices=[], archive=False)
         # Index through the cleaned list of marginal prices
         for mp in marginal_price_set:
             # Create a vertex at the indexed marginal price value
