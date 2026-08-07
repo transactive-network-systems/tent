@@ -14,6 +14,7 @@ _log = logging.getLogger(__name__)
 
 class ModelFrameAsset(LocalAsset, ModelFrame):
     def __init__(self,
+                 transactive_node,
                  model_configs: dict = None,
                  temperature_forecast_name: str = '',
                  actuation_manager: dict = None,
@@ -21,7 +22,7 @@ class ModelFrameAsset(LocalAsset, ModelFrame):
                  *args, **kwargs):
         model_configs = model_configs if model_configs else {}
         ModelFrame.__init__(self, model_configs, **kwargs)
-        LocalAsset.__init__(self, *args, **kwargs)
+        LocalAsset.__init__(self, transactive_node, *args, **kwargs)
 
         self.temperature_forecast_name = temperature_forecast_name
         # self.actuation_method = actuation_method
