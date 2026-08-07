@@ -173,9 +173,11 @@ class SDCurve(Archivable):
         #  ensure vertices exist at the extrema of the flexibility range.
         if min_power != max_power:
             if not self.has_vertex_at_quantity(min_power):
-                self.update(Vertex(price=(self.price_from_vertices(min_power)), cost=0, quantity=min_power))
+                self.update(Vertex(price=(self.price_from_vertices(min_power)), cost=0, quantity=min_power),
+                            archive=False)
             if not self.has_vertex_at_quantity(max_power):
-                self.update(Vertex(price=(self.price_from_vertices(max_power)), cost=0, quantity=max_power))
+                self.update(Vertex(price=(self.price_from_vertices(max_power)), cost=0, quantity=max_power),
+                            archive=False)
         elif len(self.vertices) == 1:
             self.vertices[0].price = float('inf')
         else:
