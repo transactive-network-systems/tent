@@ -82,4 +82,5 @@ class MeasurementType(Enum):
     EngagementSchedule = 32
     ConvergenceFlag = 33
     PredictedValue = 34
+    SignalVertex = 35
     Unknown = 40
