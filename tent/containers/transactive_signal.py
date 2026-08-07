@@ -53,6 +53,7 @@ except ImportError:
     from typing_extensions import Self
 
 from tent.containers import SDCurve, SDMeasurement, TimeInterval, Vertex
+from tent.enumerations import MeasurementType, MeasurementUnit
 from tent.utils.timer import Timer
 
 if TYPE_CHECKING:
@@ -71,7 +72,9 @@ class TransactiveSignal(SDMeasurement):
         self.direction = direction
         self.signal_time: datetime | None = signal_time
         self.__balance_vertices: WeakKeyDictionary[TimeInterval, Vertex] = WeakKeyDictionary()
-        super(TransactiveSignal, self).__init__(source=neighbor, **kwargs)
+        super(TransactiveSignal, self).__init__(source=neighbor, measurement_type=MeasurementType.SignalVertex,
+                                                measurement_unit=MeasurementUnit.kW, archive_now=False)
+        # TODO: kW is a poor unit description of an SDCurve. What should we use?
 
     def balance_point(self, time_interval: TimeInterval) -> Vertex | None:
         """Get the balance point vertex for the specified time interval."""
