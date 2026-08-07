@@ -28,9 +28,10 @@ class ModelFrameAsset(LocalAsset, ModelFrame):
         # self.actuator_identity = actuator_identity
         # self.ilc_target_topic = ilc_target_topic
 
+        # TODO: Occupation and ActuationManagers should probably be loaded from class methods on the base classes.
         # Initialize Scheduler
         if occupancy_manager:  # TODO: Implement default behavior if occupancy_manager is not specified (make an always occupied base class).
-            om_class = get_class_from_spec(occupancy_manager, 'OccupancyManager', 'transactive_node.local_asset')
+            om_class = get_class_from_spec(occupancy_manager, 'SimpleOccupancyManager', 'tent.local_asset.occupancy_manager')
             self.occupancy_manager: OccupancyManager = om_class(**occupancy_manager)
 
         for device_topic in self.models:

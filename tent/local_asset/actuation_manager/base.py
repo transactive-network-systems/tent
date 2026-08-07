@@ -6,7 +6,7 @@ from abc import ABCMeta, abstractmethod
 from tent.local_asset import LocalAsset
 from tent.transactive_node import TransactiveNode
 
-from ..occupancy_manager.simple import OccupancyManager
+from ..occupancy_manager import OccupancyManager
 
 _log = logging.getLogger(__name__)
 

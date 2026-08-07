@@ -4,7 +4,7 @@ from dateutil import parser
 from tent.utils.timer import Timer
 
 
-class OccupancyManager:
+class SimpleOccupancyManager:
     def __init__(self, schedule: dict):
         self.occupied = property(self.check_schedule)
         self.schedule = {}
@@ -21,7 +21,7 @@ class OccupancyManager:
         else:
             self.always_occupied = True
 
-    def check_schedule(self, dt: datetime = None):
+    def check_schedule(self, dt: datetime | None = None):
         if self.always_occupied:
             return True
         dt = dt if dt else Timer.now()
