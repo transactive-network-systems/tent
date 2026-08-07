@@ -161,15 +161,19 @@ class Measurement(Archivable):
     DATA_TYPE: type = MeasurementValue
     def __init__(self,
                  source: Component,
-                 measurement_type: MeasurementType = MeasurementType.Unknown,
-                 measurement_unit: MeasurementUnit = MeasurementUnit.Unknown,
+                 measurement_type: MeasurementType | str = MeasurementType.Unknown,
+                 measurement_unit: MeasurementUnit | str = MeasurementUnit.Unknown,
+                 archive_now: bool = True
                  ):
         super(Measurement, self).__init__()
         # TODO: There should probably be something (a name?) to distinguish between multiple measurements with same
         #  units and type from same source. How often is this an issue?
         self.source: Component = proxy(source, safe_weak_proxy_callback(self, 'source'))
-        self.type: MeasurementType = measurement_type
-        self.unit: MeasurementUnit = measurement_unit
+        self.type: MeasurementType = measurement_type if isinstance(measurement_type, MeasurementType) \
+            else MeasurementType[measurement_type]
+        self.unit: MeasurementUnit = measurement_unit if isinstance(measurement_unit, MeasurementUnit) \
+            else MeasurementUnit[measurement_unit]
+
 
         # TODO: Tests are needed to be sure that garbage collection works to remove these.
         self._data: WeakKeyDictionary[TimeInterval, Measurement.DATA_TYPE] = WeakKeyDictionary()
