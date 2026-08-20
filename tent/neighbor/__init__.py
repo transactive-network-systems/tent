@@ -42,7 +42,7 @@ under Contract DE-AC05-76RL01830
 """
 import json
 import logging
-from copy import deepcopy
+from copy import copy
 from datetime import datetime
 from typing import Union
 from weakref import WeakKeyDictionary
@@ -322,8 +322,8 @@ class Neighbor(Entity):
 
         for time_interval in market.time_intervals:
             # Check for transactive records in the indexed time interval and market.
-            received_signal: TransactiveSignal = self.last_received_signals.get(market)
-            received_sd_curve: SDCurve = (deepcopy(received_signal.get_by_interval(time_interval))
+            received_signal: TransactiveSignal | None = self.last_received_signals.get(market)
+            received_sd_curve: SDCurve | None = (copy(received_signal.get_by_interval(time_interval))
                                           if received_signal else None)
 
             if not self.transactive or not received_sd_curve:
@@ -336,8 +336,9 @@ class Neighbor(Entity):
                     #  the signal having arrived. That condition is unknown here, so it would need to happen in the
                     #  market. Do we need have that information there, or do we need a flag to be set?
                     # No records for an interval should be an abnormal condition except on startup of iterative markets.
-                    _log.warning(f'No received transactive signal was found for transactive neighbor {self.name}'
-                                 f' in time interval {time_interval.name}')
+                    # _log.warning(f'No received transactive signal was found for transactive neighbor {self.name}'
+                    #              f' in time interval {time_interval.name}')
+                    pass
 
             else:  # The neighbor is transactive and at least one vertex has been received for this time interval.
                 # Re-create active vertices from the received transactive records.
@@ -345,7 +346,7 @@ class Neighbor(Entity):
 
                 # TODO: Should this block be added to check_rationality?
                 # Check for and correct treatment of a lone default vertex marginal price.
-                if len(received_sd_curve) == 1:
+                if received_sd_curve and len(received_sd_curve) == 1:
                     received_sd_curve.vertices[0].price = float('inf')
                 self.active_vertices.update(time_interval, received_sd_curve, archive=False, replace=True)
 
@@ -457,10 +458,9 @@ class Neighbor(Entity):
                 return
 
             # Apply the minimum and maximum power constraints to the vertices.
+            # Signs are opposite those of the neighbor, as this node is its counter-party.
             # At this point, the vertices will include any flexibility, stated from the perspective of the local agent.
-            _log.info('BEFORE APPLY CONSTRAINTS AND BOUNDS IN NEIGHBOR')
-            sd_curve.apply_constraints_and_bounds(self.minimum_power, self.maximum_power)
-            _log.info('AFTER APPLY CONSTRAINTS AND BOUNDS IN NEIGHBOR')
+            sd_curve.apply_constraints_and_bounds(minimum_power=-self.maximum_power, maximum_power=-self.minimum_power)
 
             # Remove the impacts of any demand charges that were included at the local node but are not relevant at the
             # remote agent location.
