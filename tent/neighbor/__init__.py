@@ -88,9 +88,6 @@ class Neighbor(Entity):
                                        maximum_power, meter_points, minimum_power, name, transactive_node)
 
         self.convergence_threshold = float(convergence_threshold)      # [Small positive fraction]: May affect negotiations
-        if cost_parameters is None:
-            cost_parameters = [0.0, 0.0, 0.0]
-        self.cost_parameters = [float(cp) for cp in cost_parameters]   # 3x[float]: Parameters of quadratic production cost
         self.demand_month = int(demand_month)                          # [month number]: Used to reset demand charges
         self.demand_rate = float(demand_rate)                          # [$ / kW (/h)]: rate determinant
         self.demand_threshold = float(demand_threshold)                # [kW]; current power above which demand charges accrue
@@ -98,11 +95,8 @@ class Neighbor(Entity):
         self.description = str(description)                            # [text]
         self.effective_impedance = float(effective_impedance)          # [Ohms]: (future) may be used for loss effects
         self.friend = validate_bool(friend, 'friend')                  # [boolean]: True for collaborative, friendly Neighbor
-        self.location = str(location)                                  # [text]
         self.loss_factor = float(loss_factor)                          # [dimensionless] 0.01 = 1% full-load loss
-        self.maximum_power = float(maximum_power)                      # [avg.kW, signed] Object's physical "hard" constraint
         self.mechanism = mechanism                                     # future, unused
-        self.minimum_power = float(minimum_power)                      # [avg.kW, signed] Object's physical "hard" constraint
         self.name = str(name)                                          # [text]
         self.transactive = validate_bool(transactive, 'transactive')   # [boolean]: True for transactive neighbor
         if isinstance(up_or_down, Direction):                          # 'upstream' or 'downstream' direction of this neighbor
