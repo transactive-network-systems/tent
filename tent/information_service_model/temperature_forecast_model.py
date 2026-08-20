@@ -49,6 +49,7 @@ import logging
 from datetime import timedelta
 from dateutil import parser
 from typing import Union
+from zoneinfo import ZoneInfo
 
 from tent.information_service_model import InformationServiceModel
 from tent.enumerations import MeasurementType
@@ -127,6 +128,8 @@ class TemperatureForecastModel(InformationServiceModel):
                     self.weather_data = [r for r in reader]
                     for rec in self.weather_data:
                         rec['Timestamp'] = parser.parse(rec['Timestamp']).replace(minute=0, second=0, microsecond=0)
+                        if rec['Timestamp'].tzinfo is None:
+                            rec['Timestamp'] = rec['Timestamp'].replace(tzinfo=ZoneInfo(self.tn.tz))
                         rec['Value'] = float(rec['Value'])
             except Exception:
                 self.weather_data = []
