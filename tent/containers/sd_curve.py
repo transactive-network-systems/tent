@@ -353,32 +353,34 @@ class SDCurve(Archivable):
                         # The marginal price is the same as the indexed active vertex. Use its power value.
                         return lower.quantity  # [kW]
 
-    def price_from_vertices(self, power: float) -> float:
+    def price_from_vertices(self, quantity: float) -> float:
         """ Given a power [avg.kW], determine the corresponding marginal price [$/kWh] from the SDCurve.
         """
         # TODO: This and power_from_vertices assume a rational curve (power monotonic with price). Is this actually guaranteed?
-        if power < self.vertices[0].quantity:
+        if quantity < self.vertices[0].quantity:
             # The power is below the first vertex. Marginal price is indeterminate.
             #  Return price of the first vertex and warn. (This should be an unlikely condition.)
-            _log.warning('Indeterminate price: Power was lower than first vertex.')
+            _log.warning(f'Indeterminate price: Quantity provided ({quantity})'
+                         f' is lower than that of first vertex ({self.vertices[0].quantity}).')
             return self.vertices[0].price
 
-        elif power >= self.vertices[-1].quantity:
+        elif quantity >= self.vertices[-1].quantity:
             # The power is above the last vertex. Marginal price is indeterminate.
             # Return price of the last vertex and warn. (This should be an unlikely condition.)
-            _log.warning('Indeterminate price: Power was greater than last vertex.')
+            _log.warning(f'Indeterminate price: Quantity provided ({quantity})'
+                         f' is greater than that of last vertex ({self.vertices[-1].quantity}).')
             return self.vertices[-1].price
 
         # # The marginal power lies among the active vertices.
         for lower, upper in zip(self.vertices, self.vertices[1:]):
-            if lower.quantity == power == upper.quantity:
+            if lower.quantity == quantity == upper.quantity:
                 # The segment is horizontal. Marginal price is indefinite. Return the second vertex price and warn.
                 _log.warning('Indeterminate price due to horizontal segment of SDCurve. Returning second price.')
                 return upper.price
-            elif lower.quantity <= power < upper.quantity:
+            elif lower.quantity <= quantity < upper.quantity:
                 # The segment is not horizontal. Interpolate on the segment.
                 slope = (upper.price - lower.price) / (upper.quantity - lower.quantity)  # [$/kWh/kW]
-                return lower.price + (power - lower.quantity) * slope  # [$/kWh]
+                return lower.price + (quantity - lower.quantity) * slope  # [$/kWh]
 
     @staticmethod
     def get_prices_from_curves(curves: list) -> list[float]:
