@@ -142,7 +142,7 @@ class TransactiveSignal(SDMeasurement):
             if not (market := tn.get_market_by_name(message['market'])):
                 _log.warning(f'Unable to find valid market "{market}" from received transactive signal.')
                 return  # TODO: Should we raise on bad market or neighbor and let the caller handle it?
-            if not (neighbor := tn.get_neighbor_by_name(message['neighbor'])):
+            if not (neighbor := tn.get_neighbors_by_attribute('name', message['neighbor'], first_only=True)):
                 _log.warning(f'Unable to find valid neighbor "{neighbor}" from received transactive signal.')
             signal_time = datetime.fromisoformat(message['signal_time']) if message.get('signal_time') else None
             signal = cls(market=market, neighbor=neighbor, direction='received',
