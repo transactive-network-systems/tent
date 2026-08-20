@@ -82,6 +82,7 @@ class TransactiveSignal(SDMeasurement):
 
     def flexibility_vertices(self, time_interval: TimeInterval) -> list[Vertex]:
         """Get the non-balance-point vertices for the specified time interval."""
+        # TODO: Double check that is works as a comparison here. If there is a weak reference, we need to use ==.
         return [v for v in self.get_by_interval(time_interval).vertices if v is not self.balance_point(time_interval)]
 
     def _add_balance_vertices(self, scheduled_powers):
@@ -93,7 +94,6 @@ class TransactiveSignal(SDMeasurement):
                 vertex = Vertex(balance_price, balance_cost, sp)
                 sd_curve.update(vertex)
                 self.__balance_vertices[ti] = vertex
-
 
     def generate_signal(self, scheduled_powers=None):
         if scheduled_powers is not None:
@@ -129,7 +129,6 @@ class TransactiveSignal(SDMeasurement):
     @classmethod
     def parse_signal(cls, tn, message: dict) -> Self | None:
         """Parse a transactive signal dictionary and update the SDMeasurement."""
-        _log.info('@@@@@@@@@ PARSING TRANSACTIVE SIGNAL')
         # TODO: Currently assumes signal is being received from a remote.
         #  If there is another reason to parse a signal, an "on_receipt" flag should be added to signature.
         try:

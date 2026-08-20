@@ -156,15 +156,6 @@ class SDCurve(Archivable):
                 * The passed arguments are hard minimum and maximum power limits.
                 * The maximum and minimum vertices in the SDCurve are soft constraints.
         """
-        # # TODO: This seemed wrong. Shouldn't min_power, for instance, be max(self.min_power, min(vertex_powers))?
-        #    I think this may have been the result of assuming demand was negative and that the limits provided for
-        #    demand entities would be positive, but that is not going to always be the case.
-        #    This line of thinking informs how the replacement lines below are done.
-        #    If this was correct before, change it back, otherwise, delete this commented block.
-        # vertex_powers = [x.quantity for x in self.vertices]  # [avg.kW]
-        # min_power = max(-self.max_power, min(vertex_powers))  # [avg.kW]
-        # max_power = min(-self.min_power, max(vertex_powers))  # [avg.kW]
-
         # Find the minimum and maximum powers from the SDCurve.
         #  These are soft constraints that represent a range of flexibility.
         min_power = self.min_quantity(limit=minimum_power)
@@ -465,7 +456,6 @@ class SDCurve(Archivable):
             "time_interval_id": self.interval.id if self.interval else None,
             "timestamp": self.interval.start_time if self.interval else None
         })
-        _log.info(f'@@@@@@ GETTING RECORD FOR {self.measurement.source.name}, {self.measurement.type.name}, {self.interval.start_time}')
         return record
 
     @classmethod
@@ -519,7 +509,6 @@ class SDMeasurement(Measurement):
     def update(self, time_interval: TimeInterval,
                value: SDCurve | list[Vertex] | Vertex | list[list[float]] | list[dict],
                archive: bool = True, replace: bool = False):
-        _log.info(f'@@@@@@@@@ UPDATING SD CURVE FROM {self.source.name}, with archive: {archive} and replace: {replace}')
         if isinstance(value, SDCurve):
             processed_value = list(value.vertices)  # Convert SortedSet to list
         elif isinstance(value, Vertex):
