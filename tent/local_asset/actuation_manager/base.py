@@ -45,13 +45,16 @@ class ActuationManager(metaclass=ABCMeta):
 
     @abstractmethod
     def actuate(self, mkt):
-        ocm = self.occupancy_manager() if self.occupancy_manager else self.occupancy_manager
-        if ocm and ocm.check_schedule(start_time) and ocm.check_schedule(end_time) and self.actuation_allowed:
         start_time = mkt.transition_times.delivery
         end_time = start_time + mkt.series.duration.market_interval
         _log.info(f'Actuating {self.parent.name} for market: {mkt.name} with actuator {self.__class__.__name__}'
                   f' from {start_time.strftime("%A, %B %d -- %H:%M:%S")}'
                   f' to {end_time.strftime("%A, %B %d -- %H:%M:%S")}')
+        if (self.occupancy_manager
+            and self.occupancy_manager.check_schedule(start_time)
+            and self.occupancy_manager.check_schedule(end_time)
+            and self.actuation_allowed
+        ):
             self.actuation_active = True
         else:
             if self.actuation_active:
