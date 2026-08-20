@@ -70,6 +70,7 @@ class Market(Component):
     def __init__(self,
                  transactive_node,
                  market_series,
+                 initial_market_state: MarketState,
                  transition_times: MarketTimings,
                  market_to_be_refined=None,
                  prior_market_in_series=None,
@@ -102,7 +103,7 @@ class Market(Component):
         self.blended_prices2: Measurement = Measurement(self, MeasurementType.BlendedPrice, MeasurementUnit.Monetary)  # (future functionality)
         self.converged: bool = False
         self.dual_costs: Measurement = Measurement(self, MeasurementType.DualCost, MeasurementUnit.Monetary)  # Values are [$]
-        self.market_state: MarketState = self.series.initial_market_state  # TODO: Is this still even needed?
+        self.market_state: MarketState = initial_market_state
         self.marginal_prices: Measurement = Measurement(self, MeasurementType.MarginalPrice, MeasurementUnit.Monetary) # [$/kWh]
         self.net_powers: Measurement = Measurement(self, MeasurementType.NetPower, MeasurementUnit.kW)  # [avg.kW]
         self.price_model = price_model
