@@ -95,6 +95,7 @@ class ModelFrameAsset(LocalAsset, ModelFrame):
         # - Updates self.scheduledPowers - the schedule of power consumed
 
         temperature_forecast = [x for x in self.information_services if x.name == self.temperature_forecast_name][0]
+        temperature_forecast.update_information(market)
         for time_interval in market.time_intervals:
             outside_air_temperature = temperature_forecast.predicted_values.get_by_interval(time_interval)
             # Get new scheduled power value for this time interval:
