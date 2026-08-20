@@ -24,6 +24,7 @@ class MarketSeries(Component):
     """
     def __init__(self,
                  transactive_node,
+                 name: str,
                  commitment: bool = False,                  # [Boolean] Are scheduled power & price commitments?
                  default_price: float = 0.05,               # [$/kWh] Static default price assignment
                  delivery_anchor_time: str | None = None,   # A time of day a market will always start (immediate if None)
@@ -43,7 +44,6 @@ class MarketSeries(Component):
                  market_order=1,                            # [pos. integer] Ordering of sequential markets  (Unused)
                  method: Union[Method, str, int] = Method.Interpolation,#Solution method {1:subgradient,2:interpolation}
                  price_model: dict = None,                  # Configuration spec for a PriceModel class.
-                 name='Market Series',
                  refined_series=None,
                  ):
         super(MarketSeries, self).__init__(description, name, transactive_node)
@@ -91,7 +91,7 @@ class MarketSeries(Component):
 
         # Instantiate the first market in the series.
         self.next_clearing_time: datetime = self.duration.get_first_clearing_time()
-        self.spawn()
+        self.spawn(MarketState.Initial)
 
     def __iter__(self):
         """Allow iteration over the series' markets."""
@@ -119,7 +119,7 @@ class MarketSeries(Component):
         return (self.refined_series.markets[self.refined_series.markets.bisect(clearing_time) - 1]
                 if self.refined_series else None)
 
-    def spawn(self):
+    def spawn(self, initial_market_state: MarketState | None = None):
         """
         This method is called when a test determines that a new market object may be needed. The base method creates the
         new market object, as will be normal for systems having only one market. This method must be replaced or
@@ -141,6 +141,7 @@ class MarketSeries(Component):
         new_market = self.market_class(
             transactive_node=self.tn,
             market_series=self,
+            initial_market_state=initial_market_state if initial_market_state is not None else self.initial_market_state,
             transition_times=self.duration.get_timings(self.next_clearing_time),
             market_to_be_refined=self.get_refined_market(self.next_clearing_time),
             prior_market_in_series=self.newest_market if self.newest_market else None,

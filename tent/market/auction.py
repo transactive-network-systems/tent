@@ -158,8 +158,8 @@ class Auction(Market):
             if len(missing_interval_names):
                 all_received = False
                 missing_report.append((downstream_agent.name, missing_interval_names))
-        _log.debug(f'WHILE IN MARKET LEAD, {self.name} HAS RECEIVED ALL RECORDS: {all_received}')
-        _log.debug(f'MISSING: {missing_report}')
+        if all_received:
+            _log.debug(f'{self.name} has received all records.')
         # If all expected bids have been received from downstream agents, have the downstream neighbor models update
         # their vertices and schedule themselves. The result of this will be an updated set of active vertices for each
         # downstream agent.
@@ -267,7 +267,7 @@ class Auction(Market):
 
                 # Prepare aggregated offer for the downstream agent, and send it a transactive signal (i.e., an offer).
                 downstream_agent.prep_transactive_signal(self)
-                _log.info(f'@@@@@@@@@ SENDING TO DOWNSTREAM NEIGHBOR FROM {self.name}.')
+                _log.info(f'Signaling downstream neighbor: {downstream_agent.name} from {self.name}.')
                 downstream_agent.send_transactive_signal(self)
 
             self._stateIsCompleted = True

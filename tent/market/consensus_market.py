@@ -48,7 +48,7 @@ from tent.market import Market
 class ConsensusMarket(Market):
     MARKET_TYPE = MarketTypes.consensus
 
-    def __init__(self, market_series_name='Consensus_Market_Series', *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         super(ConsensusMarket, self).__init__(
             method='Interpolation',
             *args, **kwargs
