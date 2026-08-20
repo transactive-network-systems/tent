@@ -59,7 +59,7 @@ class MarketSeries(Component):
         self.duality_gap_threshold: float = float(duality_gap_threshold)
         self.future_horizon: timedelta = (future_horizon if isinstance(future_horizon, timedelta)
                                           else timedelta(seconds=future_horizon))
-        # TODO: Is initial_market_state still used? Will it always be the same for one series?
+        # TODO: Should initial_market_state just always be INITIAL for first object and INACTIVE afterwards?
         self.initial_market_state: MarketState = (
             initial_market_state if isinstance(initial_market_state, MarketState)
             else MarketState(initial_market_state) if isinstance(initial_market_state, int)
@@ -132,6 +132,7 @@ class MarketSeries(Component):
         # TODO: Revise this docstring once the new architecture is finalized.
         :return: None
         """
+
         if self.newest_market:
             price_model_obj = deepcopy(self.newest_market.price_model)
         else:

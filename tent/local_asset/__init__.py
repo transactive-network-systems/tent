@@ -292,7 +292,6 @@ class LocalAsset(Entity):
         #
         # For the base local asset model, a single, inelastic power is needed. There is no flexibility. The constant
         # power may be represented by a single (price, power) point (See Vertex container).
-        _log.info('@@@@@@@@@@ IN UPDATE VERTICES OF LOCAL ASSET')
         for time_interval in market.time_intervals:
             # Find the scheduled power for the indexed time interval.
             scheduled_power = self.scheduled_powers.get_by_interval(time_interval)  # avg. kW

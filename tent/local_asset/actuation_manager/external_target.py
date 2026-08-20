@@ -1,4 +1,8 @@
+import logging
+
 from tent.local_asset.actuation_manager import ActuationManager
+
+_log = logging.getLogger(__name__)
 
 
 class ExternalTargetActuationManager(ActuationManager):
@@ -12,6 +16,7 @@ class ExternalTargetActuationManager(ActuationManager):
             for sp in scheduled_powers_for_mkt:
                 start_time = sp.interval.start_time
                 end_time = start_time + sp.interval.duration
+                _log.info(f'Setting target for{self.parent.name} from {start_time} to {end_time} with value: {sp.value}')
                 self.set_target(target=sp.value, start=start_time, end=end_time)
 
     def set_target(self, target, start, end):

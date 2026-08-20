@@ -1,7 +1,11 @@
+import logging
+
 from datetime import datetime
 from dateutil import parser
 
 from tent.utils.timer import Timer
+
+_log = logging.getLogger(__name__)
 
 
 class SimpleOccupancyManager:

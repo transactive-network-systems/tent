@@ -187,13 +187,17 @@ class Market(Component):
             self._stateIsCompleted = False
             # Fall through to the Expired handler at the bottom of this method.
 
+        # TODO: Is the INITIAL state is used to set up the first market in a series.
+        #  This should probably be used to create priors which this market will use so that it is not warning
+        #  about steps yet to be completed. Even with the market series, it may still be useful because
+        #  different market types may have different setup requirements.
         # EVENT 0: % FIRST INSTANTIATION OF A MARKET SERIES ************************************************************
         # First time setup of a new market series.
         if self.market_state == MarketState.Initial:
             self.transition_from_initial_to_inactive()
             self.market_state = MarketState.Inactive
 
-            # 210118DJH: New flag. Set false upon transition to new market state.
+            # Set false upon transition to new market state.
             self._stateIsCompleted = False
 
         # EVENT 1A: % A NEW MARKET OBJECT BECOMES ACTIVE ***************************************************************
@@ -203,8 +207,7 @@ class Market(Component):
         # the market's clearing time. Note that this logic seems a little backward because the state's start must be
         # determined *before* the needed market object exists.
 
-        # TODO: Moved spawn() call to next block, since it has same time trigger.
-        #  Rework comments to reflect use of self.transition_times.
+        # TODO: Rework comments to reflect use of self.transition_times.
 
         # EVENT 1B: TRANSITION FROM INACTIVE TO ACTIVE STATE ***********************************************************.
         if self.market_state == MarketState.Inactive:  # and self._stateIsCompleted is True:
@@ -665,11 +668,9 @@ class Market(Component):
           production cost / total production)).
         - power: system net power at the vertex (The system "clears" where system net power is zero.)
         """
-        _log.info("@@@@@@@@@@@ IN ASSIGN SYSTEM VERTICES.")
         for time_interval in self.time_intervals:
             # Call the utility sum_vertices to recreate the aggregate vertices in the indexed time interval.
             self.active_vertices.update(time_interval, self.sum_vertices(time_interval), replace=True)
-        _log.info("@@@@@@@@@@@ AFTER ASSIGN SYSTEM VERTICES.")
 
     def balance(self, k=1):
         """
@@ -873,11 +874,7 @@ class Market(Component):
         #    - Where there is one vertex, assign infinite marginal price because quantity is constant.
         #    - Where there are multiple vertices. Use the marginal price values from the vertices themselves.
         marginal_price_list = SortedList()
-        _log.info('@@@@ IN SUM_VERTICES.')
-        _log.info(f'@@@@ neighbors: {[n.name for n in self.tn.neighbors]}')
-        _log.info(f'@@@@ local_assets: {[a.name for a in self.tn.local_assets]}')
         for entity in self.tn.neighbors + self.tn.local_assets:
-            _log.info(f'@@@@@ FOR ENTITY: {entity.name}')
             # Jump out of this iteration if neighbor model happens to be the "object to exclude"
             if object_to_exclude is not None and entity == object_to_exclude:
                 continue
@@ -885,7 +882,6 @@ class Market(Component):
             sd_curve = entity.active_vertices.get_by_interval(time_interval)
 
             if not sd_curve.empty:
-                _log.info(f'@@@@ SDCURVE HAS {len(sd_curve.vertices)} vertices.')
                 marginal_price_list.update([float("inf")] if len(sd_curve) == 1 else sd_curve.prices)  # [$/kWh]
             else:
                 _log.warning(f'No vertices found for {entity.name} in time interval {time_interval.name}.')
@@ -923,10 +919,8 @@ class Market(Component):
                 vertex.cost += entity_sd_curve.prod_cost_from_vertices(entity_production)
                 vertex.quantity += entity_production  # [avg.kW]
 
-            _log.info('@@@@@@@@ ABOUT TO UPDATE SUMMED CURVE.')
             # Append Vertex iv to the list of vertices
             summed_curve.update(vertex, archive=False)  # TODO: Set archive false to prevent second write on prep_signal. Does this change usage elsewhere?
-            _log.info('@@@@@@@@ AFTER UPDATE SUMMED CURVE.')
         return summed_curve
 
     def update_costs(self):

@@ -81,9 +81,12 @@ class TemperatureForecastModel(InformationServiceModel):
         if self.weather_file_path is not None:
             # Only initialize weather data if the file actually exists. Protect against
             # invalid or placeholder paths (e.g., the string 'None').
+            #_log.debug(f'@@@@@@@@@ TEMPERATURE_FORECAST_MODEL --- USING PATH: {self.weather_file_path}')
             if os.path.exists(self.weather_file_path):
+                #_log.debug('@@@@@@@@ TEMPERATURE_FORECAST_MODEL --- THE PATH EXISTS, TOO!')
                 self.init_weather_data()
             else:
+                #_log.debug('@@@@@@@@@@ TEMPERATURE_FORECAST_MODEL --- THE PATH DOES NOT EXIST.')
                 # If the provided path doesn't exist, treat as if no weather file was provided.
                 self.weather_file_path = None
             self.location = None
@@ -104,6 +107,7 @@ class TemperatureForecastModel(InformationServiceModel):
                 self.weather_file_path = None
 
     def update_information(self, market):
+        #_log.debug(f'@@@@@@@@@@@ IN UPDATE INFORMATION FOR MARKET: {market.name}.')
         if self.weather_file_path is not None:
             self.get_forecast_file(market)
         else:
@@ -133,7 +137,7 @@ class TemperatureForecastModel(InformationServiceModel):
                         rec['Value'] = float(rec['Value'])
             except Exception:
                 self.weather_data = []
-                _log.debug("WEATHER - problem parsing weather file!")
+                _log.warning("WEATHER - problem parsing weather file!")
 
     def map_forecast_to_interval(self, mkt, weather_data):
         items = []
@@ -149,13 +153,13 @@ class TemperatureForecastModel(InformationServiceModel):
                 predicted_values.append((ti, previous_measurement[0]))
                 items = previous_measurement
             else:
-                _log.debug("Cannot assign WEATHER information for interval: {}".format(ti))
+                _log.warning("Cannot assign WEATHER information for interval: {}".format(ti))
         if len(mkt.time_intervals) == len(predicted_values):
             for val in predicted_values:
                 self.predicted_values.update(*val)
             return True
         else:
-            _log.debug("WEATHER data problem when assigning forecast {}".format(len(predicted_values)))
+            _log.warning("WEATHER data problem when assigning forecast {}".format(len(predicted_values)))
             return False
 
     def query_weather_data(self):
@@ -190,11 +194,14 @@ class TemperatureForecastModel(InformationServiceModel):
                     self.get_forecast_file(mkt)
 
     def get_forecast_file(self, mkt):
+        #_log.debug(f'IN GET_FORCAST_FILE FOR MARKET: {mkt.name}.')
         self.init_weather_data()
         # Copy weather data to predictedValues
         for ti in mkt.time_intervals:
             # Find item which has the same timestamp as ti.timeStamp
             start_time = ti.start_time.replace(minute=0)
+            #_log.debug(f'LOOKING FOR TIMESTAMP ({type(start_time)}): {start_time}')
+            #_log.debug(f'THE FIRST POSSIBILITY ({type(self.weather_data[0]["Timestamp"])}) IS: {self.weather_data[0]["Timestamp"]}')
             items = [x for x in self.weather_data if x['Timestamp'] == start_time]
             if len(items) == 0:
                 trial_deltas = [-1, 1, -2, 2, -24, 24]

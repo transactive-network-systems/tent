@@ -49,7 +49,7 @@ class LocalDataManager(DataManager):
                 _log.warning(f'Attempted to archive data to non-existent table: {table_name}')
                 # Early return so we don't attempt to call a NoneType (regression fix for unit test failure)
                 return
-            _log.debug(rec['data'])
+            #_log.debug(rec['data'])
             record_object = table_orm(**self._normalize_data(table_name, rec['data']))
             sess.add(record_object)
 

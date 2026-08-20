@@ -54,6 +54,7 @@ class ActuationManager(metaclass=ABCMeta):
 
     @abstractmethod
     def release(self, mkt):
+        _log.info(f'Releasing actuation for {self.parent.name} with actuator {self.__class__.__name__}')
         # Override to implement release behavior
         pass
 

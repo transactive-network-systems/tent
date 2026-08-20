@@ -447,19 +447,15 @@ class Neighbor(Entity):
 
         # An active threshold is initialized here and used during the assessment of demand charges.
         active_threshold = -self.demand_threshold
-        _log.info(f'@@@@@@@ IN PREP_TRANSACTIVE_SIGNAL @@@@@@@')
         for time_interval in market.time_intervals:
-            _log.info(f'@@@@@@@@@ LOOKING AT TIME INTERVAL: {time_interval.name}')
             if market not in self.prepared_signals:
                 self.prepared_signals[market] = TransactiveSignal(market=market, neighbor=self, archive_now=False)
 
             # Create the vertices of the net supply or demand curve, EXCLUDING this transactive neighbor.
             #     This SDCurve should already be a deep copy of any vertices from which it was originated.
             #  NOTE: It is important that the transactive neighbor is excluded.
-            _log.info('BEFORE SUM VERTICES IN NEIGHBOR')
             sd_curve: SDCurve = market.sum_vertices(time_interval, object_to_exclude=self,
                                                     enclosing_measurement=self.prepared_signals[market])
-            _log.info('AFTER SUM VERTICES IN NEIGHBOR')
             # This should be rare, Warn if no vertices are found.
             if sd_curve.empty:
                 _log.warning(f'No summed vertices were found in method prep_transactive_signal for neighbor '
@@ -482,9 +478,7 @@ class Neighbor(Entity):
                 scheduled_power = self.scheduled_powers.get_by_interval(time_interval)
                 if scheduled_power:
                     active_threshold = min(active_threshold, scheduled_power)
-                _log.info('BEFORE REMOVE DEMAND CHARGES) IN NEIGHBOR')
                 self.remove_demand_charges(sd_curve=sd_curve, threshold=active_threshold)
-                _log.info('AFTER REMOVE DEMAND CHARGES) IN NEIGHBOR')
 
             # Remove the impacts of marginal losses to place the vertices into the perspective of the remote neighbor to
             # which a transactive signal will be sent.
@@ -495,9 +489,7 @@ class Neighbor(Entity):
 
             # The vertices are now suitable for creating transactive records representing the remote agent perspective.
             #  Store the corrected vertices in prepared_signals, where they are ready to send to the remote neighbor.
-            _log.info('BEFORE PREPARE SIGNAL UPDATE IN NEIGHBOR')
             self.prepared_signals[market].update(time_interval, sd_curve, archive=False, replace=True)
-            _log.info('AFTER PREPARE SIGNAL UPDATE IN NEIGHBOR')
 
     def send_transactive_signal(self, market, include_schedule=False):
         # Send transactive records to a transactive neighbor.
@@ -539,7 +531,6 @@ class Neighbor(Entity):
         self.last_sent_signals[market] = prepared_signal
 
         # Save the newly sent transactive records.
-        _log.info('@@@@@@@@@@ ABOUT TO ARCHIVE LAST SENT SIGNALS.')
         self.last_sent_signals[market].archive()
 
         # Return transactive records to allow further processing by subclasses.
@@ -547,6 +538,7 @@ class Neighbor(Entity):
 
     def receive_transactive_signal(self, signal_dict: dict):
         """Receive and save transactive records from a transactive Neighbor."""
+        _log.info(f'{self.tn.name} is receiving a transactive signal from {signal_dict.get("neighbor")}.')
         if not self.transactive:
             _log.warning('Transactive signals are not expected to be received from non-transactive neighbors. '
                          'No signal is read.')
