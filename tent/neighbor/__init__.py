@@ -536,7 +536,7 @@ class Neighbor(Entity):
         # Return transactive records to allow further processing by subclasses.
         return prepared_signal
 
-    def receive_transactive_signal(self, signal_dict: dict):
+    def receive_transactive_signal(self, _, __, signal_dict: dict, **___):
         """Receive and save transactive records from a transactive Neighbor."""
         _log.info(f'{self.tn.name} is receiving a transactive signal from {signal_dict.get("neighbor")}.')
         if not self.transactive:
@@ -545,7 +545,8 @@ class Neighbor(Entity):
             return
 
         parsed_signal = TransactiveSignal.parse_signal(self.tn, signal_dict)
-        self.last_received_signals[parsed_signal.market] = parsed_signal
+        if parsed_signal:
+            self.last_received_signals[parsed_signal.market] = parsed_signal
 
     def update_costs(self, market):
         """

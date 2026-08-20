@@ -1,5 +1,7 @@
 import logging
 
+from datetime import datetime
+
 from tent.containers.time_interval import TimeInterval
 from tent.containers.vertex import Vertex
 from tent.local_asset import LocalAsset
@@ -47,7 +49,7 @@ class ModelFrameAsset(LocalAsset, ModelFrame):
                                               **actuation_manager)
             _log.info(f'Configured actuator {am_class.__name__} for asset: {self.name}')
 
-    def new_model_data(self, message: dict):
+    def new_model_data(self, time_received: datetime, subscribe_key: str, message: dict):
         """Ingest new data for models in ModelFrame.
         """
         if subscribe_key in self.models:
