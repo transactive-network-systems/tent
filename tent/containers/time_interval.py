@@ -62,11 +62,7 @@ class TimeInterval(Archivable):
         # TODO: Should we have an owner attribute in addition to market?
 
         # The TimeInterval name is used by the transactive record, and must be unique to its market.
-        # TODO: Confirm that this change to naming is appropriate.
-        # TODO: Is either version actually unique?
-        #  How about multiple multi-interval markets in series with intervals starting @ same time?
-        #self.name: str = str(self.market.market_series_name) + ":" + format_ts(self.start_time)
-        self.name: str = f'{self.market.market_series_name}@{self.start_time.isoformat()}'
+        self.name: str = f'{self.market.name}@{self.start_time.isoformat()}'
 
     @property
     def data_manager(self):
