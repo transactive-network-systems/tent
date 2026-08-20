@@ -1,6 +1,8 @@
+import abc
 import logging
 
-from typing import Callable
+from datetime import datetime
+from typing import Any, Callable
 
 from tent.meter_point import MeterPoint
 
