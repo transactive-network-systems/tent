@@ -77,13 +77,9 @@ class Market(Component):
                  price_model=None
                  ):
         # Build market name BEFORE calling Component.__init__ (self.name not yet set)
-        series_description = getattr(market_series, 'description', getattr(market_series, 'name', 'Market'))
-        base_name = str(series_description).replace(' ', '_')
-        market_name = f"{base_name}_{transition_times.delivery_lead.isoformat(timespec='seconds')}"
-        super(Market, self).__init__(series_description, market_name, transactive_node)
-        # Backwards compatibility: some legacy code expects market_series_name attr
-        if not hasattr(self, 'market_series_name'):
-            self.market_series_name = getattr(market_series, 'name', base_name)
+        market_name = '_'.join((*market_series.name.split(' '), transition_times.delivery_lead.isoformat(timespec='seconds')))
+        super(Market, self).__init__(market_series.description, market_name, transactive_node)
+
         self.series: MarketSeries = proxy(market_series, safe_weak_proxy_callback(self, 'market_series'))
         self.transition_times: MarketTimings = transition_times
 
