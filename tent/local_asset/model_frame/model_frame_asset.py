@@ -25,9 +25,6 @@ class ModelFrameAsset(LocalAsset, ModelFrame):
         LocalAsset.__init__(self, transactive_node, *args, **kwargs)
 
         self.temperature_forecast_name = temperature_forecast_name
-        # self.actuation_method = actuation_method
-        # self.actuator_identity = actuator_identity
-        # self.ilc_target_topic = ilc_target_topic
 
         # TODO: Occupation and ActuationManagers should probably be loaded from class methods on the base classes.
         # Initialize Scheduler
@@ -35,11 +32,10 @@ class ModelFrameAsset(LocalAsset, ModelFrame):
             om_class = get_class_from_spec(occupancy_manager, 'SimpleOccupancyManager', 'tent.local_asset.occupancy_manager')
             self.occupancy_manager: OccupancyManager = om_class(**occupancy_manager)
 
-        for device_topic in self.models:
-            if 'Uncontrolled' in device_topic:
+        for subscribe_key in self.models:
+            if 'Uncontrolled' in subscribe_key:
                 continue
-            _log.info("Subscribing to " + device_topic)
-            self.tn.register_subscription(subscribe_key=device_topic, callback=self.new_model_data)
+            self.tn.register_subscription(subscribe_key=subscribe_key, callback=self.new_model_data)
 
             # Initialize Actuation Manager
             if actuation_manager:
@@ -52,12 +48,9 @@ class ModelFrameAsset(LocalAsset, ModelFrame):
 
     def new_model_data(self, message: dict):
         """Ingest new data for models in ModelFrame.
-            data: {'datetime': <datetime>, 'data': {<key>: <value>}}
         """
-        now = message['datetime']
-        for key, data in message['data'].items():
-            if key in self.models:
-                self.models[key].update_data(data, now)
+        if subscribe_key in self.models:
+            self.models[subscribe_key].update_data(message, time_received)
 
     def _get_scheduled_power_from_model(self, time_interval: TimeInterval, outside_air_temperature) -> float:
         """Return a schedule power value for one interval from a model."""

@@ -22,7 +22,7 @@ class DirectRatioActuationManager(ActuationManager):
             price = min(max(price, min_price), max_price)  # clamp price within bid range.
             cleared_price_ratio = (price - min_price) / (max_price - min_price)
             for model in self.parent.models.values():  # TODO: Generalize this away from models in ModelFrameAsset.
-                if model.actuation_topic:
+                if model.actuation_key:
                     min_set_point, max_set_point = model.set_point_range(mkt.transition_times.delivery)
                     # For forward-acting (cooling) mode:
                     new_set_point = (cleared_price_ratio * (max_set_point - min_set_point)) + min_set_point
@@ -31,7 +31,7 @@ class DirectRatioActuationManager(ActuationManager):
                     #  and a deadband. For lighting, it is always reverse-acting (heating).
                     # new_set_point = max_set_point - (cleared_price_ratio * (
                     #            max_set_point - min_set_point))
-                    self.direct_actuate(model.actuation_topic, new_set_point)
+                    self.direct_actuate(model.actuation_key, new_set_point)
 
     def direct_actuate(self, target_id, new_set_point):
         pass
@@ -39,8 +39,8 @@ class DirectRatioActuationManager(ActuationManager):
     def release(self, mkt):
         super(DirectRatioActuationManager, self).release(mkt)
         for model in self.parent.models.values():  # TODO: Generalize this away from models in ModelFrameAsset.
-            if model.actuation_topic:
-                self.direct_release(model.actuation_topic)
+            if model.actuation_key:
+                self.direct_release(model.actuation_key)
 
     def direct_release(self, target_id):
         pass

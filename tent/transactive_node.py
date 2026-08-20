@@ -47,6 +47,7 @@ from datetime import datetime, timezone
 from dateutil import parser
 from itertools import chain
 from sortedcontainers import SortedList
+from typing import Any, Callable
 from zoneinfo import ZoneInfo
 
 from tent.base import Archivable
@@ -244,7 +245,11 @@ class TransactiveNode(Archivable):
         pass
 
     @abc.abstractmethod
-    def register_subscription(self, subscribe_key, callback):
+    def register_subscription(self, subscribe_key: str, callback: Callable[[datetime, str, Any], None]):
+        """ When data is available for the given subscribe key,
+            a callback with the following signature will be called to process the data:
+                callback(time_received: datetime, subscribe_key: str, message: Any)
+        """
         pass
 
     @abc.abstractmethod

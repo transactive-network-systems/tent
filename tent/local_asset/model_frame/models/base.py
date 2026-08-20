@@ -64,16 +64,16 @@ class ModelFrame(object):
         base_module = "tent.local_asset.model_frame.models."
         for model in config['models']:
             try:
-                topic = model["topic"]
+                subscribe_key = model["subscribe_key"]
                 model_type = model["model_type"]
             except KeyError as e:
-                _log.exception("Missing Model Type key: {}".format(e))
+                _log.exception(f"Model configuration is missing key: {e}")
                 raise e
             _file, model_type = model_type.split(".")
             module = importlib.import_module(base_module + _file)
             self.model_class = getattr(module, model_type)
             model['model_config']['demand_curve_points'] = self.demand_curve_points
-            self.models[topic] = self.model_class(model['model_config'], parent=self)
+            self.models[subscribe_key] = self.model_class(model['model_config'], parent=self)
 
     def model_flexibility(self, params: dict = None) -> List[float]:
         params = params if params else {}
@@ -82,7 +82,7 @@ class ModelFrame(object):
             try:
                 q[i, :] = model.predict_flexibility(params=params)
             except KeyError:
-                _log.debug("Error making prediction for %s", model.topic)
+                _log.debug(f"Error making prediction for {model.subscribe_key}.")
         flexibility = q.sum(axis=0)
         return list(flexibility)
 
@@ -94,13 +94,13 @@ class ModelFrame(object):
                 q += model.predict_power(params=params, set_point=None)
                 # _log.debug(f'Power after {k}: {q}')
             except KeyError:
-                _log.debug("Error making prediction for %s", model.topic)
+                _log.debug(f"Error making prediction for {model.subscribe_key}.")
         return q
 
 #
 # class BaseModel(object):
-#     def __init__(self, actuation_topic: str = None):
-#         self.topic = actuation_topic
+#     def __init__(self, actuation_key: str = None):
+#         self.actuation_key = actuation_key
 #
 #     def predict_flexibility(self, params: dict = None) -> Iterable[float]:
 #         pass
