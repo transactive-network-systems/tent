@@ -37,14 +37,15 @@ class ModelFrameAsset(LocalAsset, ModelFrame):
                 continue
             self.tn.register_subscription(subscribe_key=subscribe_key, callback=self.new_model_data)
 
-            # Initialize Actuation Manager
-            if actuation_manager:
-                # TODO: The default module_prefix doesn't quite work with the default class.
-                #  Need better detection logic in the helper function.
-                am_class = get_class_from_spec(actuation_manager, 'NullActuationManager', transactive_node=self.tn,
-                                               default_module_prefix='tent.local_asset.actuation_manager')
-                self.actuation_manager = am_class(parent=self, occupancy_manager=self.occupancy_manager,
-                                                  **actuation_manager)
+        # Initialize Actuation Manager
+        if actuation_manager:
+            # TODO: The default module_prefix doesn't quite work with the default class.
+            #  Need better detection logic in the helper function.
+            am_class = get_class_from_spec(actuation_manager, 'NullActuationManager', transactive_node=self.tn,
+                                           default_module_prefix='tent.local_asset.actuation_manager')
+            self.actuation_manager = am_class(parent=self, occupancy_manager=self.occupancy_manager,
+                                              **actuation_manager)
+            _log.info(f'Configured actuator {am_class.__name__} for asset: {self.name}')
 
     def new_model_data(self, message: dict):
         """Ingest new data for models in ModelFrame.
