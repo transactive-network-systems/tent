@@ -2,9 +2,11 @@ import logging
 import weakref
 
 from abc import ABCMeta, abstractmethod
+from weakref import proxy
 
 from tent.local_asset import LocalAsset
 from tent.transactive_node import TransactiveNode
+from tent.utils.helpers import safe_weak_proxy_callback
 
 from ..occupancy_manager import OccupancyManager
 
@@ -18,14 +20,15 @@ class ActuationManager(metaclass=ABCMeta):
                  # outputs: Dict[dict] = None,  # TODO: How is this handled in parent?
                  parent: LocalAsset = None,
                  occupancy_manager: OccupancyManager = None,
-                 transactive_node: TransactiveNode = None):
+                 transactive_node: TransactiveNode = None,
+                 **kwargs):
         self.active_onstart = active_onstart
         self.control_interval = control_interval
         # self.outputs = outputs if outputs else []
         self.parent = parent if parent else LocalAsset(transactive_node)
         # TODO: Does this really need to be a weak reference? Should probably be a proxy if it does.
-        self.occupancy_manager = None if occupancy_manager is None else weakref.ref(occupancy_manager)
-        self.tn = None if transactive_node is None else weakref.ref(transactive_node)
+        self.occupancy_manager = proxy(occupancy_manager, safe_weak_proxy_callback(self, 'occupancy_manager'))
+        self.tn = transactive_node
 
         self.actuation_active = False
         self.actuation_allowed = True if self.active_onstart else False
