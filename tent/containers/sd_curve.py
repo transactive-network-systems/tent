@@ -1,5 +1,6 @@
 import logging
 
+from copy import copy
 from sortedcontainers import SortedSet
 try:  # Python <3.11 compatibility
     from typing import Self  # type: ignore
@@ -416,6 +417,22 @@ class SDCurve(Archivable):
 
     def __len__(self):
         return len(self.vertices)
+
+    def __copy__(self):
+        """
+        Returns a copy of this SDCurve object.
+        This is a redefinition of method copy.copy() that will be evoked when a SDCurve object is to be copied.
+        The copy will have the same properties as this SDCurve, but will not have the same Archivable id nor timestamp.
+        The new curve will not be archived on creation.
+
+        Parameters: None
+        """
+        return SDCurve(
+            measurement=self.measurement,
+            interval=self.interval,
+            vertices=[copy(v) for v in self.vertices],
+            archive=False
+        )
 
     def update(self, value: Vertex | dict | list[float|int] | list[Vertex] | list[list[float|int]] | list[dict], archive: bool = True):
         # TODO: Should this have a default value like in the constructor?
