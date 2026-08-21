@@ -488,7 +488,7 @@ class TestBackendSwap:
         from pvlib.pvsystem import PVSystem
         from pvlib.temperature import TEMPERATURE_MODEL_PARAMETERS
 
-        from der_interface.adapters.pvlib_pv import PvlibPvAdapter
+        from der_interface.adapters.pvlib import PvlibPvAdapter
 
         adapter = PvlibPvAdapter.from_location(
             "campus_pv",
@@ -522,3 +522,100 @@ class TestBackendSwap:
         for ti in mkt.time_intervals:
             power = asset.scheduled_powers.get_by_interval(ti).value
             assert 0.0 < power <= 120.0
+
+    def test_gridlabd_water_heater_backend(self, tn, market):
+        """GridLAB-D water heater adapter connected to simulation engine."""
+        from der_interface.adapters.gridlabd import GridlabdWaterHeaterAdapter
+
+        wh = GridlabdWaterHeaterAdapter.from_config(
+            resource_id="wh_01",
+            rated_kw=4.5,
+            gridlabd={
+                "object_name": "wh_01",
+                "t_min_f": 110.0,
+                "t_max_f": 140.0,
+                "t_desired_f": 125.0,
+            },
+        )
+        asset = DerAsset(
+            flexibility=wh,
+            transactive_node=tn,
+            name="gridlabd_wh_asset",
+            price_range=(0.03, 0.12),
+        )
+        asset.schedule(market)
+        assert asset.schedule_calculated
+
+        ti = market.time_intervals[0]
+        curve = asset.active_vertices.get_by_interval(ti)
+        assert len(curve.vertices) == 2
+        quantities = sorted(v.quantity for v in curve.vertices)
+        # TENT convention: consumption is negative kW (-4.5 kW to 0 kW)
+        assert quantities[0] == pytest.approx(-4.5, 0.1)
+        assert quantities[1] == pytest.approx(0.0, 0.1)
+
+        # Actuate heating dispatch
+        asset.scheduled_powers.update(ti, -4.5)
+        asset.actuate(market)
+        assert len(asset.dispatch_responses) == len(market.time_intervals)
+
+    def test_gridlabd_hvac_backend(self, tn, market):
+        """GridLAB-D HVAC house adapter connected to simulation engine."""
+        from der_interface.adapters.gridlabd import GridlabdHvacAdapter
+
+        hvac = GridlabdHvacAdapter.from_config(
+            resource_id="house_01",
+            rated_kw=3.5,
+            gridlabd={
+                "object_name": "house_01",
+                "min_cooling_setpoint_f": 68.0,
+                "max_cooling_setpoint_f": 78.0,
+            },
+        )
+        asset = DerAsset(
+            flexibility=hvac,
+            transactive_node=tn,
+            name="gridlabd_hvac_asset",
+            price_range=(0.02, 0.10),
+        )
+        asset.schedule(market)
+        assert asset.schedule_calculated
+
+        ti = market.time_intervals[0]
+        curve = asset.active_vertices.get_by_interval(ti)
+        assert len(curve.vertices) == 2
+        quantities = sorted(v.quantity for v in curve.vertices)
+        # TENT convention: cooling load is negative kW (-3.5 kW to 0.0 kW)
+        assert quantities[0] == pytest.approx(-3.5, 0.1)
+        assert quantities[1] == pytest.approx(0.0, 0.1)
+
+    def test_gridlabd_battery_backend(self, tn, market):
+        """GridLAB-D inverter battery adapter with bidirectional bidding."""
+        from der_interface.adapters.gridlabd import GridlabdBatteryInverterAdapter
+
+        battery = GridlabdBatteryInverterAdapter.from_config(
+            resource_id="inv_battery_01",
+            rated_kw=5.0,
+            gridlabd={
+                "object_name": "inv_battery_01",
+                "capacity_kwh": 13.5,
+                "min_soc": 0.10,
+                "max_soc": 0.95,
+            },
+        )
+        asset = DerAsset(
+            flexibility=battery,
+            transactive_node=tn,
+            name="gridlabd_battery_asset",
+            price_range=(0.02, 0.15),
+        )
+        asset.schedule(market)
+        assert asset.schedule_calculated
+
+        ti = market.time_intervals[0]
+        curve = asset.active_vertices.get_by_interval(ti)
+        assert len(curve.vertices) == 2
+        quantities = sorted(v.quantity for v in curve.vertices)
+        # In TENT (generation-positive): charging is -5 kW, discharging is +5 kW
+        assert quantities[0] == pytest.approx(-5.0, 0.1)
+        assert quantities[1] == pytest.approx(5.0, 0.1)

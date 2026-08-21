@@ -244,7 +244,7 @@
       "scheduling_horizon": 86400,
       "flexibility": {
         "class_name": "PvlibPvAdapter",
-        "module_name": "der_interface.adapters.pvlib_pv",
+        "module_name": "der_interface.adapters.pvlib",
         "factory": "from_config",
         "resource_id": "campus_pv",
         "rated_kw": 120.0,
