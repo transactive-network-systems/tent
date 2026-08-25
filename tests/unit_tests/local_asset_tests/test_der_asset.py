@@ -619,3 +619,78 @@ class TestBackendSwap:
         # In TENT (generation-positive): charging is -5 kW, discharging is +5 kW
         assert quantities[0] == pytest.approx(-5.0, 0.1)
         assert quantities[1] == pytest.approx(5.0, 0.1)
+
+    def test_ochre_battery_backend(self, tn, market):
+        """NREL OCHRE battery storage adapter connected to TENT market asset."""
+        from der_interface.adapters.ochre import OchreBatteryAdapter
+
+        battery = OchreBatteryAdapter.from_config(
+            resource_id="ochre_battery_01",
+            rated_kw=5.0,
+            capacity_kwh=10.0,
+            min_soc=0.10,
+            max_soc=0.95,
+        )
+        asset = DerAsset(
+            flexibility=battery,
+            transactive_node=tn,
+            name="ochre_battery_asset",
+            price_range=(0.02, 0.15),
+        )
+        asset.schedule(market)
+        assert asset.schedule_calculated
+
+        ti = market.time_intervals[0]
+        curve = asset.active_vertices.get_by_interval(ti)
+        assert len(curve.vertices) == 2
+        quantities = sorted(v.quantity for v in curve.vertices)
+        assert quantities[0] == pytest.approx(-5.0, 0.1)
+        assert quantities[1] == pytest.approx(5.0, 0.1)
+
+    def test_ochre_water_heater_backend(self, tn, market):
+        """NREL OCHRE water heater adapter connected to TENT market asset."""
+        from der_interface.adapters.ochre import OchreWaterHeaterAdapter
+
+        wh = OchreWaterHeaterAdapter.from_config(
+            resource_id="ochre_wh_01",
+            rated_kw=4.5,
+        )
+        asset = DerAsset(
+            flexibility=wh,
+            transactive_node=tn,
+            name="ochre_wh_asset",
+            price_range=(0.03, 0.12),
+        )
+        asset.schedule(market)
+        assert asset.schedule_calculated
+
+        ti = market.time_intervals[0]
+        curve = asset.active_vertices.get_by_interval(ti)
+        assert len(curve.vertices) == 2
+        quantities = sorted(v.quantity for v in curve.vertices)
+        assert quantities[0] == pytest.approx(-4.5, 0.1)
+        assert quantities[1] == pytest.approx(0.0, 0.1)
+
+    def test_ochre_hvac_backend(self, tn, market):
+        """NREL OCHRE dwelling HVAC adapter connected to TENT market asset."""
+        from der_interface.adapters.ochre import OchreHvacAdapter
+
+        hvac = OchreHvacAdapter.from_config(
+            resource_id="ochre_hvac_01",
+            rated_kw=3.5,
+        )
+        asset = DerAsset(
+            flexibility=hvac,
+            transactive_node=tn,
+            name="ochre_hvac_asset",
+            price_range=(0.02, 0.10),
+        )
+        asset.schedule(market)
+        assert asset.schedule_calculated
+
+        ti = market.time_intervals[0]
+        curve = asset.active_vertices.get_by_interval(ti)
+        assert len(curve.vertices) == 2
+        quantities = sorted(v.quantity for v in curve.vertices)
+        assert quantities[0] == pytest.approx(-3.5, 0.1)
+        assert quantities[1] == pytest.approx(0.0, 0.1)
