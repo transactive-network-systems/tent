@@ -1,0 +1,15 @@
+{
+  "resource_id": "ochre_hvac_01",
+  "rated_kw": 3.5,
+  "min_cooling_setpoint_f": 68.0,
+  "max_cooling_setpoint_f": 78.0,
+  "ochre": {
+    "description": "OCHRE Residential Dwelling HVAC & Multi-Zone Building Thermal Envelope",
+    "name": "OchreHouse01",
+    "start_time": "2018-01-01T00:00:00",
+    "time_res": 900,
+    "hpxml_file": "models/ochre/dwelling_up11.xml",
+    "hpxml_schedule_file": "models/ochre/dwelling_schedule.csv",
+    "weather_file": "models/ochre/denver_weather.epw"
+  }
+}

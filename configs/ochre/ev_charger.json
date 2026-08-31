@@ -1,0 +1,18 @@
+{
+  "resource_id": "ochre_ev_01",
+  "rated_kw": 7.2,
+  "capacity_kwh": 65.0,
+  "initial_soc": 0.40,
+  "target_soc": 0.90,
+  "min_soc": 0.10,
+  "ochre": {
+    "description": "OCHRE Level 2 Electric Vehicle Charger",
+    "vehicle_type": "BEV",
+    "charging_level": "Level 2",
+    "range": 200,
+    "charging_efficiency": 0.90,
+    "force_connected": true,
+    "start_time": "2026-08-05T20:00:00",
+    "time_res": 900
+  }
+}

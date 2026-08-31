@@ -52,6 +52,6 @@ if __name__ == '__main__':
         url='',
         packages=find_packages('.'),
         install_requires=[
-            'python-dateutil', 'matplotlib', 'uuid6', 'sortedcontainers', 'SQLAlchemy-Utils'
+            'python-dateutil', 'matplotlib', 'uuid6', 'sortedcontainers', 'SQLAlchemy-Utils', 'plotext'
         ]
     )

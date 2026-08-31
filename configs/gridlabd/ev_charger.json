@@ -1,0 +1,18 @@
+{
+  "resource_id": "ev_01",
+  "rated_kw": 7.2,
+  "location": {
+    "latitude": 46.28,
+    "longitude": -119.28,
+    "tz": "US/Pacific"
+  },
+  "gridlabd": {
+    "object_name": "ev_01",
+    "model_path": "models/gridlabd/feeder.glm",
+    "rated_charging_kw": 7.2,
+    "battery_capacity_kwh": 60.0,
+    "target_soc": 0.90,
+    "charging_efficiency": 0.92,
+    "bidirectional": false
+  }
+}

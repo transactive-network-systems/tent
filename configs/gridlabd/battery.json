@@ -1,0 +1,16 @@
+{
+  "resource_id": "inv_battery_01",
+  "rated_kw": 5.0,
+  "location": {
+    "latitude": 46.28,
+    "longitude": -119.28,
+    "tz": "US/Pacific"
+  },
+  "gridlabd": {
+    "object_name": "inv_battery_01",
+    "model_path": "models/gridlabd/feeder.glm",
+    "capacity_kwh": 13.5,
+    "min_soc": 0.10,
+    "max_soc": 0.95
+  }
+}

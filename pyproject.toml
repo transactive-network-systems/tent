@@ -23,6 +23,7 @@ wheel = ">=0.30.0"
 deepdiff = ">=6.3.0"
 sortedcontainers = ">=2.4.0"
 uuid6 = ">=2025.0.1"
+plotext = ">=5.2.8"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "~7.4.3"

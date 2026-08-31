@@ -1,0 +1,15 @@
+{
+  "resource_id": "house_01",
+  "rated_kw": 3.5,
+  "location": {
+    "latitude": 46.28,
+    "longitude": -119.28,
+    "tz": "US/Pacific"
+  },
+  "gridlabd": {
+    "object_name": "house_01",
+    "model_path": "models/gridlabd/feeder.glm",
+    "min_cooling_setpoint_f": 68.0,
+    "max_cooling_setpoint_f": 78.0
+  }
+}
