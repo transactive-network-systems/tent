@@ -64,15 +64,33 @@ class ModelFrame(object):
         for model in config['models']:
             try:
                 topic = model["topic"]
-                model_type = model["model_type"]
+                model_type = model.get("model_type")
             except KeyError as e:
                 _log.exception("Missing Model Type key: {}".format(e))
                 raise e
-            _file, model_type = model_type.split(".")
-            module = importlib.import_module(base_module + _file)
-            self.model_class = getattr(module, model_type)
-            model['model_config']['demand_curve_points'] = self.demand_curve_points
-            self.models[topic] = self.model_class(model['model_config'], parent=self)
+
+            model_config = model.get('model_config', {})
+            model_config['demand_curve_points'] = self.demand_curve_points
+            model_config['topic'] = topic
+
+            # Support direct FMI / preset configurations
+            if not model_type or model_type.lower() in ("fmi", "flexibility_model", "fmi_adapter"):
+                from .fmi_adapter import FlexibilityModelFrameAdapter
+                self.models[topic] = FlexibilityModelFrameAdapter(model_config, parent=self)
+            elif "." in model_type:
+                _file, m_type = model_type.split(".", 1)
+                try:
+                    module = importlib.import_module(base_module + _file)
+                    model_class = getattr(module, m_type)
+                except (ImportError, AttributeError):
+                    # Try importing as absolute module path
+                    module = importlib.import_module(_file)
+                    model_class = getattr(module, m_type)
+                self.models[topic] = model_class(model_config, parent=self)
+            else:
+                module = importlib.import_module(base_module + model_type.lower())
+                model_class = getattr(module, model_type)
+                self.models[topic] = model_class(model_config, parent=self)
 
     def model_flexibility(self, params: dict = None) -> List[float]:
         params = params if params else {}

@@ -359,7 +359,7 @@ def ochre_dwelling():
         "name": "TentHouse",
         "start_time": dt.datetime(2018, 7, 1, 0, 0),     # summer → cooling is active
         "time_res": dt.timedelta(minutes=15),
-        "duration": dt.timedelta(hours=24),   # 24 market cycles × 4 steps × 15 min = 24 h
+        "duration": dt.timedelta(days=3),   # ample horizon across module tests
         "initialization_time": dt.timedelta(days=1),     # warm up to steady state
         "verbosity": 6,   # exposes all 4 status-dict keys we need
         "hpxml_file": os.path.join(
