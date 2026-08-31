@@ -228,8 +228,8 @@
       "scheduling_horizon": 86400
     },
     {
-      "class_name": "DerAsset",
-      "module_name": "tent.local_asset.der_asset",
+      "class_name": "ModelFrameAsset",
+      "module_name": "tent.local_asset.model_frame.model_frame_asset",
       "cost_parameters": [0.0, 0.0, 0.0],
       "default_power": 0.0,
       "default_vertices": [[0, 0, 30.0, true]],
@@ -242,26 +242,33 @@
       "meter_points": null,
       "name": "SolarPv",
       "scheduling_horizon": 86400,
-      "flexibility": {
-        "class_name": "PvlibPvAdapter",
-        "module_name": "tent.flexibility.adapters.pvlib",
-        "factory": "from_config",
-        "resource_id": "campus_pv",
-        "rated_kw": 120.0,
-        "location": {
-          "latitude": 46.28,
-          "longitude": -119.28,
-          "tz": "US/Pacific"
-        },
-        "system": {
-          "surface_tilt": 30,
-          "surface_azimuth": 180
-        },
-        "weather": {
-          "kind": "clearsky",
-          "cloud_factor": 1.0
-        },
-        "curtailable": false
+      "model_configs": {
+        "demand_curve_points": 2,
+        "models": [
+          {
+            "topic": "devices/campus_pv",
+            "model_type": "fmi",
+            "model_config": {
+              "preset": "residential_pv",
+              "resource_id": "campus_pv",
+              "rated_kw": 120.0,
+              "location": {
+                "latitude": 46.28,
+                "longitude": -119.28,
+                "tz": "US/Pacific"
+              },
+              "system": {
+                "surface_tilt": 30,
+                "surface_azimuth": 180
+              },
+              "weather": {
+                "kind": "clearsky",
+                "cloud_factor": 1.0
+              },
+              "curtailable": false
+            }
+          }
+        ]
       }
     }
   ],
