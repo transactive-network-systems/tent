@@ -17,14 +17,14 @@ A standard node JSON configuration includes:
    * ``market_cycle_in_min``: Negotiation period in minutes (e.g., 15 or 60).
    * ``duality_gap_threshold``: Convergence threshold for market clearing.
 
-2. **``local_assets`` List**:
+2. **Local Assets List** (``local_assets``):
    * Array of ``ModelFrameAsset`` objects with their sub-model configurations.
 
-3. **``neighbors`` List**:
+3. **Neighbors List** (``neighbors``):
    * Array of neighboring transactive agents and bulk power suppliers.
 
-4. **``market_series`` List**:
+4. **Market Series List** (``market_series``):
    * Market series definition with horizon length, interval duration, and auction rules.
 
-5. **``information_services`` List**:
+5. **Information Services List** (``information_services``):
    * Forecast models for weather, temperature, and solar irradiance.

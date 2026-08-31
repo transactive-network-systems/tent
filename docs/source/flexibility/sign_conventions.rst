@@ -16,13 +16,13 @@ The Two Conventions
    * - Convention
      - Physical Meaning
      - Primary Usage
-   * - **``LOAD_POSITIVE``** (Canonical FMI)
-     - :math:`P > 0` = Consumption / Charging
-       :math:`P < 0` = Generation / Discharging
+   * - ``LOAD_POSITIVE`` (Canonical FMI)
+     - | :math:`P > 0` : Consumption / Charging
+       | :math:`P < 0` : Generation / Discharging
      - Physical simulators (OCHRE, GridLAB-D, pvlib, physical meters)
-   * - **``GENERATION_POSITIVE``** (TENT Internal)
-     - :math:`P > 0` = Generation / Production
-       :math:`P < 0` = Demand / Consumption
+   * - ``GENERATION_POSITIVE`` (TENT Internal)
+     - | :math:`P > 0` : Generation / Production
+       | :math:`P < 0` : Demand / Consumption
      - TENT ``ModelFrameAsset``, ``Market``, ``Auction``
 
 Boundary Conversion Rule

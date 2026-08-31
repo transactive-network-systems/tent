@@ -11,10 +11,10 @@ Compositional Hierarchy
 
 Rather than treating an entire commercial building or facility as a black box with a single rigid model, ``ModelFrameAsset`` hosts an arbitrary collection of sub-models within its ``models`` dictionary:
 
-* **Thermostat Models (``tent.local_asset.model_frame.models.thermostat``)**: Second-order equivalent thermal parameter (RC) models for heating and cooling.
-* **Lighting Models (``tent.local_asset.model_frame.models.light``)**: Illuminance and schedule-driven lighting power.
-* **Uncontrolled Models (``tent.local_asset.model_frame.models.uncontrolled``)**: Plug loads, appliances, and non-shiftable baseload.
-* **Physical FMI Models (``tent.local_asset.model_frame.models.fmi_adapter``)**: Physics-backed models powered by OCHRE, GridLAB-D, pvlib, or Replay datasets.
+* **Thermostat Models** (``tent.local_asset.model_frame.models.thermostat``): Second-order equivalent thermal parameter (RC) models for heating and cooling.
+* **Lighting Models** (``tent.local_asset.model_frame.models.light``): Illuminance and schedule-driven lighting power.
+* **Uncontrolled Models** (``tent.local_asset.model_frame.models.uncontrolled``): Plug loads, appliances, and non-shiftable baseload.
+* **Physical FMI Models** (``tent.local_asset.model_frame.models.fmi_adapter``): Physics-backed models powered by OCHRE, GridLAB-D, pvlib, or Replay datasets.
 
 Aggregation Mechanics
 ---------------------

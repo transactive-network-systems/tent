@@ -11,16 +11,16 @@ Supply / Demand Curve Construction
 
 Every participating asset or neighbor submits a set of **Vertices** :math:`V = \{(p_1, q_1), (p_2, q_2), \dots, (p_n, q_n)\}` for each active time interval:
 
-* **Price (:math:`p_i`)**: Marginal price in $/kWh.
-* **Quantity (:math:`q_i`)**: Power in kW (positive for supply/generation, negative for demand/consumption).
+* Price (:math:`p_i`): Marginal price in $/kWh.
+* Quantity (:math:`q_i`): Power in kW (positive for supply/generation, negative for demand/consumption).
 
 Curve Aggregation
 -----------------
 
 The auction separates vertices into supply and demand functions:
 
-1. **Supply Curve :math:`S(p)`**: Formed by sorting supply bids in ascending order of price.
-2. **Demand Curve :math:`D(p)`**: Formed by sorting demand bids in descending order of price.
+1. Supply Curve :math:`S(p)`: Formed by sorting supply bids in ascending order of price.
+2. Demand Curve :math:`D(p)`: Formed by sorting demand bids in descending order of price.
 
 Market Clearing Price (MCP)
 ---------------------------

@@ -63,9 +63,9 @@ Below is an annotated JSON structure defining a campus building asset with physi
 Configuration Properties
 ------------------------
 
-* **``class_name``**: Must be ``"ModelFrameAsset"``.
-* **``module_name``**: Must be ``"tent.local_asset.model_frame.model_frame_asset"``.
-* **``maximum_power``**: Upper generation or curtailment boundary in kW.
-* **``minimum_power``**: Maximum allowable consumption in kW (negative in TENT convention).
-* **``scheduling_horizon``**: Lookahead duration in seconds (e.g. 86400 for 24 hours).
-* **``model_configs.models``**: Array of nested sub-model definitions. For physical models, set ``"model_type": "fmi"``.
+* ``class_name``: Must be ``"ModelFrameAsset"``.
+* ``module_name``: Must be ``"tent.local_asset.model_frame.model_frame_asset"``.
+* ``maximum_power``: Upper generation or curtailment boundary in kW.
+* ``minimum_power``: Maximum allowable consumption in kW (negative in TENT convention).
+* ``scheduling_horizon``: Lookahead duration in seconds (e.g. 86400 for 24 hours).
+* ``model_configs.models``: Array of nested sub-model definitions. For physical models, set ``"model_type": "fmi"``.
