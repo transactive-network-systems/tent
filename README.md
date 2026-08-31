@@ -99,6 +99,10 @@ TENT implements continuous double auctions where:
 
 ## Flexibility Modeling (`tent.flexibility`)
 
+<details open>
+<summary><b>Click to expand / collapse: Flexibility Modeling, 3-Curve Envelopes & Simulators</b></summary>
+<br>
+
 To support arbitrary physical equipment (residential dwellings, batteries, commercial HVAC, water heaters, solar arrays, and distribution feeders), TENT embeds the **Flexibility Model Interface (FMI)**.
 
 ### The 3-Curve Flexibility Envelope
@@ -128,9 +132,7 @@ sequenceDiagram
     Adapter-->>FMI: DispatchResponse (actual, violations)
 ```
 
-<details>
-<summary><b>🔍 Expand: Sign Conventions (Load-Positive vs. Generation-Positive)</b></summary>
-<br>
+### Sign Conventions (Load-Positive vs. Generation-Positive)
 
 To prevent catastrophic sign errors, TENT establishes strict boundary conversions:
 
@@ -142,11 +144,7 @@ To prevent catastrophic sign errors, TENT establishes strict boundary conversion
 `FlexibilityModelFrameAdapter` transparently handles the conversion at the boundary:
 $$\text{Power}_{\text{TENT}} = -\text{Power}_{\text{FMI}}$$
 
-</details>
-
-<details>
-<summary><b>🔌 Expand: Supported Simulator Adapters & Presets</b></summary>
-<br>
+### Supported Simulator Adapters & Presets
 
 TENT includes built-in adapters for major physical simulation tools:
 
@@ -180,6 +178,10 @@ dwelling = load_adapter("dwelling_standard")
 
 ## ModelFrameAsset & Asset Composition
 
+<details open>
+<summary><b>Click to expand / collapse: ModelFrameAsset Architecture & JSON Configuration</b></summary>
+<br>
+
 TENT uses a composable architecture where a single transactive entity can combine any number of sub-models under one unified asset schedule.
 
 ```mermaid
@@ -211,9 +213,7 @@ classDiagram
     ModelFrameAsset *-- FlexibilityModelFrameAdapter : contains in models
 ```
 
-<details>
-<summary><b>📝 Expand: Example ModelFrameAsset JSON Configuration</b></summary>
-<br>
+### Example ModelFrameAsset JSON Configuration
 
 Here is an example configuring a multi-resource building asset in `tn.campus.json`:
 
@@ -262,6 +262,10 @@ Here is an example configuring a multi-resource building asset in `tn.campus.jso
 
 ## Market Lifecycle & Double Auctions
 
+<details open>
+<summary><b>Click to expand / collapse: Market Lifecycle States & Double Auction Mechanics</b></summary>
+<br>
+
 TENT markets progress through deterministic lifecycle states to guarantee convergence and synchronization across nodes.
 
 ```mermaid
@@ -276,9 +280,7 @@ stateDiagram-v2
     Reconciliation --> [*] : Archived to DataManager
 ```
 
-<details>
-<summary><b>📊 Expand: Double Auction Market Clearing Mechanics</b></summary>
-<br>
+### Double Auction Market Clearing Mechanics
 
 1. **Vertex Formulation**: Each asset transforms its flexibility envelope into a set of piecewise linear vertices $(P_i, Q_i)$.
 2. **Curve Aggregation**: All supply curves are sorted in ascending order of price; demand curves in descending order.
