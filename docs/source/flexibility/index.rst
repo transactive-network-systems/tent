@@ -10,6 +10,7 @@ TENT incorporates the **Flexibility Model Interface (FMI)** under ``tent.flexibi
    :maxdepth: 2
 
    overview
+   installation_and_setup
    sign_conventions
    simulator_adapters
    presets_and_factory

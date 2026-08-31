@@ -52,7 +52,7 @@ from tent.base import Component
 from tent.containers import IntervalSeries, MarketTimings, Measurement, SDCurve, SDMeasurement, Vertex
 from tent.enumerations import MarketState, MarketTypes, MeasurementType, MeasurementUnit, Method
 from tent.market.price_models import HourlyAveragePriceModel
-from tent.utils.helpers import safe_weak_proxy_callback
+from tent.utils.helpers import get_class_from_spec, safe_weak_proxy_callback
 from tent.utils.timer import Timer
 
 if TYPE_CHECKING:
@@ -113,7 +113,20 @@ class Market(Component):
         self.market_state: MarketState = initial_market_state
         self.marginal_prices: Measurement = Measurement(self, MeasurementType.MarginalPrice, MeasurementUnit.Monetary) # [$/kWh]
         self.net_powers: Measurement = Measurement(self, MeasurementType.NetPower, MeasurementUnit.kW)  # [avg.kW]
-        self.price_model = price_model
+        if price_model is not None:
+            self.price_model = price_model
+        elif hasattr(market_series, 'price_model') and market_series.price_model is not None:
+            self.price_model = market_series.price_model
+        elif hasattr(market_series, 'price_model_spec') and market_series.price_model_spec:
+            import inspect
+            pm_spec = dict(market_series.price_model_spec)
+            pm_class = get_class_from_spec(pm_spec, 'HourlyAveragePriceModel', 'tent.market.price_models', transactive_node=transactive_node)
+            sig = inspect.signature(pm_class.__init__)
+            valid_keys = set(sig.parameters.keys()) - {'self'}
+            filtered_spec = {k: v for k, v in pm_spec.items() if k in valid_keys}
+            self.price_model = pm_class(**filtered_spec)
+        else:
+            self.price_model = HourlyAveragePriceModel()
         self.production_costs: Measurement = Measurement(self, MeasurementType.ProductionCost, MeasurementUnit.Monetary)  # [$]
         self.reconciled: bool = False  # [Boolean] Convergence flag
         self.time_intervals: IntervalSeries = IntervalSeries(self,  # [TimeInterval] Current list of active time intervals
@@ -836,9 +849,13 @@ class Market(Component):
                         continue
 
                 # METHOD #4. Use the price model to predict marginal price.
-
+                def_price = getattr(self, 'default_price', getattr(getattr(self, 'series', None), 'default_price', 0.05))
                 if self.price_model is not None:
-                    marginal_price = self.price_model.get(time_interval.start_time)[0]
+                    try:
+                        res = self.price_model.get(time_interval.start_time)
+                        marginal_price = res[0] if isinstance(res, (list, tuple)) else (float(res) if isinstance(res, (int, float)) else def_price)
+                    except Exception:
+                        marginal_price = def_price
                     if marginal_price is not None:
                         self.marginal_prices.update(time_interval, marginal_price)
                         continue

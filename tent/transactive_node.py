@@ -43,7 +43,7 @@ under Contract DE-AC05-76RL01830
 import abc
 import logging
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, tzinfo
 from dateutil import parser
 from itertools import chain
 from sortedcontainers import SortedList
@@ -133,18 +133,43 @@ class TransactiveNode(Archivable):
         self.tz = updated_configs.get('tz', self.tz)
         return updated_configs
 
+    @staticmethod
+    def _parse_tz(tz_val):
+        if isinstance(tz_val, (ZoneInfo, timezone, tzinfo)):
+            return tz_val
+        if isinstance(tz_val, str):
+            try:
+                return ZoneInfo(tz_val)
+            except Exception:
+                abbrev_map = {
+                    "PDT": "America/Los_Angeles", "PST": "America/Los_Angeles",
+                    "MDT": "America/Denver", "MST": "America/Denver",
+                    "CDT": "America/Chicago", "CST": "America/Chicago",
+                    "EDT": "America/New_York", "EST": "America/New_York",
+                    "UTC": "UTC", "GMT": "GMT",
+                }
+                iana = abbrev_map.get(tz_val.upper())
+                if iana:
+                    try:
+                        return ZoneInfo(iana)
+                    except Exception:
+                        pass
+                return timezone.utc
+        return timezone.utc
+
     def _setup_timer(self, config):
         # Simulation Configurations:
         self.simulation = validate_bool(config.get('simulation', self.simulation), 'simulation')
+        tz_obj = self._parse_tz(config.get('tz', self.tz))
         if self.simulation:
             self.simulation_start_time = parser.parse(config.get('simulation_start_time', self.simulation_start_time)
-                                                      ).replace(tzinfo=ZoneInfo(self.tz))
+                                                      ).replace(tzinfo=tz_obj)
             self.simulation_one_hour_in_seconds = int(config.get('simulation_one_hour_in_seconds',
                                                                  self.simulation_one_hour_in_seconds))
         Timer.set(sim_one_hr_in_sec=self.simulation_one_hour_in_seconds,
                   sim_start_time=self.simulation_start_time,
                   simulation=self.simulation,
-                  tz=ZoneInfo(self.tz)
+                  tz=tz_obj
         )
 
     def _setup_component_objects(self, config):
@@ -198,9 +223,8 @@ class TransactiveNode(Archivable):
 
     def _setup_data_manager(self, config):
         dm_configs = config.get('data_manager', {})
-        # TODO: Make sure that we can run without a DataManager. This chokes if there is not one in the config.
-        #  Alternately, should we have a NullDataManager that just passes when called?
-        dm_class =  get_class_from_spec(dm_configs, default_module_prefix='tent.data_manager', transactive_node=self)
+        # Default to LocalDataManager if not explicitly specified
+        dm_class = get_class_from_spec(dm_configs, default_class_name='LocalDataManager', default_module_prefix='tent.data_manager', transactive_node=self)
         self._data_manager = dm_class(self, **dm_configs)
         self.data_manager.add_tables(self.get_archive_definitions())
 

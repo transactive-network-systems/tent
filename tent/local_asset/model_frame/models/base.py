@@ -88,7 +88,15 @@ class ModelFrame(object):
                 self.models[subscribe_key] = model_class(model_config, parent=self)
             else:
                 module = importlib.import_module(base_module + model_type.lower())
-                model_class = getattr(module, model_type)
+                model_class = getattr(module, model_type, None)
+                if model_class is None:
+                    # Common name fallbacks like 'uncontrolled' -> 'UncontrolledLoad'
+                    for attr in dir(module):
+                        if attr.lower().startswith(model_type.lower()) and not attr.startswith('_'):
+                            model_class = getattr(module, attr)
+                            break
+                if model_class is None:
+                    model_class = getattr(module, model_type)
                 self.models[subscribe_key] = model_class(model_config, parent=self)
 
     def model_flexibility(self, params: dict = None) -> List[float]:

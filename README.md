@@ -313,6 +313,15 @@ source .venv/bin/activate
 pip install -e .
 ```
 
+### 2. Optional Physical Simulator Dependencies
+
+To run physics-backed simulations, install the desired simulator packages:
+
+* **pvlib (Solar Physics)**: `pip install pvlib`
+* **OCHRE (Residential Buildings & Batteries)**: `pip install ochre-nrel "pint==0.24.4"`
+* **GridLAB-D (Distribution Grid Engine)**: Install GridLAB-D C++ engine and `pip install gridlabd` (see [Sphinx Documentation](docs/source/flexibility/installation_and_setup.rst) for full setup instructions).
+* **Replay Datasets**: No external simulator needed (built-in CSV timeseries replay).
+
 ---
 
 ## Running Simulations & CLI Examples
