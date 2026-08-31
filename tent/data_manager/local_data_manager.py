@@ -1,12 +1,12 @@
 import json
 import logging
 
-from datetime import datetime
+from datetime import datetime, time
 from uuid import UUID
 
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
-from sqlalchemy.sql.sqltypes import DateTime, Uuid
+from sqlalchemy.sql.sqltypes import DateTime, Uuid,  Boolean, Time
 from typing import Mapping, Sequence
 
 from tent.data_manager import DataManager
@@ -26,12 +26,18 @@ class LocalDataManager(DataManager):
         self.registry.metadata.create_all(self.engine, checkfirst=True)
         # TODO: Can we check if the database is actually successfully created and ready here?
         self.archive_ready = True
+        # arch_debug = []
+        # for i in self.archival_queue:
+        #     i['data'] = {k: str(v) for k, v in i['data'].items()}
+        #     arch_debug.append(i)
+        # _log.info(f'@@@@@ ARCHIVAL QUEUE HAS: {  arch_debug }')
         self.archive_data()
 
     def archive_data(self, records: Mapping|Sequence = None):
         # TODO: Would it be better to move db write logic into a periodic and always append here to the archival_queue?
         records = records if records else []
         records = [records] if isinstance(records, Mapping) else records
+        #_log.info(f'@@@@@@@ Archiving data: {records}')
         if not self.archive_ready:
             self.archival_queue.extend(records)
             return
@@ -43,7 +49,7 @@ class LocalDataManager(DataManager):
                 _log.warning(f'Attempted to archive data to non-existent table: {table_name}')
                 # Early return so we don't attempt to call a NoneType (regression fix for unit test failure)
                 return
-            _log.debug(rec['data'])
+            #_log.debug(rec['data'])
             record_object = table_orm(**self._normalize_data(table_name, rec['data']))
             sess.add(record_object)
 
@@ -119,11 +125,12 @@ class LocalDataManager(DataManager):
         return table_orm
 
     def _normalize_data(self, table_name: str, data: Mapping) -> dict:
-        table = self.tables.get(table_name)
-        if table is None:
+        orm = self._get_orm(table_name)
+
+        if orm is None:
             return dict(data)
         return {
-            key: self._normalize_value(table.c[key], value) if key in table.c else value
+            key: self._normalize_value(getattr(orm, key), value) if hasattr(orm, key) else value
             for key, value in data.items()
         }
 
@@ -131,6 +138,13 @@ class LocalDataManager(DataManager):
     def _normalize_value(column, value):
         if value is None:
             return None
+        if isinstance(column.type, Boolean):
+            if value in ['T', 'True', 't', 'true', 'TRUE', '1', '1.0', 1, 1.0, 'y', 'Y', 'yes', 'Yes', 'YES']:
+                return True
+            elif value in ['F', 'False', 'FALSE', 'f', 'false', '0', '0.0', 0, 0.0, 'no', 'No', 'NO']:
+                return False
+        if isinstance(column.type, Time) and isinstance(value, str):
+            return time.fromisoformat(value.replace('Z', '+00:00'))
         if isinstance(column.type, DateTime) and isinstance(value, str):
             return datetime.fromisoformat(value.replace('Z', '+00:00'))
         if isinstance(column.type, Uuid) and isinstance(value, str):

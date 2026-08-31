@@ -6,7 +6,7 @@ _log = logging.getLogger(__name__)
 
 class UncontrolledLoad(object):
     def __init__(self, config, **kwargs):
-        self.actuation_topic = None
+        self.actuation_key = None
         self.load_schedule = config['uncontrolled_load_schedule']
         self.n_points = config.get("demand_curve_points", 2)
 

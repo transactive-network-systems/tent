@@ -1,4 +1,8 @@
-from . import ActuationManager
+import logging
+
+from tent.local_asset.actuation_manager import ActuationManager
+
+_log = logging.getLogger(__name__)
 
 
 class ExternalTargetActuationManager(ActuationManager):
@@ -8,10 +12,11 @@ class ExternalTargetActuationManager(ActuationManager):
     def actuate(self, mkt):
         super(ExternalTargetActuationManager, self).actuate(mkt)
         if self.actuation_active:  # TODO: Add ability to determine future active schedule.
-            scheduled_powers_for_mkt = [sp for sp in self.parent.scheduled_powers if sp.market is mkt]
-            for sp in scheduled_powers_for_mkt:
-                start_time = sp.interval.start_time
-                end_time = start_time + sp.interval.duration
+            scheduled_powers_for_mkt = [sp for sp in self.parent.scheduled_powers.all if sp[0].market == mkt]
+            for ti, sp in scheduled_powers_for_mkt:
+                start_time = ti.start_time
+                end_time = start_time + ti.duration
+                _log.info(f'Setting target for{self.parent.name} from {start_time} to {end_time} with value: {sp.value}')
                 self.set_target(target=sp.value, start=start_time, end=end_time)
 
     def set_target(self, target, start, end):
@@ -19,10 +24,10 @@ class ExternalTargetActuationManager(ActuationManager):
 
     def release(self, mkt):
         super(ExternalTargetActuationManager, self).release(mkt)
-        scheduled_powers_for_mkt = [sp for sp in self.parent.scheduled_powers if sp.market is mkt]
-        for sp in scheduled_powers_for_mkt:
-            start_time = sp.interval.start_time
-            end_time = start_time + sp.interval.duration
+        scheduled_powers_for_mkt = [sp for sp in self.parent.scheduled_powers.all if sp[0].market == mkt]
+        for ti, _ in scheduled_powers_for_mkt:
+            start_time = ti.start_time
+            end_time = start_time + ti.duration
             self.release_target(start=start_time, end=end_time)
 
     def release_target(self, start, end):

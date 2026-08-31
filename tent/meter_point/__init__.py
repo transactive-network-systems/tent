@@ -158,7 +158,7 @@ class MeterPoint(Component):
             {
                 "name": "entity_meter_point",
                 "columns": [
-                    {"name": "entity", "foreign_key": "entity.id", "kwargs": {"primary_key": True}},
+                    {"name": "entity_id", "foreign_key": "entity.id", "kwargs": {"primary_key": True}},
                     {"name": "meter_point_id", "foreign_key": "meter_point.id", "kwargs": {"primary_key": True}}
                 ]
             },
@@ -166,7 +166,7 @@ class MeterPoint(Component):
                 "name": "meter_point",
                 "inherits": "component",
                 "columns": [
-                    {"name": "id", "foreign_key": "component.id", "kwargs": {"primary_key": True}},
+                    {"name": "id", "type": "Uuid", "foreign_key": "component.id", "kwargs": {"primary_key": True}},
                     {"name": "class", "type": "String", "type_args": [255]},
                     {"name": "measurement_type", "enumeration": "MeasurementType"},
                     {"name": "measurement_unit", "enumeration": "MeasurementUnit"},

@@ -69,9 +69,9 @@ class Thermostat(object):
         self.coefficients = {"c1", "c2", "c3", "c4"}
         self.rated_power = config["rated_power"]
         self.n_points = config.get("demand_curve_points", 2)
-        self.topic = config.get("topic", None)
+        self.subscribe_key = config.get("subscribe_key", None)
         self.error = False
-        self.actuation_topic = config.get('actuation_topic', None)
+        self.actuation_key = config.get('actuation_key', None)
 
     def predict_flexibility(self, params=None):
         params = params if params else {}
@@ -110,7 +110,7 @@ class Thermostat(object):
             self.current_time = now
             self.error = False
         except KeyError:
-            _log.debug("Error for %s input data on topic %s", self.name, self.topic)
+            _log.debug("Error for %s input data on subscribe_key %s", self.name, self.subscribe_key)
             self.error = True
 
     def _get_q(self, oat, temp, temp_stpt, index):

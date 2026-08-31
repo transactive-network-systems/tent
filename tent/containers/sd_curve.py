@@ -1,5 +1,6 @@
 import logging
 
+from copy import copy
 from sortedcontainers import SortedSet
 try:  # Python <3.11 compatibility
     from typing import Self  # type: ignore
@@ -155,15 +156,6 @@ class SDCurve(Archivable):
                 * The passed arguments are hard minimum and maximum power limits.
                 * The maximum and minimum vertices in the SDCurve are soft constraints.
         """
-        # # TODO: This seemed wrong. Shouldn't min_power, for instance, be max(self.min_power, min(vertex_powers))?
-        #    I think this may have been the result of assuming demand was negative and that the limits provided for
-        #    demand entities would be positive, but that is not going to always be the case.
-        #    This line of thinking informs how the replacement lines below are done.
-        #    If this was correct before, change it back, otherwise, delete this commented block.
-        # vertex_powers = [x.quantity for x in self.vertices]  # [avg.kW]
-        # min_power = max(-self.max_power, min(vertex_powers))  # [avg.kW]
-        # max_power = min(-self.min_power, max(vertex_powers))  # [avg.kW]
-
         # Find the minimum and maximum powers from the SDCurve.
         #  These are soft constraints that represent a range of flexibility.
         min_power = self.min_quantity(limit=minimum_power)
@@ -173,16 +165,16 @@ class SDCurve(Archivable):
         #  ensure vertices exist at the extrema of the flexibility range.
         if min_power != max_power:
             if not self.has_vertex_at_quantity(min_power):
-                self.update(Vertex(price=(self.price_from_vertices(min_power)), cost=0, quantity=min_power))
+                self.update(Vertex(price=(self.price_from_vertices(min_power)), cost=0, quantity=min_power),
+                            archive=False)
             if not self.has_vertex_at_quantity(max_power):
-                self.update(Vertex(price=(self.price_from_vertices(max_power)), cost=0, quantity=max_power))
+                self.update(Vertex(price=(self.price_from_vertices(max_power)), cost=0, quantity=max_power),
+                            archive=False)
         elif len(self.vertices) == 1:
             self.vertices[0].price = float('inf')
         else:
-            # TODO: Does this correctly identify the neighbor when called from prep_transactive_signal?
-            #  The SDCurve was created by a Market.sum_vertices()...
             owner_name = getattr(getattr(self.measurement, 'source', None), 'name', 'unknown')
-            _log.error(f'Unexpected flexibility logic while bounding SDCurve in {owner_name}. '
+            _log.warning(f'Unexpected flexibility logic while bounding SDCurve in {owner_name}. '
                        f'Maximum and minimum power are the same, but in separate vertices.')
 
         # Trim the list of vertices to remove any that are outside the soft flexibility range.
@@ -353,32 +345,34 @@ class SDCurve(Archivable):
                         # The marginal price is the same as the indexed active vertex. Use its power value.
                         return lower.quantity  # [kW]
 
-    def price_from_vertices(self, power: float) -> float:
+    def price_from_vertices(self, quantity: float) -> float:
         """ Given a power [avg.kW], determine the corresponding marginal price [$/kWh] from the SDCurve.
         """
         # TODO: This and power_from_vertices assume a rational curve (power monotonic with price). Is this actually guaranteed?
-        if power < self.vertices[0].quantity:
+        if quantity < self.vertices[0].quantity:
             # The power is below the first vertex. Marginal price is indeterminate.
             #  Return price of the first vertex and warn. (This should be an unlikely condition.)
-            _log.warning('Indeterminate price: Power was lower than first vertex.')
+            _log.warning(f'Indeterminate price: Quantity provided ({quantity})'
+                         f' is lower than that of first vertex ({self.vertices[0].quantity}).')
             return self.vertices[0].price
 
-        elif power >= self.vertices[-1].quantity:
+        elif quantity >= self.vertices[-1].quantity:
             # The power is above the last vertex. Marginal price is indeterminate.
             # Return price of the last vertex and warn. (This should be an unlikely condition.)
-            _log.warning('Indeterminate price: Power was greater than last vertex.')
+            _log.warning(f'Indeterminate price: Quantity provided ({quantity})'
+                         f' is greater than that of last vertex ({self.vertices[-1].quantity}).')
             return self.vertices[-1].price
 
         # # The marginal power lies among the active vertices.
         for lower, upper in zip(self.vertices, self.vertices[1:]):
-            if lower.quantity == power == upper.quantity:
+            if lower.quantity == quantity == upper.quantity:
                 # The segment is horizontal. Marginal price is indefinite. Return the second vertex price and warn.
                 _log.warning('Indeterminate price due to horizontal segment of SDCurve. Returning second price.')
                 return upper.price
-            elif lower.quantity <= power < upper.quantity:
+            elif lower.quantity <= quantity < upper.quantity:
                 # The segment is not horizontal. Interpolate on the segment.
                 slope = (upper.price - lower.price) / (upper.quantity - lower.quantity)  # [$/kWh/kW]
-                return lower.price + (power - lower.quantity) * slope  # [$/kWh]
+                return lower.price + (quantity - lower.quantity) * slope  # [$/kWh]
 
     @staticmethod
     def get_prices_from_curves(curves: list) -> list[float]:
@@ -414,6 +408,22 @@ class SDCurve(Archivable):
 
     def __len__(self):
         return len(self.vertices)
+
+    def __copy__(self):
+        """
+        Returns a copy of this SDCurve object.
+        This is a redefinition of method copy.copy() that will be evoked when a SDCurve object is to be copied.
+        The copy will have the same properties as this SDCurve, but will not have the same Archivable id nor timestamp.
+        The new curve will not be archived on creation.
+
+        Parameters: None
+        """
+        return SDCurve(
+            measurement=self.measurement,
+            interval=self.interval,
+            vertices=[copy(v) for v in self.vertices],
+            archive=False
+        )
 
     def update(self, value: Vertex | dict | list[float|int] | list[Vertex] | list[list[float|int]] | list[dict], archive: bool = True):
         # TODO: Should this have a default value like in the constructor?
@@ -472,13 +482,14 @@ class SDMeasurement(Measurement):
     def __init__(self,
                  source: Component,
                  measurement_type: MeasurementType = MeasurementType.Vertex,
-                 measurement_unit: MeasurementUnit = MeasurementUnit.kW):
+                 measurement_unit: MeasurementUnit = MeasurementUnit.kW,
+                 archive_now: bool = True):
                 # TODO: Adding vertex_unit: MeasurementUnit would allow SDCurves for quantities other than power.
                 #  This would require also adding the unit to the TransactiveSignal and making sure it is passed
                 #  everywhere it needs to be.
         if not 'Vertex' in measurement_type.name:
             raise ValueError('SDMeasurement must contain vertex-type objects.')
-        super(SDMeasurement, self).__init__(source, MeasurementType.Vertex, measurement_unit)
+        super(SDMeasurement, self).__init__(source, measurement_type, measurement_unit, archive_now)
 
     @property
     def empty(self):

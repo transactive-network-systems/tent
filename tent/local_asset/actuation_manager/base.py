@@ -2,11 +2,13 @@ import logging
 import weakref
 
 from abc import ABCMeta, abstractmethod
+from weakref import proxy
 
 from tent.local_asset import LocalAsset
 from tent.transactive_node import TransactiveNode
+from tent.utils.helpers import safe_weak_proxy_callback
 
-from ..occupancy_manager.simple import OccupancyManager
+from ..occupancy_manager import OccupancyManager
 
 _log = logging.getLogger(__name__)
 
@@ -18,14 +20,15 @@ class ActuationManager(metaclass=ABCMeta):
                  # outputs: Dict[dict] = None,  # TODO: How is this handled in parent?
                  parent: LocalAsset = None,
                  occupancy_manager: OccupancyManager = None,
-                 transactive_node: TransactiveNode = None):
+                 transactive_node: TransactiveNode = None,
+                 **kwargs):
         self.active_onstart = active_onstart
         self.control_interval = control_interval
         # self.outputs = outputs if outputs else []
-        self.parent = parent if parent else LocalAsset()  # TODO: This needs a transactive node.
+        self.parent = parent if parent else LocalAsset(transactive_node)
         # TODO: Does this really need to be a weak reference? Should probably be a proxy if it does.
-        self.occupancy_manager = None if occupancy_manager is None else weakref.ref(occupancy_manager)
-        self.tn = None if transactive_node is None else weakref.ref(transactive_node)
+        self.occupancy_manager = proxy(occupancy_manager, safe_weak_proxy_callback(self, 'occupancy_manager'))
+        self.tn = transactive_node
 
         self.actuation_active = False
         self.actuation_allowed = True if self.active_onstart else False
@@ -43,9 +46,15 @@ class ActuationManager(metaclass=ABCMeta):
     @abstractmethod
     def actuate(self, mkt):
         start_time = mkt.transition_times.delivery
-        end_time = mkt.transition_times.reconciliation
-        ocm = self.occupancy_manager() if self.occupancy_manager else self.occupancy_manager
-        if ocm and ocm.check_schedule(start_time) and ocm.check_schedule(end_time) and self.actuation_allowed:
+        end_time = start_time + mkt.series.duration.market_interval
+        _log.info(f'Actuating {self.parent.name} for market: {mkt.name} with actuator {self.__class__.__name__}'
+                  f' from {start_time.strftime("%A, %B %d -- %H:%M:%S")}'
+                  f' to {end_time.strftime("%A, %B %d -- %H:%M:%S")}')
+        if (self.occupancy_manager
+            and self.occupancy_manager.check_schedule(start_time)
+            and self.occupancy_manager.check_schedule(end_time)
+            and self.actuation_allowed
+        ):
             self.actuation_active = True
         else:
             if self.actuation_active:
@@ -54,6 +63,7 @@ class ActuationManager(metaclass=ABCMeta):
 
     @abstractmethod
     def release(self, mkt):
+        _log.info(f'Releasing actuation for {self.parent.name} with actuator {self.__class__.__name__}')
         # Override to implement release behavior
         pass
 

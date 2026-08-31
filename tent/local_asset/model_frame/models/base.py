@@ -62,21 +62,20 @@ class ModelFrame(object):
         self.demand_curve_points = config.get('demand_curve_points', 2)
         base_module = "tent.local_asset.model_frame.models."
         for model in config['models']:
-            try:
-                topic = model["topic"]
-                model_type = model.get("model_type")
-            except KeyError as e:
-                _log.exception("Missing Model Type key: {}".format(e))
-                raise e
+            subscribe_key = model.get("subscribe_key", model.get("topic"))
+            if not subscribe_key:
+                raise KeyError("Model configuration is missing 'subscribe_key' or 'topic'")
 
+            model_type = model.get("model_type")
             model_config = model.get('model_config', {})
             model_config['demand_curve_points'] = self.demand_curve_points
-            model_config['topic'] = topic
+            model_config['subscribe_key'] = subscribe_key
+            model_config['topic'] = subscribe_key
 
             # Support direct FMI / preset configurations
             if not model_type or model_type.lower() in ("fmi", "flexibility_model", "fmi_adapter"):
                 from .fmi_adapter import FlexibilityModelFrameAdapter
-                self.models[topic] = FlexibilityModelFrameAdapter(model_config, parent=self)
+                self.models[subscribe_key] = FlexibilityModelFrameAdapter(model_config, parent=self)
             elif "." in model_type:
                 _file, m_type = model_type.split(".", 1)
                 try:
@@ -86,11 +85,11 @@ class ModelFrame(object):
                     # Try importing as absolute module path
                     module = importlib.import_module(_file)
                     model_class = getattr(module, m_type)
-                self.models[topic] = model_class(model_config, parent=self)
+                self.models[subscribe_key] = model_class(model_config, parent=self)
             else:
                 module = importlib.import_module(base_module + model_type.lower())
                 model_class = getattr(module, model_type)
-                self.models[topic] = model_class(model_config, parent=self)
+                self.models[subscribe_key] = model_class(model_config, parent=self)
 
     def model_flexibility(self, params: dict = None) -> List[float]:
         params = params if params else {}
@@ -99,7 +98,7 @@ class ModelFrame(object):
             try:
                 q[i, :] = model.predict_flexibility(params=params)
             except KeyError:
-                _log.debug("Error making prediction for %s", model.topic)
+                _log.debug(f"Error making prediction for {model.subscribe_key}.")
         flexibility = q.sum(axis=0)
         return list(flexibility)
 
@@ -111,13 +110,13 @@ class ModelFrame(object):
                 q += model.predict_power(params=params, set_point=None)
                 # _log.debug(f'Power after {k}: {q}')
             except KeyError:
-                _log.debug("Error making prediction for %s", model.topic)
+                _log.debug(f"Error making prediction for {model.subscribe_key}.")
         return q
 
 #
 # class BaseModel(object):
-#     def __init__(self, actuation_topic: str = None):
-#         self.topic = actuation_topic
+#     def __init__(self, actuation_key: str = None):
+#         self.actuation_key = actuation_key
 #
 #     def predict_flexibility(self, params: dict = None) -> Iterable[float]:
 #         pass

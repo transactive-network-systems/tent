@@ -39,7 +39,6 @@ class MatchingStrategy(Enum):
 # The following constants may be assigned here and will affect instantiated MatchingEngine objects.
 MATCHING_STRATEGY: list = [MatchingStrategy.ORDER_VOLUME]  # order of matching strategies - See Enum MatchingStrategy.
 HAS_MARKET: bool = True  # set True if this agent performs market matching
-MARKET_SERIES_NAME: str = "Matching_Engine"
 NEGOTIATION_LEAD_TIME: timedelta = timedelta(hours=24.0)  # time prior to the delivery time with orders become permitted
 DELIVERY_LEAD_TIME: timedelta = timedelta(minutes=15.0)  # time prior to deliver that orders become disallowed
 INTERVAL_DURATION: timedelta = timedelta(hours=1.0)  # duration of delivery period
@@ -54,7 +53,6 @@ class MatchingEngine(Market):
     Protected Parameters: (Cannot be altered after object initialization)
         matching_strategy: (MatchingStrategy) See enumeration MatchingStrategy.
         has_market: (boolean) True if this TransactiveNode hosts a MatchingEngine marketplace.
-        market_series_name: (string)
         negotiation_lead_time: (timedelta) Duration of Negotiation market state.
         delivery_lead_time: (timedelta) Duration of time between Negotiation stop and Delivery start.
         interval_duration: (timedelta) Duration of market time interval.
@@ -85,7 +83,6 @@ class MatchingEngine(Market):
             self,
             matching_strategy: list or None = None,  # PROTECTED
             has_market: bool = HAS_MARKET,  # PROTECTED
-            market_series_name=MARKET_SERIES_NAME,  # PROTECTED
             negotiation_lead_time: timedelta = NEGOTIATION_LEAD_TIME,  # PROTECTED. duration of negotiation period
             delivery_lead_time: timedelta = DELIVERY_LEAD_TIME,  # PROTECTED. time when negotiations stop prior to
             #                                                      delivery
@@ -106,7 +103,6 @@ class MatchingEngine(Market):
             market_clearing_interval=interval_duration,
             market_clearing_time=delivery_start_time - delivery_lead_time,
             market_lead_time=timedelta(hours=0.0),
-            market_series_name=market_series_name,
             market_to_be_refined="Subscription_Market",
             negotiation_lead_time=negotiation_lead_time,
             prior_market_in_series=prior_market_in_series
@@ -420,7 +416,6 @@ class MatchingEngine(Market):
             delivery_start_time=new_market_clearing_time + self.deliveryLeadTime,
             has_market=True,
             interval_duration=self.series.duration.market_interval,
-            market_series_name=self.series.name,
             matching_strategy=self.matchingStrategy,
             # name=self.name,
             negotiation_lead_time=self.negotiationLeadTime,

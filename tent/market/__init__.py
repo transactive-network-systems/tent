@@ -70,19 +70,27 @@ class Market(Component):
     def __init__(self,
                  transactive_node,
                  market_series,
-                 transition_times: MarketTimings,
+                 initial_market_state: MarketState = None,
+                 transition_times: MarketTimings = None,
                  market_to_be_refined=None,
                  prior_market_in_series=None,
                  price_model=None
                  ):
+        if isinstance(initial_market_state, MarketTimings) and transition_times is None:
+            transition_times = initial_market_state
+            initial_market_state = MarketState.Inactive
+        elif initial_market_state is None:
+            initial_market_state = MarketState.Inactive
+
         # Build market name BEFORE calling Component.__init__ (self.name not yet set)
-        series_description = getattr(market_series, 'description', getattr(market_series, 'name', 'Market'))
-        base_name = str(series_description).replace(' ', '_')
-        market_name = f"{base_name}_{transition_times.delivery_lead.isoformat(timespec='seconds')}"
-        super(Market, self).__init__(series_description, market_name, transactive_node)
-        # Backwards compatibility: some legacy code expects market_series_name attr
-        if not hasattr(self, 'market_series_name'):
-            self.market_series_name = getattr(market_series, 'name', base_name)
+        series_name = getattr(market_series, 'name', 'MarketSeries')
+        if not isinstance(series_name, str):
+            series_name = 'MarketSeries'
+        delivery_lead_str = transition_times.delivery_lead.isoformat(timespec='seconds') if transition_times and hasattr(transition_times, 'delivery_lead') and hasattr(transition_times.delivery_lead, 'isoformat') else '0'
+        market_name = '_'.join((*series_name.split(' '), delivery_lead_str))
+        series_desc = getattr(market_series, 'description', '')
+        super(Market, self).__init__(series_desc, market_name, transactive_node)
+
         self.series: MarketSeries = proxy(market_series, safe_weak_proxy_callback(self, 'market_series'))
         self.transition_times: MarketTimings = transition_times
 
@@ -102,7 +110,7 @@ class Market(Component):
         self.blended_prices2: Measurement = Measurement(self, MeasurementType.BlendedPrice, MeasurementUnit.Monetary)  # (future functionality)
         self.converged: bool = False
         self.dual_costs: Measurement = Measurement(self, MeasurementType.DualCost, MeasurementUnit.Monetary)  # Values are [$]
-        self.market_state: MarketState = self.series.initial_market_state  # TODO: Is this still even needed?
+        self.market_state: MarketState = initial_market_state
         self.marginal_prices: Measurement = Measurement(self, MeasurementType.MarginalPrice, MeasurementUnit.Monetary) # [$/kWh]
         self.net_powers: Measurement = Measurement(self, MeasurementType.NetPower, MeasurementUnit.kW)  # [avg.kW]
         self.price_model = price_model
@@ -187,13 +195,17 @@ class Market(Component):
             self._stateIsCompleted = False
             # Fall through to the Expired handler at the bottom of this method.
 
+        # TODO: Is the INITIAL state is used to set up the first market in a series.
+        #  This should probably be used to create priors which this market will use so that it is not warning
+        #  about steps yet to be completed. Even with the market series, it may still be useful because
+        #  different market types may have different setup requirements.
         # EVENT 0: % FIRST INSTANTIATION OF A MARKET SERIES ************************************************************
         # First time setup of a new market series.
         if self.market_state == MarketState.Initial:
             self.transition_from_initial_to_inactive()
             self.market_state = MarketState.Inactive
 
-            # 210118DJH: New flag. Set false upon transition to new market state.
+            # Set false upon transition to new market state.
             self._stateIsCompleted = False
 
         # EVENT 1A: % A NEW MARKET OBJECT BECOMES ACTIVE ***************************************************************
@@ -203,8 +215,7 @@ class Market(Component):
         # the market's clearing time. Note that this logic seems a little backward because the state's start must be
         # determined *before* the needed market object exists.
 
-        # TODO: Moved spawn() call to next block, since it has same time trigger.
-        #  Rework comments to reflect use of self.transition_times.
+        # TODO: Rework comments to reflect use of self.transition_times.
 
         # EVENT 1B: TRANSITION FROM INACTIVE TO ACTIVE STATE ***********************************************************.
         if self.market_state == MarketState.Inactive:  # and self._stateIsCompleted is True:
@@ -432,9 +443,11 @@ class Market(Component):
             # Delete market intervals that are defined by this market object.
             self.time_intervals.destroy()
 
-            # Remove the expired market from the transactive node's flat list.
-            self.tn.markets[:] = [x for x in self.tn.markets if x != self]
-
+            # Remove the expired market from the containing Market Series.
+            expired_markets = [x for x in self.series.markets if x == self]
+            for expired in expired_markets:
+                _log.info(f'Removing expired market: {expired}')
+                self.series.markets.discard(expired)
             # Mark completed so this block is not re-entered on subsequent events() calls.
             # NOTE: Removal from series.markets is NOT done here because events() may be called
             # during iteration over series.markets. Pruning is handled by
@@ -571,7 +584,7 @@ class Market(Component):
 
         # Tell Local Assets it is time to actuate.
         self._actuate_assets()
-        self.balanced_price_publish()
+        # self.balanced_price_publish() # TODO: Is this something that should still exist?
         return None
 
     def balanced_price_publish(self):  # TODO: Should this be replaced with archival functionality?
@@ -855,7 +868,7 @@ class Market(Component):
         for neighbor in self.tn.neighbors:
             neighbor.schedule(self)
 
-    def sum_vertices(self, time_interval, object_to_exclude=None):
+    def sum_vertices(self, time_interval, object_to_exclude=None, enclosing_measurement: Measurement | None = None):
         """
         Create system vertices with system information for a single time interval. An optional argument allows the
         exclusion of a transactive neighbor object, which is useful for transactive records and their corresponding
@@ -879,6 +892,8 @@ class Market(Component):
 
             if not sd_curve.empty:
                 marginal_price_list.update([float("inf")] if len(sd_curve) == 1 else sd_curve.prices)  # [$/kWh]
+            else:
+                _log.warning(f'No vertices found for {entity.name} in time interval {time_interval.name}.')
 
         # Keep only two (near) duplicates of any marginal price.
         #   Where there are two instances of a price, offset one by a small number so the SDCurve remains a function.
@@ -893,7 +908,10 @@ class Market(Component):
         # A clean set of marginal prices has been created. Create vertices at the marginal prices.
         # TODO: Reevaluate passing vertices=[] here. Without it, SDCurve defaults to a dummy (0,0) vertex.
         #  Is it worth creating an SDCurve with empty vertices, or should we handle the no-prices case earlier?
-        summed_curve = SDCurve(None, time_interval, vertices=[])
+
+        # TODO: Added archive=False here to avoid second write when sending transactive signals.
+        #  Do other areas of code need to handle archival now?
+        summed_curve = SDCurve(enclosing_measurement, time_interval, vertices=[], archive=False)
         # Index through the cleaned list of marginal prices
         for mp in marginal_price_set:
             # Create a vertex at the indexed marginal price value
@@ -911,8 +929,7 @@ class Market(Component):
                 vertex.quantity += entity_production  # [avg.kW]
 
             # Append Vertex iv to the list of vertices
-            summed_curve.update(vertex)
-
+            summed_curve.update(vertex, archive=False)  # TODO: Set archive false to prevent second write on prep_signal. Does this change usage elsewhere?
         return summed_curve
 
     def update_costs(self):

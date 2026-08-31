@@ -53,12 +53,12 @@ class MarketState(Enum):
     events(), which is a state machine that transitions between a set of these enumerated states. Implementers may
     modify the actions taken during transitions between these states and while in the various states.
 
-    240207DJH: Making Initial same as Inactive. Proper handling of initial market state is via attribute
-               market.initial_market_state.
     """
-    Initial = 2         # First run of a market in a new market series
+    # TODO: Probably need to update this to reflect the states which are actually used.
+    # TODO: Probably should reorder them to numerically follow the order of the state machine.
+    Initial = 0         # First run of a market in a new market series
     Active = 1          #
-    Inactive = 2        # Unneeded, inactive
+    Inactive = 2        # The market object has been created, but is not yet active.
     Delivery = 3        # The system is currently in the interval period
     DeliveryLead = 4    #
     Expired = 5         # Reconciliation is concluded. The interval is inactive

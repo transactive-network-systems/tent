@@ -1,5 +1,7 @@
 import logging
 
+from datetime import datetime, timezone
+
 from tent.containers.time_interval import TimeInterval
 from tent.containers.vertex import Vertex
 from tent.local_asset import LocalAsset
@@ -14,6 +16,7 @@ _log = logging.getLogger(__name__)
 
 class ModelFrameAsset(LocalAsset, ModelFrame):
     def __init__(self,
+                 transactive_node,
                  model_configs: dict = None,
                  temperature_forecast_name: str = '',
                  actuation_manager: dict = None,
@@ -21,43 +24,56 @@ class ModelFrameAsset(LocalAsset, ModelFrame):
                  *args, **kwargs):
         model_configs = model_configs if model_configs else {}
         ModelFrame.__init__(self, model_configs, **kwargs)
-        LocalAsset.__init__(self, *args, **kwargs)
+        LocalAsset.__init__(self, transactive_node, *args, **kwargs)
 
         self.temperature_forecast_name = temperature_forecast_name
-        # self.actuation_method = actuation_method
-        # self.actuator_identity = actuator_identity
-        # self.ilc_target_topic = ilc_target_topic
 
+        # TODO: Occupation and ActuationManagers should probably be loaded from class methods on the base classes.
         # Initialize Scheduler
         self.occupancy_manager: OccupancyManager | None = None
         if occupancy_manager:  # TODO: Implement default behavior if occupancy_manager is not specified (make an always occupied base class).
-            om_class = get_class_from_spec(occupancy_manager, 'OccupancyManager', 'tent.local_asset.occupancy_manager')
+            om_class = get_class_from_spec(occupancy_manager, 'SimpleOccupancyManager', 'tent.local_asset.occupancy_manager')
             self.occupancy_manager = om_class(**occupancy_manager)
 
         self.actuation_manager = None
-        for device_topic in self.models:
-            if 'Uncontrolled' in device_topic:
+        for subscribe_key in self.models:
+            if 'Uncontrolled' in subscribe_key:
                 continue
-            _log.info("Subscribing to " + device_topic)
-            self.tn.register_subscription(subscribe_key=device_topic, callback=self.new_model_data)
+            self.tn.register_subscription(subscribe_key=subscribe_key, callback=self.new_model_data)
 
-            # Initialize Actuation Manager
-            if actuation_manager:
-                # TODO: The default module_prefix doesn't quite work with the default class.
-                #  Need better detection logic in the helper function.
-                am_class = get_class_from_spec(actuation_manager, 'ActuationManager', transactive_node=self.tn,
-                                               default_module_prefix='tent.local_asset.actuation_manager')
-                self.actuation_manager = am_class(parent=self, occupancy_manager=self.occupancy_manager,
-                                                  **actuation_manager)
+        # Initialize Actuation Manager
+        if actuation_manager:
+            # TODO: The default module_prefix doesn't quite work with the default class.
+            #  Need better detection logic in the helper function.
+            am_class = get_class_from_spec(actuation_manager, 'NullActuationManager', transactive_node=self.tn,
+                                           default_module_prefix='tent.local_asset.actuation_manager')
+            self.actuation_manager = am_class(parent=self, occupancy_manager=self.occupancy_manager,
+                                              **actuation_manager)
+            _log.info(f'Configured actuator {am_class.__name__} for asset: {self.name}')
 
-    def new_model_data(self, message: dict):
+    def new_model_data(self, *args, **kwargs):
         """Ingest new data for models in ModelFrame.
-            data: {'datetime': <datetime>, 'data': {<key>: <value>}}
+        Supports both signatures:
+          new_model_data(time_received: datetime, subscribe_key: str, message: dict)
+          new_model_data(message: dict)
         """
-        now = message['datetime']
-        for key, data in message['data'].items():
-            if key in self.models:
-                self.models[key].update_data(data, now)
+        if len(args) == 3:
+            time_received, subscribe_key, message = args
+            if subscribe_key in self.models:
+                self.models[subscribe_key].update_data(message, time_received)
+        elif len(args) == 1 and isinstance(args[0], dict):
+            msg = args[0]
+            now = msg.get('datetime', datetime.now(timezone.utc))
+            data = msg.get('data', {})
+            for key, val in data.items():
+                if key in self.models:
+                    self.models[key].update_data(val, now)
+        elif 'subscribe_key' in kwargs and 'message' in kwargs:
+            time_received = kwargs.get('time_received', datetime.now(timezone.utc))
+            subscribe_key = kwargs['subscribe_key']
+            message = kwargs['message']
+            if subscribe_key in self.models:
+                self.models[subscribe_key].update_data(message, time_received)
 
     def _get_scheduled_power_from_model(self, time_interval: TimeInterval, outside_air_temperature) -> float:
         """Return a schedule power value for one interval from a model."""
@@ -99,20 +115,22 @@ class ModelFrameAsset(LocalAsset, ModelFrame):
         # - Updates self.scheduledPowers - the schedule of power consumed
         temp_services = [x for x in self.information_services if x.name == self.temperature_forecast_name] if (self.information_services and self.temperature_forecast_name) else []
         temp_forecast = temp_services[0] if temp_services else None
-        default_value = self.default_power
+        if temp_forecast is not None and hasattr(temp_forecast, 'update_information'):
+            temp_forecast.update_information(market)
 
         for time_interval in market.time_intervals:
             outside_air_temperature = None
             if temp_forecast is not None:
-                val = temp_forecast.predicted_values.get_by_interval(time_interval)
-                if val is not None:
-                    outside_air_temperature = val.value
+                outside_air_temperature = temp_forecast.predicted_values.get_by_interval(time_interval)
 
-            # Get new scheduled power value for this time interval:
-            modeled_value = self._get_scheduled_power_from_model(time_interval, outside_air_temperature)
-            value = modeled_value if modeled_value is not None else default_value  # Use default if modeled values is not available.
+            if hasattr(outside_air_temperature, 'value'):
+                modeled_value = self._get_scheduled_power_from_model(time_interval, outside_air_temperature.value)
+            elif outside_air_temperature is not None and isinstance(outside_air_temperature, (int, float)):
+                modeled_value = self._get_scheduled_power_from_model(time_interval, outside_air_temperature)
+            else:
+                modeled_value = self._get_scheduled_power_from_model(time_interval, None)
 
-            # Check whether a scheduled power already exists for the indexed time interval:
+            value = modeled_value if modeled_value is not None else self.default_power
             self.scheduled_powers.update(time_interval, value)
 
         self.schedule_calculated = True
@@ -125,11 +143,21 @@ class ModelFrameAsset(LocalAsset, ModelFrame):
         for time_interval in market.time_intervals:
             outside_air_temperature = None
             if temp_forecast is not None:
-                val = temp_forecast.predicted_values.get_by_interval(time_interval)
-                if val is not None:
-                    outside_air_temperature = val.value
+                outside_air_temperature = temp_forecast.predicted_values.get_by_interval(time_interval)
 
-            power_flexibility = self._get_power_flexibility_from_model(time_interval, outside_air_temperature)
+            if hasattr(outside_air_temperature, 'value'):
+                oat_val = outside_air_temperature.value
+            elif outside_air_temperature is not None and isinstance(outside_air_temperature, (int, float)):
+                oat_val = outside_air_temperature
+            else:
+                oat_val = None
+
+            power_flexibility = self._get_power_flexibility_from_model(time_interval, oat_val)
+            if power_flexibility is None:
+                power_flexibility = [self.default_power, self.default_power]
+                _log.warning(f'No outside air temperature found for interval {time_interval.name}.'
+                             f' Using default ({power_flexibility}) for power flexibility.')
+
             price_flexibility = self._get_price_flexibility(time_interval, market)
             self.active_vertices.update(time_interval, self._create_vertices(power_flexibility, price_flexibility))
 

@@ -54,6 +54,7 @@ except ImportError:
     from typing_extensions import Self
 
 from tent.containers import SDCurve, SDMeasurement, TimeInterval, Vertex
+from tent.enumerations import MeasurementType, MeasurementUnit
 from tent.utils.timer import Timer
 
 if TYPE_CHECKING:
@@ -72,7 +73,9 @@ class TransactiveSignal(SDMeasurement):
         self.direction = direction
         self.signal_time: datetime | None = signal_time
         self.__balance_vertices: WeakKeyDictionary[TimeInterval, Vertex] = WeakKeyDictionary()
-        super(TransactiveSignal, self).__init__(source=neighbor, **kwargs)
+        super(TransactiveSignal, self).__init__(source=neighbor, measurement_type=MeasurementType.SignalVertex,
+                                                measurement_unit=MeasurementUnit.kW, archive_now=False)
+        # TODO: kW is a poor unit description of an SDCurve. What should we use?
 
     def balance_point(self, time_interval: TimeInterval) -> Vertex | None:
         """Get the balance point vertex for the specified time interval."""
@@ -80,6 +83,7 @@ class TransactiveSignal(SDMeasurement):
 
     def flexibility_vertices(self, time_interval: TimeInterval) -> list[Vertex]:
         """Get the non-balance-point vertices for the specified time interval."""
+        # TODO: Double check that is works as a comparison here. If there is a weak reference, we need to use ==.
         return [v for v in self.get_by_interval(time_interval).vertices if v is not self.balance_point(time_interval)]
 
     def _add_balance_vertices(self, scheduled_powers):
@@ -92,13 +96,12 @@ class TransactiveSignal(SDMeasurement):
                 sd_curve.update(vertex)
                 self.__balance_vertices[ti] = vertex
 
-
     def generate_signal(self, scheduled_powers=None):
         if scheduled_powers is not None:
             self._add_balance_vertices(scheduled_powers)
         self.signal_time = Timer.now()
         self.direction = 'sent'
-        self.archive()
+        # self.archive()
         intervals = {}
         for ti, sd in self.all:
             flexibility = {
@@ -120,7 +123,7 @@ class TransactiveSignal(SDMeasurement):
             'neighbor': self.neighbor.tn.name,
             'protocol_version': self.PROTOCOL_VERSION,
             'signal_time': self.signal_time.isoformat(),
-            'unit': self.unit,
+            'unit': self.unit.name,
             'intervals': intervals
         }
 
@@ -142,7 +145,7 @@ class TransactiveSignal(SDMeasurement):
             if not (market := tn.get_market_by_name(message['market'])):
                 _log.warning(f'Unable to find valid market "{market}" from received transactive signal.')
                 return  # TODO: Should we raise on bad market or neighbor and let the caller handle it?
-            if not (neighbor := tn.get_neighbor_by_name(message['neighbor'])):
+            if not (neighbor := tn.get_neighbors_by_attribute('name', message['neighbor'], first_only=True)):
                 _log.warning(f'Unable to find valid neighbor "{neighbor}" from received transactive signal.')
             signal_time = datetime.fromisoformat(message['signal_time']) if message.get('signal_time') else None
             signal = cls(market=market, neighbor=neighbor, direction='received',
@@ -175,7 +178,7 @@ class TransactiveSignal(SDMeasurement):
                     # If this is the balance point, we need to store the index for later retrieval.
                     signal.__balance_vertices[time_interval] = vertex
 
-            signal.update(time_interval, vertices, archive=True)
+            signal.update(time_interval, vertices, archive=False, replace=True) #archive=True)
         signal.archive()
         return signal
 

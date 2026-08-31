@@ -1,4 +1,8 @@
+import logging
+
 from . import ActuationManager
+
+_log = logging.getLogger(__name__)
 
 
 class DirectRatioActuationManager(ActuationManager):
@@ -11,14 +15,12 @@ class DirectRatioActuationManager(ActuationManager):
             # TODO: Is price assignment just trying to find the first price in delivery?
             #  If so, there is now a Measurement.first method. If not, this needs to be reworked.
             price = [v.value for ti, v in mkt.marginal_prices.all if ti.start_time == mkt.transition_times.delivery][0]
-            # active_vertices is an SDMeasurement: iterate .all to get (TimeInterval, SDCurve) pairs,
-            # then read the SDCurve's .vertices for the delivery interval.
-            delivery_curve = next(
-                (sdc for ti, sdc in self.parent.active_vertices.all
-                 if ti.start_time == mkt.transition_times.delivery),
-                None,
-            )
-            vertex_prices = [v.price for v in delivery_curve.vertices] if delivery_curve else []
+            vertex_prices = [
+                av.price
+                for ti, sdc in self.parent.active_vertices.all
+                for av in sdc.vertices
+                if ti.start_time == mkt.transition_times.delivery
+            ]
             if not vertex_prices:
                 return
             min_price = min(vertex_prices)
@@ -26,7 +28,7 @@ class DirectRatioActuationManager(ActuationManager):
             price = min(max(price, min_price), max_price)  # clamp price within bid range.
             cleared_price_ratio = (price - min_price) / (max_price - min_price)
             for model in self.parent.models.values():  # TODO: Generalize this away from models in ModelFrameAsset.
-                if model.actuation_topic:
+                if model.actuation_key:
                     min_set_point, max_set_point = model.set_point_range(mkt.transition_times.delivery)
                     # For forward-acting (cooling) mode:
                     new_set_point = (cleared_price_ratio * (max_set_point - min_set_point)) + min_set_point
@@ -35,7 +37,7 @@ class DirectRatioActuationManager(ActuationManager):
                     #  and a deadband. For lighting, it is always reverse-acting (heating).
                     # new_set_point = max_set_point - (cleared_price_ratio * (
                     #            max_set_point - min_set_point))
-                    self.direct_actuate(model.actuation_topic, new_set_point)
+                    self.direct_actuate(model.actuation_key, new_set_point)
 
     def direct_actuate(self, target_id, new_set_point):
         pass
@@ -43,8 +45,8 @@ class DirectRatioActuationManager(ActuationManager):
     def release(self, mkt):
         super(DirectRatioActuationManager, self).release(mkt)
         for model in self.parent.models.values():  # TODO: Generalize this away from models in ModelFrameAsset.
-            if model.actuation_topic:
-                self.direct_release(model.actuation_topic)
+            if model.actuation_key:
+                self.direct_release(model.actuation_key)
 
     def direct_release(self, target_id):
         pass

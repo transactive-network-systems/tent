@@ -11,7 +11,7 @@ class Lighting(object):
         self.rated_power = config["rated_power"]
         self.max_set_point_offset = config.get('max_set_point_offset', 0.1)
         self.n_points = config.get("demand_curve_points", 2)
-        self.actuation_topic = config.get('actuation_topic', None)
+        self.actuation_key = config.get('actuation_key', None)
         try:
             self.lighting_schedule = config["default_lighting_schedule"]
         except KeyError:

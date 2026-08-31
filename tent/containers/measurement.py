@@ -40,6 +40,8 @@ PACIFIC NORTHWEST NATIONAL LABORATORY
 operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
+import logging
+
 from copy import deepcopy
 from datetime import datetime
 from typing import Any
@@ -50,6 +52,9 @@ from tent.containers.time_interval import TimeInterval
 from tent.enumerations import MeasurementType, MeasurementUnit
 from tent.utils.helpers import safe_weak_proxy_callback
 from tent.utils.timer import Timer
+
+_log = logging.getLogger(__name__)
+
 
 # TODO: Consider renaming Measurement to DataCollection, MeasurementValue to Measurement.
 class MeasurementValue(Archivable):
@@ -161,20 +166,25 @@ class Measurement(Archivable):
     DATA_TYPE: type = MeasurementValue
     def __init__(self,
                  source: Component,
-                 measurement_type: MeasurementType = MeasurementType.Unknown,
-                 measurement_unit: MeasurementUnit = MeasurementUnit.Unknown,
+                 measurement_type: MeasurementType | str = MeasurementType.Unknown,
+                 measurement_unit: MeasurementUnit | str = MeasurementUnit.Unknown,
+                 archive_now: bool = True
                  ):
         super(Measurement, self).__init__()
         # TODO: There should probably be something (a name?) to distinguish between multiple measurements with same
         #  units and type from same source. How often is this an issue?
         self.source: Component = proxy(source, safe_weak_proxy_callback(self, 'source'))
-        self.type: MeasurementType = measurement_type
-        self.unit: MeasurementUnit = measurement_unit
+        self.type: MeasurementType = measurement_type if isinstance(measurement_type, MeasurementType) \
+            else MeasurementType[measurement_type]
+        self.unit: MeasurementUnit = measurement_unit if isinstance(measurement_unit, MeasurementUnit) \
+            else MeasurementUnit[measurement_unit]
+
 
         # TODO: Tests are needed to be sure that garbage collection works to remove these.
         self._data: WeakKeyDictionary[TimeInterval, Measurement.DATA_TYPE] = WeakKeyDictionary()
 
-        self.archive()
+        if archive_now:
+            self.archive()
 
     @property
     def all(self):
@@ -247,8 +257,8 @@ class Measurement(Archivable):
         record = super(Measurement, self).get_record()
         record.update({
             "source_id": self.source.id,
-            "measurement_type": self.type,
-            "measurement_unit": self.unit
+            "measurement_type": self.type.name,
+            "measurement_unit": self.unit.name
         })
         return record
 

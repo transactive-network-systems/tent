@@ -298,12 +298,13 @@ class LocalAsset(Entity):
         #
         # For the base local asset model, a single, inelastic power is needed. There is no flexibility. The constant
         # power may be represented by a single (price, power) point (See Vertex container).
-
         for time_interval in market.time_intervals:
             # Find the scheduled power for the indexed time interval.
             scheduled_power = self.scheduled_powers.get_by_interval(time_interval)  # avg. kW
             # Create the vertex that can represent this (lack of) flexibility
-            self.active_vertices.update(time_interval, Vertex(float("inf"), 0.0, scheduled_power.value, True))
+            self.active_vertices.update(time_interval,
+                                        Vertex(float("inf"), 0.0, scheduled_power.value, True),
+                                        archive=False, replace=True)
 
         _log.debug(f"{self.name} asset model active vertices are: {self.active_vertices.log_report}")
 

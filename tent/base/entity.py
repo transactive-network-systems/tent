@@ -15,8 +15,10 @@ class Entity(Component, abc.ABC):
                  description: str, information_services: list, location: str, maximum_power: float, meter_points: list,
                  minimum_power: float, name: str, transactive_node):
         super(Entity, self).__init__(description, name, transactive_node)
+        # cost_parameters: [float, float, float] Coefficients of quadratic cost function
+        # TODO: What are reasonable defaults for cost parameters? Is [1,1,1] better than [0,0,0]?
         self.cost_parameters: list[float] = [float(cp) for cp in
-                                             cost_parameters]  # [float, float, float] Coefficients of quadratic cost function
+                                             cost_parameters] if cost_parameters is not None else [0.0, 0.0, 0.0]
         self.location = str(location)  # [text]
         self.maximum_power = float(maximum_power)  # [avg.kW, signed] Asset's physical "hard" constraint
         self.minimum_power = float(minimum_power)  # [avg.kW, signed] Asset's physical "hard" constraint
@@ -209,11 +211,11 @@ class Entity(Component, abc.ABC):
     def archive(self, records: list[dict] = None):
         records = records if records else []
         records.extend([
-            {'table_name': 'entity_meter_point', 'data': {'component': self.id, 'meter_point_id': m.id}}
+            {'table_name': 'entity_meter_point', 'data': {'entity_id': self.id, 'meter_point_id': m.id}}
             for m in self.meter_points
         ])
         records.extend([
-            {'table_name': 'entity_information_service', 'data': {'component': self.id, 'information_service_id': i.id}}
+            {'table_name': 'entity_information_service', 'data': {'entity_id': self.id, 'information_service_id': i.id}}
             for i in self.information_services
         ])
         super(Entity, self).archive(records)

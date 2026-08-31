@@ -47,6 +47,7 @@ from datetime import datetime, timezone
 from dateutil import parser
 from itertools import chain
 from sortedcontainers import SortedList
+from typing import Any, Callable
 from zoneinfo import ZoneInfo
 
 from tent.base import Archivable
@@ -172,9 +173,12 @@ class TransactiveNode(Archivable):
         Returns list of instantiated and configured components
         """
         components = []
+        _log.info(f'Configuring {component_type}')
         if not configs:
+            _log.info(f'No {component_type} configurations were provided.')
             return components
         for config in configs:
+            _log.info(f'Configuring {config.get("class_name")}: {config.get("name")}')
             component_class = get_class_from_spec(config, default_module_prefix='tent', transactive_node=self)
             self.data_manager.add_tables(component_class.get_archive_definitions())
             if issubclass(component_class, MarketSeries):
@@ -194,6 +198,8 @@ class TransactiveNode(Archivable):
 
     def _setup_data_manager(self, config):
         dm_configs = config.get('data_manager', {})
+        # TODO: Make sure that we can run without a DataManager. This chokes if there is not one in the config.
+        #  Alternately, should we have a NullDataManager that just passes when called?
         dm_class =  get_class_from_spec(dm_configs, default_module_prefix='tent.data_manager', transactive_node=self)
         self._data_manager = dm_class(self, **dm_configs)
         self.data_manager.add_tables(self.get_archive_definitions())
@@ -206,6 +212,14 @@ class TransactiveNode(Archivable):
 
     def get_market_series_by_attribute(self, attribute, match, first_only=False):
         return self.get_objects_by_attribute(self.market_series, attribute, match, first_only)
+
+    def get_market_by_name(self, name):
+        for series in self.market_series:
+            if series.name in name:
+                matches = [m for m in series if m.name == name]
+                if matches:
+                    return matches[0]
+        return None
 
     def get_assets_by_attribute(self, attribute, match, first_only=False):
         return self.get_objects_by_attribute(self.local_assets, attribute, match, first_only)
@@ -231,7 +245,11 @@ class TransactiveNode(Archivable):
         pass
 
     @abc.abstractmethod
-    def register_subscription(self, subscribe_key, callback):
+    def register_subscription(self, subscribe_key: str, callback: Callable[[datetime, str, Any], None]):
+        """ When data is available for the given subscribe key,
+            a callback with the following signature will be called to process the data:
+                callback(time_received: datetime, subscribe_key: str, message: Any)
+        """
         pass
 
     @abc.abstractmethod

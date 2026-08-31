@@ -120,7 +120,7 @@ class InformationServiceModel(Component):
             {
                 "name": "entity_information_service",
                 "columns": [
-                    {"name": "component", "foreign_key": "component.id", "kwargs": {"primary_key": True}},
+                    {"name": "entity_id", "foreign_key": "component.id", "kwargs": {"primary_key": True}},
                     {"name": "information_service_id", "foreign_key": "information_service.id"}
                 ]
             }

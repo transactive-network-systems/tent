@@ -123,6 +123,26 @@ class Vertex(Archivable):
     def __hash__(self):
         return hash((self.price, self.quantity))
 
+    def __copy__(self):
+        """
+        Returns a copy of this Vertex object.
+        This is a redefinition of method copy.copy() that will be evoked when a Vertex object is to be copied.
+        The copy will have the same properties as this Vertex, but will not have the same Archivable id nor timestamp.
+
+        Parameters: None
+
+        Returns: (Vertex) A copy of this Vertex object.
+        """
+        return Vertex(
+            price=self.price,
+            cost=self.cost,
+            quantity=self.quantity,
+            continuity=self.continuity,
+            uncertainty=self.uncertainty,
+            curve=self.curve,
+        )
+
+
     @property
     def data_manager(self):
         return self.curve.data_manager
@@ -163,24 +183,3 @@ class Vertex(Archivable):
             }
         ])
         return definitions
-
-    # TODO: Order.Vertex had this method. Is this really achieving anything that copy would not on its own?
-    #  If so, does it need further update for the new version of this Vertex?
-    #  Should it have more properties?
-    # def __copy__(self):
-    #     """
-    #     Returns a copy of this Vertex object.
-    #     This is a redefinition of method copy.copy() that will be evoked when a Vertex object is to be copied.
-    #
-    #     Parameters: None
-    #
-    #     Returns: (Vertex) A copy of this Vertex object.
-    #     """
-    #     return Vertex(
-    #         price=self.price,
-    #         curve=self.curve,
-    #         # timestamp=self.time_stamp,
-    #         continuity=self.continuity,
-    #         quantity=self.quantity,
-    #         cost=self.cost
-    #     )
