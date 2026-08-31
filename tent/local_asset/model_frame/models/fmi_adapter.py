@@ -94,6 +94,35 @@ class FlexibilityModelFrameAdapter(object):
         elif hasattr(self.adapter, "update_data"):
             self.adapter.update_data(data, now)
 
+    def actuate(self, asset: Any, market: Any) -> None:
+        """Command external physical adapter to follow cleared market schedule."""
+        if not getattr(self.caps, "dispatch", False):
+            return
+
+        for time_interval in market.time_intervals:
+            scheduled = asset.scheduled_powers.get_by_interval(time_interval)
+            if scheduled is None:
+                continue
+
+            iv = Interval(
+                start=time_interval.start_time,
+                duration_s=int(time_interval.duration.total_seconds()),
+            )
+            command = DispatchCommand.for_power(
+                identity=self.adapter.identity,
+                interval=iv,
+                power_kw=scheduled.value,
+                sign=SignConvention.GENERATION_POSITIVE,
+                source=f"tent:{market.name}",
+            )
+            try:
+                response = self.adapter.dispatch(command)
+                if not hasattr(self, "dispatch_responses"):
+                    self.dispatch_responses = []
+                self.dispatch_responses.append(response)
+            except Exception as e:
+                _log.error(f"{self.name}: dispatch failed for {time_interval.name}: {e}")
+
 
 # Short alias
 FlexibilityModel = FlexibilityModelFrameAdapter

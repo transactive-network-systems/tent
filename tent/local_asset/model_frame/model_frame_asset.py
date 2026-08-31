@@ -29,10 +29,12 @@ class ModelFrameAsset(LocalAsset, ModelFrame):
         # self.ilc_target_topic = ilc_target_topic
 
         # Initialize Scheduler
+        self.occupancy_manager: OccupancyManager | None = None
         if occupancy_manager:  # TODO: Implement default behavior if occupancy_manager is not specified (make an always occupied base class).
             om_class = get_class_from_spec(occupancy_manager, 'OccupancyManager', 'tent.local_asset.occupancy_manager')
-            self.occupancy_manager: OccupancyManager = om_class(**occupancy_manager)
+            self.occupancy_manager = om_class(**occupancy_manager)
 
+        self.actuation_manager = None
         for device_topic in self.models:
             if 'Uncontrolled' in device_topic:
                 continue
@@ -59,12 +61,12 @@ class ModelFrameAsset(LocalAsset, ModelFrame):
 
     def _get_scheduled_power_from_model(self, time_interval: TimeInterval, outside_air_temperature) -> float:
         """Return a schedule power value for one interval from a model."""
-        occupied = self.occupancy_manager.check_schedule(time_interval.start_time)
+        occupied = self.occupancy_manager.check_schedule(time_interval.start_time) if self.occupancy_manager else True
         params = {'interval_time': time_interval.start_time, 'OAT': outside_air_temperature, 'occupied': occupied}
         return self.model_power(params=params)
 
     def _get_power_flexibility_from_model(self, time_interval: TimeInterval, outside_air_temperature) -> list[float]:
-        occupied = self.occupancy_manager.check_schedule(time_interval.start_time)
+        occupied = self.occupancy_manager.check_schedule(time_interval.start_time) if self.occupancy_manager else True
         params = {'interval_time': time_interval.start_time, 'OAT': outside_air_temperature, 'occupied': occupied}
         flexibility = self.model_flexibility(params=params)
         min_power = min(flexibility)
@@ -95,15 +97,20 @@ class ModelFrameAsset(LocalAsset, ModelFrame):
     def schedule_power(self, market):
         # Determine powers of an asset in active time intervals.
         # - Updates self.scheduledPowers - the schedule of power consumed
-
-        temperature_forecast = [x for x in self.information_services if x.name == self.temperature_forecast_name][0]
+        temp_services = [x for x in self.information_services if x.name == self.temperature_forecast_name] if (self.information_services and self.temperature_forecast_name) else []
+        temp_forecast = temp_services[0] if temp_services else None
         default_value = self.default_power
 
         for time_interval in market.time_intervals:
-            outside_air_temperature = temperature_forecast.predicted_values.get_by_interval(time_interval).value
+            outside_air_temperature = None
+            if temp_forecast is not None:
+                val = temp_forecast.predicted_values.get_by_interval(time_interval)
+                if val is not None:
+                    outside_air_temperature = val.value
+
             # Get new scheduled power value for this time interval:
             modeled_value = self._get_scheduled_power_from_model(time_interval, outside_air_temperature)
-            value = modeled_value if modeled_value else default_value  # Use default if modeled values is not available.
+            value = modeled_value if modeled_value is not None else default_value  # Use default if modeled values is not available.
 
             # Check whether a scheduled power already exists for the indexed time interval:
             self.scheduled_powers.update(time_interval, value)
@@ -112,14 +119,24 @@ class ModelFrameAsset(LocalAsset, ModelFrame):
 
     def update_vertices(self, market):
         """Create vertices to represent the asset's flexibility"""
-        # Get temperature forecast
-        temperature_forecast = [x for x in self.information_services if x.name == self.temperature_forecast_name][0]
+        temp_services = [x for x in self.information_services if x.name == self.temperature_forecast_name] if (self.information_services and self.temperature_forecast_name) else []
+        temp_forecast = temp_services[0] if temp_services else None
 
         for time_interval in market.time_intervals:
-            outside_air_temperature = temperature_forecast.predicted_values.get_by_interval(time_interval).value
+            outside_air_temperature = None
+            if temp_forecast is not None:
+                val = temp_forecast.predicted_values.get_by_interval(time_interval)
+                if val is not None:
+                    outside_air_temperature = val.value
+
             power_flexibility = self._get_power_flexibility_from_model(time_interval, outside_air_temperature)
             price_flexibility = self._get_price_flexibility(time_interval, market)
             self.active_vertices.update(time_interval, self._create_vertices(power_flexibility, price_flexibility))
 
     def actuate(self, mkt: Market):
-        self.actuation_manager.actuate(mkt)
+        if getattr(self, "actuation_manager", None) is not None:
+            self.actuation_manager.actuate(mkt)
+        else:
+            for model in self.models.values():
+                if hasattr(model, "actuate"):
+                    model.actuate(self, mkt)
