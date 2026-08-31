@@ -56,7 +56,7 @@ class SolarPvResource(LocalAsset):
 
         if self.use_pvlib:
             try:
-                from der_interface import from_config as load_fmi_adapter
+                from tent.flexibility import from_config as load_fmi_adapter
 
                 if preset:
                     self.pv_adapter = load_fmi_adapter(
@@ -80,7 +80,7 @@ class SolarPvResource(LocalAsset):
         """Schedule power for active time intervals using pvlib physics or cosine model."""
         if self.pv_adapter is not None:
             try:
-                from der_interface import Interval, SignConvention
+                from tent.flexibility import Interval, SignConvention
 
                 time_intervals = list(market.time_intervals)
                 intervals = [

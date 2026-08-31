@@ -8,25 +8,13 @@ from typing import Any, List, Mapping
 
 import numpy as np
 
-try:
-    from der_interface import (
-        DispatchCommand,
-        Interval,
-        SignConvention,
-        capabilities_of,
-        from_config as load_fmi_adapter,
-    )
-except ImportError:
-    try:
-        from flexibility_model_interface import (
-            DispatchCommand,
-            Interval,
-            SignConvention,
-            capabilities_of,
-            from_config as load_fmi_adapter,
-        )
-    except ImportError:
-        load_fmi_adapter = None
+from tent.flexibility import (
+    DispatchCommand,
+    Interval,
+    SignConvention,
+    capabilities_of,
+    from_config as load_fmi_adapter,
+)
 
 _log = logging.getLogger(__name__)
 

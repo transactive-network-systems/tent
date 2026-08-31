@@ -29,29 +29,29 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from der_interface import (
+from tent.flexibility import (
     DispatchCommand,
     Interval,
     ResourceIdentity,
     SignConvention,
     capabilities_of,
 )
-from der_interface.adapters.gridlabd import (
+from tent.flexibility.adapters.gridlabd import (
     GridlabdBatteryInverterAdapter,
     GridlabdEvAdapter,
     GridlabdFeederAdapter,
     GridlabdHvacAdapter,
     GridlabdWaterHeaterAdapter,
 )
-from der_interface.adapters.ochre import (
+from tent.flexibility.adapters.ochre import (
     OchreBatteryAdapter,
     OchreDwellingAdapter,
     OchreEvAdapter,
     OchreHvacAdapter,
     OchreWaterHeaterAdapter,
 )
-from der_interface.adapters.pvlib import PvlibPvAdapter
-from der_interface.adapters.replay import ReplayAdapter
+from tent.flexibility.adapters.pvlib import PvlibPvAdapter
+from tent.flexibility.adapters.replay import ReplayAdapter
 
 CONFIG_DIR = Path(__file__).resolve().parent.parent / "configs"
 UTC = timezone.utc

@@ -14,6 +14,7 @@ All adapters are also lazily accessible directly from :mod:`der_interface.adapte
 
 from __future__ import annotations
 
+from . import gridlabd, ochre, pvlib, replay
 from .factory import PRESET_CONFIGS, from_config, load_adapter
 
 __all__ = [
@@ -93,20 +94,4 @@ def __getattr__(name: str):
         from .ochre.dwelling import OchreDwellingAdapter
 
         return OchreDwellingAdapter
-    if name == "gridlabd":
-        from . import gridlabd
-
-        return gridlabd
-    if name == "ochre":
-        from . import ochre
-
-        return ochre
-    if name == "pvlib":
-        from . import pvlib
-
-        return pvlib
-    if name == "replay":
-        from . import replay
-
-        return replay
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

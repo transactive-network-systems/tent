@@ -17,32 +17,14 @@ market machinery.
 import logging
 from typing import Any
 
-try:
-    from der_interface import (
-        DispatchCommand,
-        Interval,
-        SignConvention,
-        capabilities_of,
-        from_config as load_fmi_adapter,
-    )
-    from der_interface.schema import FlexibilityEnvelope
-except ImportError:
-    try:
-        from flexibility_model_interface import (
-            DispatchCommand,
-            Interval,
-            SignConvention,
-            capabilities_of,
-            from_config as load_fmi_adapter,
-        )
-        from flexibility_model_interface.schema import FlexibilityEnvelope
-    except ImportError:
-        DispatchCommand = None
-        Interval = None
-        SignConvention = None
-        capabilities_of = None
-        FlexibilityEnvelope = None
-        load_fmi_adapter = None
+from tent.flexibility import (
+    DispatchCommand,
+    FlexibilityEnvelope,
+    Interval,
+    SignConvention,
+    capabilities_of,
+    from_config as load_fmi_adapter,
+)
 
 from tent.containers import Vertex
 from tent.local_asset.model_frame.model_frame_asset import ModelFrameAsset
@@ -52,7 +34,7 @@ from tent.utils.helpers import get_class_from_spec
 _log = logging.getLogger(__name__)
 
 #: TENT reports generated power as positive.
-TENT_SIGN = SignConvention.GENERATION_POSITIVE if SignConvention else None
+TENT_SIGN = SignConvention.GENERATION_POSITIVE
 
 
 class DerAsset(ModelFrameAsset):
@@ -146,8 +128,14 @@ class DerAsset(ModelFrameAsset):
             if load_fmi_adapter is not None:
                 return load_fmi_adapter(spec)
 
+        module_name = spec.get("module_name", "")
+        if module_name.startswith("der_interface") or module_name.startswith("flexibility_model_interface"):
+            spec["module_name"] = module_name.replace("der_interface", "tent.flexibility").replace(
+                "flexibility_model_interface", "tent.flexibility"
+            )
+
         adapter_class = get_class_from_spec(
-            spec, default_module_prefix="der_interface.adapters"
+            spec, default_module_prefix="tent.flexibility.adapters"
         )
         factory = spec.pop("factory", None)
         builder = getattr(adapter_class, factory) if factory else adapter_class

@@ -8,13 +8,13 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from der_interface import (
+from tent.flexibility import (
     DispatchCommand,
     Interval,
     SignConvention,
     capabilities_of,
 )
-from der_interface.adapters.ochre import OchreEvAdapter
+from tent.flexibility.adapters.ochre import OchreEvAdapter
 
 CONFIG_DIR = Path(__file__).resolve().parent.parent / "configs"
 UTC = timezone.utc

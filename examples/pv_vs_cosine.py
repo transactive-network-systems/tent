@@ -16,8 +16,8 @@ from pvlib.location import Location
 from pvlib.pvsystem import PVSystem
 from pvlib.temperature import TEMPERATURE_MODEL_PARAMETERS
 
-from der_interface import Interval, SignConvention
-from der_interface.adapters.pvlib import PvlibPvAdapter
+from tent.flexibility import Interval, SignConvention
+from tent.flexibility.adapters.pvlib import PvlibPvAdapter
 
 # The campus site as TENT configures it today.
 RATED_KW = 120.0
