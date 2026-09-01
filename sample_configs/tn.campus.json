@@ -228,12 +228,13 @@
       "scheduling_horizon": 86400
     },
     {
-      "class_name": "ModelFrameAsset",
-      "module_name": "tent.local_asset.model_frame.model_frame_asset",
+      "class_name": "SolarPvResource",
+      "module_name": "tent.local_asset.solar_pv_resource_model",
+      "cloud_factor": 1.0,
       "cost_parameters": [0.0, 0.0, 0.0],
       "default_power": 0.0,
       "default_vertices": [[0, 0, 30.0, true]],
-      "description": "120 kW solar PV site on the campus, modeled with pvlib",
+      "description": "120 kW solar PV site on the campus",
       "engagement_costs": [0.0, 0.0, 0.0],
       "information_services": null,
       "location": "",
@@ -241,35 +242,7 @@
       "minimum_power": 0.0,
       "meter_points": null,
       "name": "SolarPv",
-      "scheduling_horizon": 86400,
-      "model_configs": {
-        "demand_curve_points": 2,
-        "models": [
-          {
-            "topic": "devices/campus_pv",
-            "model_type": "fmi",
-            "model_config": {
-              "preset": "residential_pv",
-              "resource_id": "campus_pv",
-              "rated_kw": 120.0,
-              "location": {
-                "latitude": 46.28,
-                "longitude": -119.28,
-                "tz": "US/Pacific"
-              },
-              "system": {
-                "surface_tilt": 30,
-                "surface_azimuth": 180
-              },
-              "weather": {
-                "kind": "clearsky",
-                "cloud_factor": 1.0
-              },
-              "curtailable": false
-            }
-          }
-        ]
-      }
+      "scheduling_horizon": 86400
     }
   ],
   "market_series": [
