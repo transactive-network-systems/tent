@@ -6,14 +6,18 @@ from datetime import datetime, timezone
 
 import pytest
 
-from der_interface import (
+# OCHRE is an optional extra (pip install 'tent[ochre]'). Skip rather than
+# hard-fail the suite when it is absent, matching test_pvlib_adapter.py.
+pytest.importorskip("ochre")
+
+from der_interface import (  # noqa: E402
     DispatchCommand,
     Interval,
     ResourceKind,
     SignConvention,
     capabilities_of,
 )
-from der_interface.adapters.ochre import (
+from der_interface.adapters.ochre import (  # noqa: E402
     OchreBatteryAdapter,
     OchreDwellingAdapter,
     OchreEvAdapter,

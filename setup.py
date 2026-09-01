@@ -53,5 +53,12 @@ if __name__ == '__main__':
         packages=find_packages('.'),
         install_requires=[
             'python-dateutil', 'matplotlib', 'uuid6', 'sortedcontainers', 'SQLAlchemy-Utils', 'plotext'
-        ]
+        ],
+        # Physical simulator backends for tent.flexibility are optional. The
+        # core package, and the full non-FMI test suite, must run without them.
+        extras_require={
+            'pvlib': ['pvlib>=0.10', 'pandas>=2.0'],
+            'ochre': ['ochre-nrel', 'pint==0.24.4'],
+            'flexibility': ['pvlib>=0.10', 'pandas>=2.0', 'ochre-nrel', 'pint==0.24.4'],
+        }
     )
