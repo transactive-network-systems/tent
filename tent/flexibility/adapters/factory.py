@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import copy
 import json
+import logging
 import os
 from pathlib import Path
 from typing import Any, Mapping
 
 from ..errors import AdapterError
+
+_log = logging.getLogger(__name__)
 
 PRESET_CONFIGS: dict[str, dict[str, Any]] = {
     "residential_pv": {
@@ -72,13 +76,14 @@ PRESET_CONFIGS: dict[str, dict[str, Any]] = {
         "resource_id": "ochre_battery_10kwh",
         "rated_kw": 5.0,
         "capacity_kwh": 13.5,
-        "initial_soc": 0.5,
     },
     "ev_level2": {
         "model_type": "ochre.ev",
         "resource_id": "ochre_ev_level2",
         "rated_kw": 7.7,
-        "battery_capacity_kwh": 75.0,
+        # OchreEvAdapter.from_config takes capacity_kwh; the old
+        # battery_capacity_kwh key was dropped, silently yielding a 65 kWh EV.
+        "capacity_kwh": 75.0,
         "initial_soc": 0.4,
     },
     "gridlabd_house": {
@@ -95,7 +100,10 @@ PRESET_CONFIGS: dict[str, dict[str, Any]] = {
         "model_type": "gridlabd.battery",
         "resource_id": "gld_battery_1",
         "rated_kw": 5.0,
-        "capacity_kwh": 13.5,
+        # capacity_kwh is read from the nested gridlabd block, not the top
+        # level; at the top level it was dropped and the adapter fell back to
+        # rated_kw * 2.5 = 12.5 kWh.
+        "gridlabd": {"capacity_kwh": 13.5},
     },
     "gridlabd_ev": {
         "model_type": "gridlabd.ev",
@@ -114,14 +122,139 @@ PRESET_CONFIGS: dict[str, dict[str, Any]] = {
     },
 }
 
-# Aliases
-PRESET_CONFIGS["pv"] = PRESET_CONFIGS["residential_pv"]
-PRESET_CONFIGS["solar"] = PRESET_CONFIGS["residential_pv"]
-PRESET_CONFIGS["hvac"] = PRESET_CONFIGS["residential_hvac"]
-PRESET_CONFIGS["water_heater"] = PRESET_CONFIGS["water_heater_50gal"]
-PRESET_CONFIGS["battery"] = PRESET_CONFIGS["residential_battery"]
-PRESET_CONFIGS["ev"] = PRESET_CONFIGS["ev_level2"]
-PRESET_CONFIGS["replay"] = PRESET_CONFIGS["replay_csv"]
+# Aliases. Deep-copied rather than aliased: these were references to the same
+# dict, so mutating PRESET_CONFIGS["pv"] also rewrote "residential_pv" and
+# "solar", and the nested location/system/weather dicts stayed shared even
+# through the dict() copy in from_config.
+for _alias, _target in (
+    ("pv", "residential_pv"),
+    ("solar", "residential_pv"),
+    ("hvac", "residential_hvac"),
+    ("water_heater", "water_heater_50gal"),
+    ("battery", "residential_battery"),
+    ("ev", "ev_level2"),
+    ("replay", "replay_csv"),
+):
+    PRESET_CONFIGS[_alias] = copy.deepcopy(PRESET_CONFIGS[_target])
+
+
+# Config keys that mean the right thing but use a different name than the
+# adapter's from_config parameter. Without this mapping the value lands in
+# **kwargs, is absorbed into identity.metadata, and never reaches the physics --
+# so the config *looks* honoured while being silently ignored.
+_KEY_ALIASES: Mapping[str, Mapping[str, str]] = {
+    "ochre.ev": {"battery_capacity_kwh": "capacity_kwh"},
+    "ochre.water_heater": {"setpoint_c": "t_desired_c"},
+}
+
+# Keys that are documentation or metadata rather than constructor arguments.
+_METADATA_KEYS = frozenset({"description", "name", "comment", "notes"})
+
+
+def _normalize_config_keys(model_type: str, cfg: dict[str, Any]) -> dict[str, Any]:
+    """Rename known aliases and warn about keys the adapter will ignore.
+
+    Presets historically carried keys no from_config accepted -- ev_level2 set
+    ``battery_capacity_kwh`` while the signature wanted ``capacity_kwh``, so
+    every Level 2 EV silently used the 65 kWh default instead of the configured
+    75 kWh. Renaming is safe; anything still unrecognized is logged rather than
+    swallowed, because a dropped parameter is a wrong number, not a no-op.
+    """
+    import inspect
+
+    aliases = _KEY_ALIASES.get(model_type, {})
+    for old, new in aliases.items():
+        if old in cfg and new not in cfg:
+            cfg[new] = cfg.pop(old)
+
+    # Special cases needing a unit conversion, not just a rename.
+    if model_type == "ochre.water_heater":
+        if "volume_gal" in cfg and "tank_volume_l" not in cfg:
+            cfg["tank_volume_l"] = float(cfg.pop("volume_gal")) * 3.785411784
+        if "t_desired_c" in cfg and "t_desired_f" not in cfg:
+            cfg["t_desired_f"] = float(cfg.pop("t_desired_c")) * 9.0 / 5.0 + 32.0
+
+    resolver = _ADAPTER_RESOLVERS.get(model_type)
+    if resolver is None:
+        return cfg
+    try:
+        adapter_cls = resolver()
+    except Exception:  # simulator not installed; let the caller hit the real error
+        return cfg
+
+    try:
+        params = inspect.signature(adapter_cls.from_config).parameters
+    except (TypeError, ValueError):  # pragma: no cover
+        return cfg
+
+    if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values()):
+        unknown = [
+            k
+            for k in cfg
+            if k not in params and k not in _METADATA_KEYS and k != "kind"
+        ]
+        if unknown:
+            _log.warning(
+                "%s: config key(s) %s are not accepted by %s.from_config and will "
+                "only appear in identity.metadata, not in the physical model",
+                model_type,
+                sorted(unknown),
+                adapter_cls.__name__,
+            )
+    return cfg
+
+
+def _resolve_pvlib():
+    from .pvlib.pv import PvlibPvAdapter
+
+    return PvlibPvAdapter
+
+
+def _resolve_ochre_dwelling():
+    from .ochre.dwelling import OchreDwellingAdapter
+
+    return OchreDwellingAdapter
+
+
+def _resolve_ochre_hvac():
+    from .ochre.hvac import OchreHvacAdapter
+
+    return OchreHvacAdapter
+
+
+def _resolve_ochre_water_heater():
+    from .ochre.water_heater import OchreWaterHeaterAdapter
+
+    return OchreWaterHeaterAdapter
+
+
+def _resolve_ochre_battery():
+    from .ochre.battery import OchreBatteryAdapter
+
+    return OchreBatteryAdapter
+
+
+def _resolve_ochre_ev():
+    from .ochre.ev import OchreEvAdapter
+
+    return OchreEvAdapter
+
+
+def _resolve_replay():
+    from .replay.replay import ReplayAdapter
+
+    return ReplayAdapter
+
+
+_ADAPTER_RESOLVERS: Mapping[str, Any] = {
+    "pvlib.pv": _resolve_pvlib,
+    "ochre.dwelling": _resolve_ochre_dwelling,
+    "ochre.hvac": _resolve_ochre_hvac,
+    "ochre.water_heater": _resolve_ochre_water_heater,
+    "ochre.battery": _resolve_ochre_battery,
+    "ochre.ev": _resolve_ochre_ev,
+    "replay": _resolve_replay,
+}
 
 
 def from_config(config_or_preset: str | Mapping[str, Any], **overrides: Any) -> Any:
@@ -138,7 +271,7 @@ def from_config(config_or_preset: str | Mapping[str, Any], **overrides: Any) -> 
     if isinstance(config_or_preset, str):
         preset_key = config_or_preset.lower().strip()
         if preset_key in PRESET_CONFIGS:
-            cfg = dict(PRESET_CONFIGS[preset_key])
+            cfg = copy.deepcopy(PRESET_CONFIGS[preset_key])
         elif os.path.exists(config_or_preset):
             with open(config_or_preset, "r", encoding="utf-8") as f:
                 cfg = json.load(f)
@@ -170,7 +303,7 @@ def from_config(config_or_preset: str | Mapping[str, Any], **overrides: Any) -> 
         if "preset" in cfg:
             preset_name = str(cfg.pop("preset")).lower().strip()
             if preset_name in PRESET_CONFIGS:
-                base = dict(PRESET_CONFIGS[preset_name])
+                base = copy.deepcopy(PRESET_CONFIGS[preset_name])
                 base.update(cfg)
                 cfg = base
     else:
@@ -179,24 +312,36 @@ def from_config(config_or_preset: str | Mapping[str, Any], **overrides: Any) -> 
     # Apply overrides and extra_params
     cfg.update(overrides)
     extra_params = cfg.pop("extra_params", {})
-    if isinstance(extra_params, dict):
+    if isinstance(extra_params, Mapping):
+        # extra_params must be able to override a preset value; a preset is a
+        # starting point, not a veto. Explicit **overrides still win over both.
         for k, v in extra_params.items():
-            if k not in cfg:
+            if k not in overrides:
                 cfg[k] = v
+    elif extra_params:
+        raise AdapterError(
+            f"extra_params must be a mapping, got {type(extra_params).__name__}"
+        )
 
     model_type = str(cfg.pop("model_type", "")).lower().strip()
     if not model_type:
-        # Infer model_type if not specified
-        if "location" in cfg or "pvlib" in cfg:
+        # Infer model_type if not specified. Order matters: check the explicit
+        # simulator blocks before the generic 'location', which many configs
+        # carry incidentally.
+        if "pvlib" in cfg:
             model_type = "pvlib.pv"
-        elif "csv_path" in cfg:
+        elif "csv_path" in cfg or "rows" in cfg:
             model_type = "replay"
         elif "gridlabd" in cfg:
             model_type = "gridlabd.hvac"
         elif "ochre" in cfg:
             model_type = "ochre.dwelling"
+        elif "location" in cfg:
+            model_type = "pvlib.pv"
         else:
             raise AdapterError("configuration must specify 'model_type' or a valid 'preset'")
+
+    cfg = _normalize_config_keys(model_type, cfg)
 
     # Instantiate the corresponding adapter
     if model_type in ("pvlib.pv", "pvlib", "pv", "solar"):
