@@ -4,8 +4,8 @@ import math
 from datetime import datetime, timezone
 import pytest
 
-import flexibility_model_interface as fmi
-from der_interface import (
+from tent import flexibility as fmi
+from tent.flexibility import (
     FlexibilityModelAdapter,
     FlexibilityModelInterfaceError,
     Interval,
@@ -13,11 +13,11 @@ from der_interface import (
     from_config,
     load_adapter,
 )
-from der_interface.adapters.pvlib import CloudCoverWeather, PvlibPvAdapter
+from tent.flexibility.adapters.pvlib import CloudCoverWeather, PvlibPvAdapter
 
 
 def test_fmi_module_exports_and_aliases():
-    """Verify top-level flexibility_model_interface package exposes all core contracts."""
+    """Verify the tent.flexibility package exposes all core contracts."""
     assert fmi.FlexibilityModelAdapter is not None
     assert fmi.FlexibilityEnvelope is not None
     assert fmi.EnvelopePoint is not None

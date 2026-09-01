@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from der_interface import (
+from tent.flexibility import (
     DispatchCommand,
     EnvelopePoint,
     FlexibilityEnvelope,
@@ -29,7 +29,7 @@ from der_interface import (
     SignConvention,
     capabilities_of,
 )
-from der_interface.adapters import ReplayAdapter
+from tent.flexibility.adapters import ReplayAdapter
 
 UTC = timezone.utc
 GEN_POS = SignConvention.GENERATION_POSITIVE
@@ -123,7 +123,7 @@ class InlineHvac:
         )
 
     def get_state(self, timestamp=None):
-        from der_interface import ResourceState
+        from tent.flexibility import ResourceState
 
         return ResourceState(self.identity, timestamp or datetime.now(UTC),
                              {"power_kw": 2.8, "indoor_temp_c": 22.4})
@@ -132,7 +132,7 @@ class InlineHvac:
         return Limits(0.0, 5.0)
 
     def dispatch(self, command):
-        from der_interface import DispatchResponse
+        from tent.flexibility import DispatchResponse
 
         clamped = self.get_limits().clamp(command.power_kw)
         self.commands.append(command)
@@ -142,7 +142,7 @@ class InlineHvac:
         )
 
     def release(self, interval):
-        from der_interface import DispatchResponse
+        from tent.flexibility import DispatchResponse
 
         return DispatchResponse(self.identity, interval, accepted=True)
 
@@ -175,7 +175,7 @@ def pv_resource():
     from pvlib.pvsystem import PVSystem
     from pvlib.temperature import TEMPERATURE_MODEL_PARAMETERS
 
-    from der_interface.adapters.pvlib import PvlibPvAdapter
+    from tent.flexibility.adapters.pvlib import PvlibPvAdapter
 
     return PvlibPvAdapter.from_location(
         "campus_pv",

@@ -10,14 +10,14 @@ import pytest
 # hard-fail the suite when it is absent, matching test_pvlib_adapter.py.
 pytest.importorskip("ochre")
 
-from der_interface import (  # noqa: E402
+from tent.flexibility import (  # noqa: E402
     DispatchCommand,
     Interval,
     ResourceKind,
     SignConvention,
     capabilities_of,
 )
-from der_interface.adapters.ochre import (  # noqa: E402
+from tent.flexibility.adapters.ochre import (  # noqa: E402
     OchreBatteryAdapter,
     OchreDwellingAdapter,
     OchreEvAdapter,

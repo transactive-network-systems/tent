@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from der_interface import (
+from tent.flexibility import (
     DispatchCommand,
     DispatchResponse,
     EnvelopePoint,

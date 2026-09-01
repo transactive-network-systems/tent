@@ -11,8 +11,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from der_interface import Quality, SignConvention
-from der_interface.conventions import (
+from tent.flexibility import Quality, SignConvention
+from tent.flexibility.conventions import (
     interval_contains,
     require_aware,
     require_positive_duration,

@@ -2,26 +2,8 @@
 
 from __future__ import annotations
 
-import sys
 from datetime import datetime, timezone
 import pytest
-
-from tent import flexibility
-from tent.flexibility import adapters, conventions, errors, protocols, schema
-
-# Register compatibility module aliases for tests
-for mod_prefix in ('der_interface', 'flexibility_model_interface'):
-    sys.modules[mod_prefix] = flexibility
-    sys.modules[f'{mod_prefix}.adapters'] = adapters
-    sys.modules[f'{mod_prefix}.adapters.factory'] = adapters.factory
-    sys.modules[f'{mod_prefix}.adapters.pvlib'] = adapters.pvlib
-    sys.modules[f'{mod_prefix}.adapters.ochre'] = adapters.ochre
-    sys.modules[f'{mod_prefix}.adapters.gridlabd'] = adapters.gridlabd
-    sys.modules[f'{mod_prefix}.adapters.replay'] = adapters.replay
-    sys.modules[f'{mod_prefix}.conventions'] = conventions
-    sys.modules[f'{mod_prefix}.errors'] = errors
-    sys.modules[f'{mod_prefix}.protocols'] = protocols
-    sys.modules[f'{mod_prefix}.schema'] = schema
 
 from tent.flexibility import (
     EnvelopePoint,

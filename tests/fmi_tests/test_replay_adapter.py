@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from der_interface import (
+from tent.flexibility import (
     AdapterError,
     CapabilityError,
     DispatchCommand,
@@ -16,7 +16,7 @@ from der_interface import (
     ResourceKind,
     capabilities_of,
 )
-from der_interface.adapters import ReplayAdapter
+from tent.flexibility.adapters import ReplayAdapter
 
 UTC = timezone.utc
 

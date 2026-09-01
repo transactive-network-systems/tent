@@ -7,14 +7,14 @@ from typing import Any
 
 import pytest
 
-from der_interface import (
+from tent.flexibility import (
     DispatchCommand,
     Interval,
     ResourceKind,
     SignConvention,
     capabilities_of,
 )
-from der_interface.adapters.gridlabd import (
+from tent.flexibility.adapters.gridlabd import (
     GridlabdBatteryInverterAdapter,
     GridlabdEngine,
     GridlabdEvAdapter,
@@ -293,5 +293,5 @@ class TestGridlabdEvAdapter:
 
 
 def adapter_identity(res_id: str, kind: ResourceKind):
-    from der_interface import ResourceIdentity
+    from tent.flexibility import ResourceIdentity
     return ResourceIdentity(resource_id=res_id, kind=kind, source="test")

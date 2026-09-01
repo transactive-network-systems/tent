@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from der_interface import (
+from tent.flexibility import (
     CapabilityError,
     Interval,
     Quality,
@@ -22,7 +22,7 @@ from der_interface import (
 pvlib = pytest.importorskip("pvlib")
 pd = pytest.importorskip("pandas")
 
-from der_interface.adapters.pvlib import (  # noqa: E402
+from tent.flexibility.adapters.pvlib import (  # noqa: E402
     ClearSkyWeather,
     DataFrameWeather,
     PvlibPvAdapter,
@@ -81,7 +81,7 @@ class TestConstruction:
         assert adapter.identity.metadata["rated_kw"] == RATED_KW
 
     def test_rejects_non_positive_rating(self, location):
-        from der_interface import AdapterError
+        from tent.flexibility import AdapterError
 
         with pytest.raises(AdapterError, match="rated_kw must be > 0"):
             PvlibPvAdapter.from_location("x", location, build_system(), rated_kw=0.0)
@@ -300,7 +300,7 @@ class TestWeatherSources:
         )
 
     def test_cloud_factor_range_validated(self, location):
-        from der_interface import AdapterError
+        from tent.flexibility import AdapterError
 
         with pytest.raises(AdapterError, match=r"must be in \[0, 1\]"):
             ClearSkyWeather(location, cloud_factor=1.5)
@@ -388,7 +388,7 @@ class TestFromConfig:
     def test_missing_latitude_names_the_problem(self):
         config = self.base_config()
         del config["location"]["latitude"]
-        from der_interface import AdapterError
+        from tent.flexibility import AdapterError
 
         with pytest.raises(AdapterError, match="latitude and longitude are required"):
             PvlibPvAdapter.from_config(**config)
@@ -396,13 +396,13 @@ class TestFromConfig:
     def test_unknown_temperature_model_lists_valid_options(self):
         config = self.base_config()
         config["system"]["temperature_model"] = "nonsense"
-        from der_interface import AdapterError
+        from tent.flexibility import AdapterError
 
         with pytest.raises(AdapterError, match="unknown temperature_model"):
             PvlibPvAdapter.from_config(**config)
 
     def test_unknown_weather_kind_rejected(self):
-        from der_interface import AdapterError
+        from tent.flexibility import AdapterError
 
         with pytest.raises(AdapterError, match="unknown weather kind"):
             PvlibPvAdapter.from_config(**self.base_config(weather={"kind": "magic"}))
@@ -421,7 +421,7 @@ class TestFromConfig:
         assert adapter.get_envelope(summer_day).flexible
 
     def test_tmy_requires_path(self):
-        from der_interface import AdapterError
+        from tent.flexibility import AdapterError
 
         with pytest.raises(AdapterError, match='requires a "path"'):
             PvlibPvAdapter.from_config(**self.base_config(weather={"kind": "tmy"}))
@@ -457,7 +457,7 @@ class TestStateAndLimits:
 
 class TestEdgeCases:
     def test_empty_intervals_rejected(self, adapter):
-        from der_interface import AdapterError
+        from tent.flexibility import AdapterError
 
         with pytest.raises(AdapterError, match="at least one interval"):
             adapter.get_envelope([])
