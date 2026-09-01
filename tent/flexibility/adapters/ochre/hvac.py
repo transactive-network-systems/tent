@@ -148,10 +148,19 @@ class OchreHvacAdapter:
             dwelling_args.update({k: v for k, v in kwargs.items() if k not in dwelling_args})
             self._dwelling = Dwelling(**dwelling_args)
 
-        # Identify cooling / heating equipment name in OCHRE dwelling
-        self._cooler = self._dwelling.get_equipment_by_end_use("HVAC Cooling")
-        self._heater = self._dwelling.get_equipment_by_end_use("HVAC Heating")
-        self._cooler_name = self._cooler.name if self._cooler else "ASHP Cooler"
+        # Identify cooling / heating equipment name in OCHRE dwelling.
+        # get_equipment_by_end_use returns a list when a dwelling has several
+        # units of the same end use, so normalize before reading .name.
+        self._cooler = self._first_equipment("HVAC Cooling")
+        self._heater = self._first_equipment("HVAC Heating")
+        self._cooler_name = getattr(self._cooler, "name", None) or "ASHP Cooler"
+
+    def _first_equipment(self, end_use: str) -> Any:
+        """Return a single equipment object for *end_use*, or None."""
+        found = self._dwelling.get_equipment_by_end_use(end_use)
+        if isinstance(found, (list, tuple)):
+            return found[0] if found else None
+        return found
 
     # -- construction ------------------------------------------------------
 
@@ -273,7 +282,13 @@ class OchreHvacAdapter:
 
     def dispatch(self, command: DispatchCommand) -> DispatchResponse:
         self.commands.append(command)
-        target_kw = float(command.power_kw if command.power_kw is not None else 0.0)
+        # Normalize into the canonical load-positive convention. TENT sends
+        # GENERATION_POSITIVE commands, so omitting this inverts every dispatch.
+        target_kw = (
+            command.sign.to_canonical(command.power_kw)
+            if command.power_kw is not None
+            else 0.0
+        )
 
         # Map target power to cooling setpoint:
         # High power -> lower setpoint (cool more)
@@ -294,7 +309,7 @@ class OchreHvacAdapter:
             interval=command.interval,
             accepted=True,
             actual={
-                "power_kw": hvac_power,
+                "power_kw": command.sign.from_canonical(hvac_power),
                 "indoor_temp_f": self.indoor_temp_f,
                 "cooling_setpoint_f": setpoint_f,
             },
@@ -316,19 +331,25 @@ class OchreHvacAdapter:
 
     def get_state(self, timestamp: datetime | None = None) -> ResourceState:
         ts = timestamp or datetime.now(UTC)
-        total_kw = float(getattr(self._dwelling, "electric_kw", 0.0))
+        # Dwelling is a Simulator and exposes total_p_kw, not electric_kw.
+        raw = getattr(self._dwelling, "total_p_kw", None)
+        if raw is None:
+            raw = getattr(self._dwelling, "electric_kw", None)
+        total_kw = None if raw is None else float(raw)
+        values: dict[str, Any] = {
+            "indoor_temp_c": self.indoor_temp_c,
+            "indoor_temp_f": self.indoor_temp_f,
+            "outdoor_temp_c": self.outdoor_temp_c,
+            "outdoor_temp_f": self.outdoor_temp_f,
+            "rated_kw": self._rated_kw,
+        }
+        if total_kw is not None:
+            values["power_kw"] = total_kw
         return ResourceState(
             identity=self._identity,
             timestamp=ts,
-            values={
-                "power_kw": total_kw,
-                "indoor_temp_c": self.indoor_temp_c,
-                "indoor_temp_f": self.indoor_temp_f,
-                "outdoor_temp_c": self.outdoor_temp_c,
-                "outdoor_temp_f": self.outdoor_temp_f,
-                "rated_kw": self._rated_kw,
-            },
-            quality=Quality.VALID,
+            values=values,
+            quality=Quality.VALID if total_kw is not None else Quality.MISSING,
         )
 
     def get_limits(self, now: datetime | None = None) -> Limits:

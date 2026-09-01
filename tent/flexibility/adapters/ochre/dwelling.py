@@ -167,20 +167,32 @@ class OchreDwellingAdapter:
         return self.indoor_temp_c * 9.0 / 5.0 + 32.0
 
     @property
-    def current_power_kw(self) -> float:
-        return float(getattr(self._dwelling, "electric_kw", 0.0))
+    def current_power_kw(self) -> float | None:
+        """Whole-dwelling real power in canonical load-positive kW.
+
+        OCHRE's ``Dwelling`` is a ``Simulator``, not an ``Equipment``, so it
+        exposes ``total_p_kw`` rather than ``electric_kw``. Returns ``None`` when
+        no value is available so callers can report Quality.MISSING instead of
+        silently treating an absent reading as a genuine 0 kW.
+        """
+        value = getattr(self._dwelling, "total_p_kw", None)
+        if value is None:
+            value = getattr(self._dwelling, "electric_kw", None)
+        return None if value is None else float(value)
 
     # -- FlexibilityModel --------------------------------------------------
 
-    def get_envelope(self, intervals: Sequence[Interval]) -> FlexibilityEnvelope:
+    def get_envelope(
+        self,
+        intervals: Sequence[Interval],
+        context: Mapping[str, Any] | None = None,
+    ) -> FlexibilityEnvelope:
         if not intervals:
-            return FlexibilityEnvelope(
-                resource_id=self._identity.resource_id,
-                sign=self._sign,
-                points=(),
-            )
+            raise AdapterError("get_envelope requires at least one interval")
 
-        cur_kw = self.current_power_kw
+        measured_kw = self.current_power_kw
+        quality = Quality.VALID if measured_kw is not None else Quality.MISSING
+        cur_kw = 0.0 if measured_kw is None else measured_kw
         points: list[EnvelopePoint] = []
 
         for iv in intervals:
@@ -188,7 +200,11 @@ class OchreDwellingAdapter:
             base_kw = max(0.5, cur_kw)
             q_min = base_kw * 0.5  # shed flexible loads (HVAC, WH)
             q_max = min(self._rated_kw, base_kw * 1.5)
-            q_base = base_kw
+            # A dwelling can legitimately draw more than its configured rating
+            # (EV + resistance heat + HVAC). Keep the band ordered and the
+            # baseline inside it rather than letting EnvelopePoint raise.
+            q_max = max(q_max, q_min)
+            q_base = min(max(base_kw, q_min), q_max)
 
             points.append(
                 EnvelopePoint(
@@ -196,7 +212,7 @@ class OchreDwellingAdapter:
                     q_min_kw=q_min,
                     q_max_kw=q_max,
                     q_baseline_kw=q_base,
-                    quality=Quality.VALID,
+                    quality=quality,
                 )
             )
 
@@ -209,27 +225,91 @@ class OchreDwellingAdapter:
     # -- DispatchableModel -------------------------------------------------
 
     def dispatch(self, command: DispatchCommand) -> DispatchResponse:
-        self.commands.append(command)
-        res = self._dwelling.update()
-        actual_power = float(res.get("Total Electric Power (kW)", self.current_power_kw))
+        """Translate a power target into whole-dwelling HVAC setpoint offsets.
 
+        A dwelling has no single power actuator, so the target is expressed as a
+        thermostat nudge on whichever HVAC equipment exists. Previously this
+        method ignored the command entirely, stepped the dwelling, and returned
+        accepted=True -- so a market settled against a counterfactual it had
+        never influenced.
+        """
+        self.commands.append(command)
+
+        target_kw = (
+            command.sign.to_canonical(command.power_kw)
+            if command.power_kw is not None
+            else None
+        )
+
+        violations: list[str] = []
+        control_signal: dict[str, Any] = {}
+
+        if target_kw is None:
+            violations.append("command carried no power_kw target; dwelling free-ran")
+        else:
+            baseline_kw = self.current_power_kw
+            base = 0.5 if baseline_kw is None else max(baseline_kw, 0.5)
+            # Positive delta means "consume more" -> relax cooling / raise heat.
+            delta_ratio = (target_kw - base) / max(self._rated_kw, 1e-6)
+            offset_c = max(-2.0, min(2.0, delta_ratio * 4.0))
+
+            for end_use, key in (("HVAC Cooling", "Cooling"), ("HVAC Heating", "Heating")):
+                equipment = self._equipment_for(end_use)
+                for unit in equipment:
+                    setpoint = getattr(unit, "temp_setpoint", None)
+                    if setpoint is None:
+                        continue
+                    # More cooling power means a lower cooling setpoint; more
+                    # heating power means a higher heating setpoint.
+                    signed = -offset_c if key == "Cooling" else offset_c
+                    control_signal[unit.name] = {
+                        "Setpoint": float(setpoint) + signed
+                    }
+
+            if not control_signal:
+                violations.append(
+                    "dwelling exposes no controllable HVAC setpoint; target not actuated"
+                )
+
+        res = self._dwelling.update(control_signal=control_signal or None)
+
+        measured = res.get("Total Electric Power (kW)") if isinstance(res, Mapping) else None
+        if measured is None:
+            measured = self.current_power_kw
+        actual_values: dict[str, Any] = {"indoor_temp_f": self.indoor_temp_f}
+        if measured is not None:
+            actual_values["power_kw"] = command.sign.from_canonical(float(measured))
+
+        shown = "unavailable" if measured is None else f"{float(measured):.2f} kW"
         return DispatchResponse(
             identity=self._identity,
             interval=command.interval,
-            accepted=True,
-            actual={
-                "power_kw": actual_power,
-                "indoor_temp_f": self.indoor_temp_f,
-            },
-            message=f"OCHRE Dwelling total load: {actual_power:.2f} kW (Indoor: {self.indoor_temp_f:.1f}°F)",
+            accepted=not violations,
+            actual=actual_values,
+            violations=tuple(violations),
+            message=f"OCHRE Dwelling total load: {shown} (Indoor: {self.indoor_temp_f:.1f}°F)",
         )
 
+    def _equipment_for(self, end_use: str) -> list[Any]:
+        """Return HVAC equipment for an end use, tolerating list-or-single returns."""
+        by_end_use = getattr(self._dwelling, "equipment_by_end_use", None)
+        if not by_end_use:
+            return []
+        found = by_end_use.get(end_use)
+        if found is None:
+            return []
+        return list(found) if isinstance(found, (list, tuple)) else [found]
+
     def release(self, interval: Interval) -> DispatchResponse:
+        measured = self.current_power_kw
+        actual: dict[str, Any] = {}
+        if measured is not None:
+            actual["power_kw"] = measured
         return DispatchResponse(
             identity=self._identity,
             interval=interval,
             accepted=True,
-            actual={"power_kw": self.current_power_kw},
+            actual=actual,
             message="OCHRE Dwelling released",
         )
 
@@ -237,15 +317,18 @@ class OchreDwellingAdapter:
 
     def get_state(self, timestamp: datetime | None = None) -> ResourceState:
         ts = timestamp or datetime.now(UTC)
+        measured = self.current_power_kw
+        values: dict[str, Any] = {
+            "indoor_temp_f": self.indoor_temp_f,
+            "rated_kw": self._rated_kw,
+        }
+        if measured is not None:
+            values["power_kw"] = measured
         return ResourceState(
             identity=self._identity,
             timestamp=ts,
-            values={
-                "power_kw": self.current_power_kw,
-                "indoor_temp_f": self.indoor_temp_f,
-                "rated_kw": self._rated_kw,
-            },
-            quality=Quality.VALID,
+            values=values,
+            quality=Quality.VALID if measured is not None else Quality.MISSING,
         )
 
     def get_limits(self, now: datetime | None = None) -> Limits:

@@ -260,7 +260,13 @@ class OchreWaterHeaterAdapter:
 
     def dispatch(self, command: DispatchCommand) -> DispatchResponse:
         self.commands.append(command)
-        target_kw = float(command.power_kw if command.power_kw is not None else 0.0)
+        # Normalize into the canonical load-positive convention. TENT sends
+        # GENERATION_POSITIVE commands, so omitting this inverts every dispatch.
+        target_kw = (
+            command.sign.to_canonical(command.power_kw)
+            if command.power_kw is not None
+            else 0.0
+        )
 
         # Decide actuated setpoint based on dispatched power
         if target_kw >= (self._rated_kw * 0.5):
@@ -278,7 +284,7 @@ class OchreWaterHeaterAdapter:
             interval=command.interval,
             accepted=True,
             actual={
-                "power_kw": actual_power,
+                "power_kw": command.sign.from_canonical(actual_power),
                 "water_temp_f": self.water_temp_f,
                 "water_temp_c": self.water_temp_c,
             },

@@ -237,12 +237,24 @@ class OchreEvAdapter:
 
     def dispatch(self, command: DispatchCommand) -> DispatchResponse:
         self.commands.append(command)
-        target_kw = float(command.power_kw if command.power_kw is not None else 0.0)
+        # Normalize into the canonical load-positive convention. TENT sends
+        # GENERATION_POSITIVE commands, so omitting this inverts every dispatch.
+        target_kw = (
+            command.sign.to_canonical(command.power_kw)
+            if command.power_kw is not None
+            else 0.0
+        )
 
         if not self.is_connected or self.soc >= self._target_soc:
             clamped_kw = 0.0
         else:
             clamped_kw = max(0.0, min(self._rated_kw, target_kw))
+
+        violations: list[str] = []
+        if abs(clamped_kw - target_kw) > 1e-3:
+            violations.append(
+                f"Commanded {target_kw:.2f} kW clamped to {clamped_kw:.2f} kW"
+            )
 
         if self._force_connected:
             self._ev.in_event = True
@@ -255,9 +267,10 @@ class OchreEvAdapter:
             interval=command.interval,
             accepted=True,
             actual={
-                "power_kw": actual_power,
+                "power_kw": command.sign.from_canonical(actual_power),
                 "soc": self.soc,
             },
+            violations=tuple(violations),
             message=f"OCHRE EV dispatched to {actual_power:.2f} kW (SOC: {self.soc:.1%})",
         )
 

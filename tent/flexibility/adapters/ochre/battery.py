@@ -192,7 +192,13 @@ class OchreBatteryAdapter:
 
     def dispatch(self, command: DispatchCommand) -> DispatchResponse:
         self.commands.append(command)
-        target_kw = float(command.power_kw if command.power_kw is not None else 0.0)
+        # Normalize into the canonical load-positive convention. TENT sends
+        # GENERATION_POSITIVE commands, so omitting this inverts every dispatch.
+        target_kw = (
+            command.sign.to_canonical(command.power_kw)
+            if command.power_kw is not None
+            else 0.0
+        )
 
         # Enforce envelope physical bounds using the same calculation as
         # get_envelope so an envelope-feasible command is not clamped.
@@ -206,8 +212,13 @@ class OchreBatteryAdapter:
         )[0]
 
         clamped_kw = max(max_disch_neg, min(max_chg_kw, target_kw))
+        violations: list[str] = []
+        if abs(clamped_kw - target_kw) > 1e-3:
+            violations.append(
+                f"Commanded {target_kw:.2f} kW clamped to {clamped_kw:.2f} kW due to SOC limits"
+            )
 
-        # Update OCHRE Battery simulator (P Setpoint in kW)
+        # Update OCHRE Battery simulator (P Setpoint in kW, load-positive)
         res = self._battery.update(control_signal={"P Setpoint": clamped_kw})
         actual_power = float(res.get("Battery Electric Power (kW)", clamped_kw))
 
@@ -216,9 +227,11 @@ class OchreBatteryAdapter:
             interval=command.interval,
             accepted=True,
             actual={
-                "power_kw": actual_power,
+                # Reported back in the convention the caller used.
+                "power_kw": command.sign.from_canonical(actual_power),
                 "soc": self.soc,
             },
+            violations=tuple(violations),
             message=f"OCHRE Battery dispatched to {actual_power:.2f} kW (SOC: {self.soc:.1%})",
         )
 
