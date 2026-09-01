@@ -109,6 +109,59 @@ class ReplayAdapter:
     # -- construction ------------------------------------------------------
 
     @classmethod
+    def from_config(
+        cls,
+        resource_id: str | None = None,
+        csv_path: str | Path | None = None,
+        path: str | Path | None = None,
+        rows: Iterable[Mapping[str, Any]] | None = None,
+        kind: ResourceKind | str = ResourceKind.UNKNOWN,
+        sign: SignConvention = SignConvention.LOAD_POSITIVE,
+        strict: bool = True,
+        **kwargs: Any,
+    ) -> "ReplayAdapter":
+        """Build from a config mapping, matching the other adapters' entry point.
+
+        Accepts either ``csv_path`` (the key the factory presets use) or
+        ``path``, or an in-memory ``rows`` iterable.
+        """
+        source = csv_path if csv_path is not None else path
+        if source is None and rows is None:
+            raise AdapterError(
+                "replay config requires 'csv_path' (or 'path'), or an in-memory 'rows'"
+            )
+
+        if isinstance(kind, str):
+            try:
+                kind = ResourceKind(kind)
+            except ValueError:
+                kind = ResourceKind.UNKNOWN
+
+        # kwargs may carry preset metadata (description, rated_kw, ...) that is
+        # not constructor state; keep only what __init__ understands.
+        limits = kwargs.pop("limits", None)
+
+        if rows is not None:
+            identity = ResourceIdentity(
+                resource_id=resource_id or "replay_asset",
+                kind=kind,
+                source="replay:rows",
+            )
+            return cls.from_rows(identity, rows, sign=sign, limits=limits, strict=strict)
+
+        source = Path(source)
+        identity = None
+        if resource_id:
+            identity = ResourceIdentity(
+                resource_id=resource_id,
+                kind=kind,
+                source=f"replay:{source.name}",
+            )
+        return cls.from_csv(
+            source, identity=identity, sign=sign, limits=limits, strict=strict
+        )
+
+    @classmethod
     def from_csv(
         cls,
         path: str | Path,
@@ -228,7 +281,15 @@ class ReplayAdapter:
             )
 
         fallback = self._points[max(index, 0)]
-        return self._restamp(fallback, interval, Quality.ESTIMATED)
+        # Running off the end of the data is not the same as interpolating
+        # within it. STALE says "this is the last thing I knew" so a consumer
+        # can tell hold-last-value from a genuine recorded point.
+        quality = (
+            Quality.STALE
+            if interval.start >= self._points[-1].interval.end
+            else Quality.ESTIMATED
+        )
+        return self._restamp(fallback, interval, quality)
 
     @staticmethod
     def _restamp(
@@ -317,13 +378,21 @@ class ReplayAdapter:
             actual: Mapping[str, Any] = dict(command.target)
             violations.append("no power_kw in target; replay adapter recorded it verbatim")
         else:
-            clamped = point.clamp(requested)
-            if abs(clamped - requested) > 1e-9:
+            # The command may arrive in a different convention than the recorded
+            # envelope; compare like with like before clamping.
+            canonical = command.sign.to_canonical(requested)
+            if self._sign is not SignConvention.LOAD_POSITIVE:
+                canonical = self._sign.from_canonical(canonical)
+            clamped = point.clamp(canonical)
+            if abs(clamped - canonical) > 1e-9:
                 violations.append(
-                    f"requested {requested:.4f} kW clamped to {clamped:.4f} kW "
+                    f"requested {canonical:.4f} kW clamped to {clamped:.4f} kW "
                     f"by envelope [{point.q_min_kw}, {point.q_max_kw}]"
                 )
-            actual = {"power_kw": clamped}
+            back = clamped
+            if self._sign is not SignConvention.LOAD_POSITIVE:
+                back = self._sign.to_canonical(clamped)
+            actual = {"power_kw": command.sign.from_canonical(back)}
 
         response = DispatchResponse(
             identity=self._identity,

@@ -191,13 +191,13 @@ class OchreEvAdapter:
 
     # -- FlexibilityModel --------------------------------------------------
 
-    def get_envelope(self, intervals: Sequence[Interval]) -> FlexibilityEnvelope:
+    def get_envelope(
+        self,
+        intervals: Sequence[Interval],
+        context: Mapping[str, Any] | None = None,
+    ) -> FlexibilityEnvelope:
         if not intervals:
-            return FlexibilityEnvelope(
-                resource_id=self._identity.resource_id,
-                sign=self._sign,
-                points=(),
-            )
+            raise AdapterError("get_envelope requires at least one interval")
 
         soc = self.soc
         connected = self.is_connected

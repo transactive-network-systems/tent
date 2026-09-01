@@ -146,7 +146,15 @@ class TestEnvelope:
         adapter = ReplayAdapter.from_csv(csv_path, strict=False)
         far = Interval(datetime(2026, 9, 1, tzinfo=UTC), 900)
         envelope = adapter.get_envelope([far])
-        assert envelope[0].quality is Quality.ESTIMATED
+        # Past the end of the recorded data this is hold-last-value, not an
+        # interpolation within it. STALE keeps the two distinguishable.
+        assert envelope[0].quality is Quality.STALE
+
+    def test_non_strict_gap_within_range_is_estimated(self, csv_path):
+        """A gap inside the recorded range is still an interpolation."""
+        adapter = ReplayAdapter.from_csv(csv_path, strict=False)
+        inside = Interval(datetime(2026, 8, 5, 14, 5, tzinfo=UTC), 300)
+        assert adapter.get_envelope([inside])[0].quality is Quality.ESTIMATED
 
     def test_sub_interval_marked_estimated(self, adapter):
         """A 5-minute request against 15-minute data is an estimate, not a fact."""

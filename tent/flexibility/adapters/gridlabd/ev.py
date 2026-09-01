@@ -12,6 +12,7 @@ from typing import Any, Mapping, Sequence
 
 from ...conventions import Quality, SignConvention
 from ...errors import AdapterError
+from ..storage_envelope import soc_coupled_power_bounds
 from ...schema import (
     DispatchCommand,
     DispatchResponse,
@@ -53,6 +54,7 @@ class GridlabdEvAdapter:
         target_soc: float = 0.90,
         charging_efficiency: float = 0.92,
         bidirectional: bool = False,
+        min_soc: float = 0.20,
         sign: SignConvention = SignConvention.LOAD_POSITIVE,
     ) -> None:
         self._identity = identity
@@ -63,6 +65,7 @@ class GridlabdEvAdapter:
         self._target_soc = float(target_soc)
         self._efficiency = float(charging_efficiency)
         self._bidirectional = bool(bidirectional)
+        self._min_soc = float(min_soc)
         self._sign = sign
         self.commands: list[DispatchCommand] = []
 
@@ -88,6 +91,7 @@ class GridlabdEvAdapter:
         target_soc = float(gld_dict.pop("target_soc", 0.90))
         efficiency = float(gld_dict.pop("charging_efficiency", 0.92))
         bidirectional = bool(gld_dict.pop("bidirectional", False))
+        min_soc = float(gld_dict.pop("min_soc", 0.20))
 
         loc_str = ""
         if location:
@@ -120,6 +124,7 @@ class GridlabdEvAdapter:
             target_soc=target_soc,
             charging_efficiency=efficiency,
             bidirectional=bidirectional,
+            min_soc=min_soc,
             sign=sign,
         )
 
@@ -206,8 +211,21 @@ class GridlabdEvAdapter:
         cap_kwh = self.battery_capacity_kwh
         eff = self.charging_efficiency
 
+        # V2G discharge is bounded by the energy above min_soc, cumulatively
+        # across the horizon -- not by the inverter rating alone. Without this a
+        # near-empty EV advertised full discharge power in every interval.
+        v2g_bounds = soc_coupled_power_bounds(
+            intervals,
+            soc=current_soc,
+            capacity_kwh=cap_kwh,
+            rated_kw=rated_kw,
+            min_soc=self._min_soc,
+            max_soc=self._target_soc,
+            efficiency=eff,
+        )
+
         points = []
-        for interval in intervals:
+        for interval, (v2g_min, _) in zip(intervals, v2g_bounds):
             dur_h = interval.hours
 
             if not connected or current_soc >= self._target_soc:
@@ -220,10 +238,12 @@ class GridlabdEvAdapter:
                 energy_needed_kwh = max(0.0, (self._target_soc - current_soc) * cap_kwh / eff)
                 max_p = (energy_needed_kwh / dur_h) if dur_h > 0 else rated_kw
                 q_max = max(0.0, min(rated_kw, max_p))
-                q_min = -rated_kw if self._bidirectional else 0.0
+                q_min = v2g_min if self._bidirectional else 0.0
+                if q_min > q_max:
+                    q_min = q_max
 
                 # Autonomous baseline charging: charge if connected and under target SOC
-                baseline_kw = q_max
+                baseline_kw = min(max(q_max, q_min), q_max)
 
             points.append(
                 EnvelopePoint(
