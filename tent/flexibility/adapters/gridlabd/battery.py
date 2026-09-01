@@ -12,6 +12,7 @@ from typing import Any, Mapping, Sequence
 
 from ...conventions import Quality, SignConvention
 from ...errors import AdapterError
+from ..storage_envelope import soc_coupled_power_bounds
 from ...schema import (
     DispatchCommand,
     DispatchResponse,
@@ -51,6 +52,7 @@ class GridlabdBatteryInverterAdapter:
         capacity_kwh: float = 13.5,
         min_soc: float = 0.10,
         max_soc: float = 0.95,
+        efficiency: float = 0.95,
         sign: SignConvention = SignConvention.LOAD_POSITIVE,
     ) -> None:
         self._identity = identity
@@ -60,6 +62,7 @@ class GridlabdBatteryInverterAdapter:
         self._capacity_kwh = float(capacity_kwh)
         self._min_soc = float(min_soc)
         self._max_soc = float(max_soc)
+        self._efficiency = float(efficiency)
         self._sign = sign
         self.commands: list[DispatchCommand] = []
 
@@ -84,6 +87,7 @@ class GridlabdBatteryInverterAdapter:
         rated_power_kw = float(gld_dict.pop("rated_kw", rated_kw))
         min_soc = float(gld_dict.pop("min_soc", 0.10))
         max_soc = float(gld_dict.pop("max_soc", 0.95))
+        efficiency = float(gld_dict.pop("efficiency", kwargs.pop("efficiency", 0.95)))
 
         loc_str = ""
         if location:
@@ -115,6 +119,7 @@ class GridlabdBatteryInverterAdapter:
             capacity_kwh=capacity_kwh,
             min_soc=min_soc,
             max_soc=max_soc,
+            efficiency=efficiency,
             sign=sign,
         )
 
@@ -139,7 +144,13 @@ class GridlabdBatteryInverterAdapter:
 
     @property
     def current_power_kw(self) -> float:
-        return self._engine.get_float_property(self._object_name, "P_Out", default=0.0)
+        """Canonical load-positive power in kW.
+
+        GridLAB-D's ``P_Out`` is the inverter's real power output in VA and is
+        generation-positive, so it must be negated and scaled to kW.
+        """
+        va = self._engine.get_float_property(self._object_name, "P_Out", default=0.0)
+        return -va / 1000.0
 
     # -- FlexibilityProvider -----------------------------------------------
 
@@ -151,27 +162,21 @@ class GridlabdBatteryInverterAdapter:
         if not intervals:
             raise AdapterError("get_envelope requires at least one interval")
 
-        current_soc = self.soc
-        p_max = self._rated_kw
+        # SOC is coupled across the horizon: charging in an early interval
+        # reduces headroom in every later one. See storage_envelope for why a
+        # per-interval headroom calculation is not sufficient.
+        bounds = soc_coupled_power_bounds(
+            intervals,
+            soc=self.soc,
+            capacity_kwh=self._capacity_kwh,
+            rated_kw=self._rated_kw,
+            min_soc=self._min_soc,
+            max_soc=self._max_soc,
+            efficiency=self._efficiency,
+        )
 
         points = []
-        for interval in intervals:
-            dur_h = interval.hours
-
-            # Charging headroom in load-positive (+kW)
-            if current_soc >= self._max_soc:
-                q_max = 0.0
-            else:
-                headroom_kwh = (self._max_soc - current_soc) * self._capacity_kwh
-                q_max = min(p_max, headroom_kwh / dur_h if dur_h > 0 else p_max)
-
-            # Discharging capacity in load-positive (-kW)
-            if current_soc <= self._min_soc:
-                q_min = 0.0
-            else:
-                usable_kwh = (current_soc - self._min_soc) * self._capacity_kwh
-                q_min = -min(p_max, usable_kwh / dur_h if dur_h > 0 else p_max)
-
+        for interval, (q_min, q_max) in zip(intervals, bounds):
             if q_min > q_max:
                 q_min = q_max
 
@@ -216,35 +221,39 @@ class GridlabdBatteryInverterAdapter:
 
         dur_h = command.interval.hours
         current_soc = self.soc
+        eta = self._efficiency
 
-        # Compute physical bounds for this interval duration
-        energy_avail_kwh = max(0.0, (current_soc - self._min_soc) * self._capacity_kwh * 0.95)
-        max_discharge_kw = -(energy_avail_kwh / dur_h) if dur_h > 0 else 0.0
-
-        energy_room_kwh = max(0.0, (self._max_soc - current_soc) * self._capacity_kwh / 0.95)
-        max_charge_kw = (energy_room_kwh / dur_h) if dur_h > 0 else 0.0
-
-        q_min = max(-self._rated_kw, max_discharge_kw)
-        q_max = min(self._rated_kw, max_charge_kw)
+        # Use the same bound calculation as get_envelope so a command sitting
+        # exactly on the advertised q_min/q_max is not spuriously clamped.
+        (q_min, q_max) = soc_coupled_power_bounds(
+            [command.interval],
+            soc=current_soc,
+            capacity_kwh=self._capacity_kwh,
+            rated_kw=self._rated_kw,
+            min_soc=self._min_soc,
+            max_soc=self._max_soc,
+            efficiency=eta,
+        )[0]
 
         # Clamp power to achievable envelope [q_min, q_max]
         actual_kw = max(q_min, min(q_max, cmd_power))
         if abs(actual_kw - cmd_power) > 1e-3:
             violations.append(f"Commanded {cmd_power:.2f} kW clamped to {actual_kw:.2f} kW due to SOC limits")
 
-        # Invert for GridLAB-D inverter convention if needed (P_Out is generation in some GLD versions)
-        self._engine.set_property(self._object_name, "P_Out", actual_kw)
+        # P_Out is the inverter's real power *output* to the grid in VA, i.e.
+        # generation-positive. Canonical load-positive charging must therefore
+        # be negated, and kW scaled to VA.
+        self._engine.set_property(self._object_name, "P_Out", -actual_kw * 1000.0)
 
         # Update SOC on GridLAB-D battery / inverter
         if actual_kw > 0:  # Charging
-            new_soc = min(self._max_soc, current_soc + (actual_kw * 0.95 * dur_h) / self._capacity_kwh)
+            new_soc = min(self._max_soc, current_soc + (actual_kw * eta * dur_h) / self._capacity_kwh)
         elif actual_kw < 0:  # Discharging
-            new_soc = max(self._min_soc, current_soc - (abs(actual_kw) / 0.95 * dur_h) / self._capacity_kwh)
+            new_soc = max(self._min_soc, current_soc - (abs(actual_kw) / eta * dur_h) / self._capacity_kwh)
         else:
             new_soc = current_soc
         self._engine.set_property(self._object_name, "battery_soc", new_soc)
         self._engine.set_property(self._object_name, "state_of_charge", new_soc)
-        self._engine.set_property("battery_01", "state_of_charge", new_soc)
         self._engine.set_property(self._object_name, "SOC", new_soc)
         self._engine.step(command.interval.duration_s)
 

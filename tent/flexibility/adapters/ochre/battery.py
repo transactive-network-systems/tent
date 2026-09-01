@@ -13,6 +13,7 @@ from typing import Any, Mapping, Sequence
 
 from ...conventions import Quality, SignConvention
 from ...errors import AdapterError
+from ..storage_envelope import soc_coupled_power_bounds
 from ...schema import (
     DispatchCommand,
     DispatchResponse,
@@ -158,31 +159,25 @@ class OchreBatteryAdapter:
                 points=(),
             )
 
-        soc = self.soc
+        # SOC is coupled across the horizon: see storage_envelope for why a
+        # per-interval headroom calculation overstates total energy.
+        bounds = soc_coupled_power_bounds(
+            intervals,
+            soc=self.soc,
+            capacity_kwh=self._capacity_kwh,
+            rated_kw=self._rated_kw,
+            min_soc=self._min_soc,
+            max_soc=self._max_soc,
+        )
+
         points: list[EnvelopePoint] = []
-
-        for iv in intervals:
-            duration_hours = max(iv.duration.total_seconds() / 3600.0, 1e-4)
-
-            # Available discharge energy (down to min_soc)
-            available_disch_kwh = max(0.0, (soc - self._min_soc) * self._capacity_kwh)
-            max_disch_kw = min(self._rated_kw, available_disch_kwh / duration_hours)
-
-            # Available charge energy (up to max_soc)
-            available_chg_kwh = max(0.0, (self._max_soc - soc) * self._capacity_kwh)
-            max_chg_kw = min(self._rated_kw, available_chg_kwh / duration_hours)
-
-            # In load-positive: discharge is negative kW, charge is positive kW
-            q_min = -max_disch_kw
-            q_max = max_chg_kw
-            q_base = 0.0
-
+        for iv, (q_min, q_max) in zip(intervals, bounds):
             points.append(
                 EnvelopePoint(
                     interval=iv,
                     q_min_kw=q_min,
                     q_max_kw=q_max,
-                    q_baseline_kw=q_base,
+                    q_baseline_kw=0.0,
                     quality=Quality.VALID,
                 )
             )
@@ -199,15 +194,18 @@ class OchreBatteryAdapter:
         self.commands.append(command)
         target_kw = float(command.power_kw if command.power_kw is not None else 0.0)
 
-        # Enforce envelope physical bounds
-        soc = self.soc
-        duration_hours = max(command.interval.duration.total_seconds() / 3600.0, 1e-4)
-        available_disch_kwh = max(0.0, (soc - self._min_soc) * self._capacity_kwh)
-        max_disch_kw = min(self._rated_kw, available_disch_kwh / duration_hours)
-        available_chg_kwh = max(0.0, (self._max_soc - soc) * self._capacity_kwh)
-        max_chg_kw = min(self._rated_kw, available_chg_kwh / duration_hours)
+        # Enforce envelope physical bounds using the same calculation as
+        # get_envelope so an envelope-feasible command is not clamped.
+        (max_disch_neg, max_chg_kw) = soc_coupled_power_bounds(
+            [command.interval],
+            soc=self.soc,
+            capacity_kwh=self._capacity_kwh,
+            rated_kw=self._rated_kw,
+            min_soc=self._min_soc,
+            max_soc=self._max_soc,
+        )[0]
 
-        clamped_kw = max(-max_disch_kw, min(max_chg_kw, target_kw))
+        clamped_kw = max(max_disch_neg, min(max_chg_kw, target_kw))
 
         # Update OCHRE Battery simulator (P Setpoint in kW)
         res = self._battery.update(control_signal={"P Setpoint": clamped_kw})

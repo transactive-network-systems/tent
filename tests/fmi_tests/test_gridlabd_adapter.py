@@ -217,7 +217,11 @@ class TestGridlabdBatteryInverterAdapter:
         cmd = DispatchCommand.for_power(adapter.identity, intervals[0], -4.0)
         resp = adapter.dispatch(cmd)
         assert resp.accepted is True
-        assert engine.get_float_property("inv_test", "P_Out") == -4.0
+        # P_Out is generation-positive and in VA, so a canonical load-positive
+        # discharge of -4.0 kW must be written as +4000 VA.
+        assert engine.get_float_property("inv_test", "P_Out") == 4000.0
+        # And reading it back must round-trip to canonical load-positive kW.
+        assert adapter.current_power_kw == -4.0
 
 
 class TestGridlabdFeederAdapter:
