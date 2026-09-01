@@ -3,8 +3,14 @@
 from datetime import datetime, timezone
 import pytest
 
-from tent.local_asset.model_frame.models.base import ModelFrame
-from tent.local_asset.model_frame.models.fmi_adapter import FlexibilityModelFrameAdapter
+# These tests drive real physical simulators through the FMI bridge. Both are
+# optional extras, so skip rather than fail when they are not installed.
+pytest.importorskip("pvlib")
+
+from tent.local_asset.model_frame.models.base import ModelFrame  # noqa: E402
+from tent.local_asset.model_frame.models.fmi_adapter import (  # noqa: E402
+    FlexibilityModelFrameAdapter,
+)
 
 
 def test_fmi_modelframe_adapter_initialization_from_preset():
@@ -31,6 +37,7 @@ def test_fmi_modelframe_adapter_initialization_from_preset():
 
 def test_modelframe_aggregation_with_fmi_models():
     """Verify ModelFrame correctly aggregates multiple FMI models."""
+    pytest.importorskip("ochre")
     frame_config = {
         "demand_curve_points": 2,
         "models": [

@@ -418,7 +418,8 @@ def test_prep_transactive_signal():
             self.time_intervals = []
             self.tn = tn
         
-        def sum_vertices(self, time_interval, object_to_exclude=None):
+        def sum_vertices(self, time_interval, object_to_exclude=None,
+                         enclosing_measurement=None):
             """Sum vertices from all entities except the excluded one"""
             from sortedcontainers import SortedList, SortedSet
             
@@ -456,8 +457,12 @@ def test_prep_transactive_signal():
             if len(marginal_price_set) == 0:
                 return None
             
-            # Create summed curve
-            summed_curve = SDCurve(None, time_interval)
+            # Create summed curve. The real Market.sum_vertices attaches the
+            # curve to the enclosing measurement (the prepared TransactiveSignal)
+            # and suppresses archival; mirror that so prep_transactive_signal
+            # sees a curve owned by the same measurement it is building.
+            summed_curve = SDCurve(enclosing_measurement, time_interval,
+                                   vertices=[], archive=False)
             for mp in marginal_price_set:
                 vertex = Vertex(price=mp, cost=0, quantity=0)
                 
@@ -550,10 +555,12 @@ def test_prep_transactive_signal():
     # TEST 3: Transactive Neighbor imports from local system
     print('- Test 3: The trans. Neighbor imports from local system')
     
-    # Neighbor imports (takes negative power from local perspective)
+    # Neighbor imports (takes negative power from local perspective).
+    # maximum_power/minimum_power are the neighbor's own limits; the local
+    # net curve is bounded by their negation, i.e. [-100, -10] here.
     test_model.scheduled_powers.update(time_interval, -50.0)
-    test_model.maximum_power = -10.0
-    test_model.minimum_power = -100.0
+    test_model.maximum_power = 100.0
+    test_model.minimum_power = 10.0
     
     # Asset exports to neighbor (negative quantities from asset perspective)
     asset_vertices = [
@@ -575,10 +582,11 @@ def test_prep_transactive_signal():
     # TEST 4: Transactive Neighbor exports to local system
     print('- Test 4: The trans. Neighbor exports to local system')
     
-    # Neighbor exports (provides positive power from local perspective) 
+    # Neighbor exports (provides positive power from local perspective).
+    # Neighbor's own limits are the negation of the local [10, 100] range.
     test_model.scheduled_powers.update(time_interval, 50.0)
-    test_model.maximum_power = 100.0
-    test_model.minimum_power = 10.0
+    test_model.maximum_power = -10.0
+    test_model.minimum_power = -100.0
     
     # Asset imports from neighbor (positive quantities from asset perspective)
     asset_vertices = [
@@ -601,8 +609,8 @@ def test_prep_transactive_signal():
     print('- Test 5: There is an extra Vertex in the range')
     
     test_model.scheduled_powers.update(time_interval, 50.0)
-    test_model.maximum_power = 100.0
-    test_model.minimum_power = 10.0
+    test_model.maximum_power = -10.0
+    test_model.minimum_power = -100.0
     
     # Asset has extra vertex in the middle of the range
     asset_vertices = [
@@ -728,9 +736,9 @@ def test_receive_transactive_signal():
         'signal_time': dt.isoformat(),
         'vertices': []
     }
-    serialized_signal = json.dumps(test_signal)
-    
-    test_model.receive_transactive_signal(serialized_signal)
+    # receive_transactive_signal is a pub/sub callback (peer, sender, message)
+    # and reads the message as a dict.
+    test_model.receive_transactive_signal(None, None, test_signal)
     
     # Should not have stored the signal since neighbor is non-transactive
     assert test_market not in test_model.last_received_signals or test_model.last_received_signals[test_market].empty, \
@@ -773,10 +781,8 @@ def test_receive_transactive_signal():
             }
         }
     }
-    serialized_signal = json.dumps(signal_dict)
-    
     # Now receive it
-    test_model.receive_transactive_signal(serialized_signal)
+    test_model.receive_transactive_signal(None, None, signal_dict)
     
     # Verify the signal was stored
     assert test_market in test_model.last_received_signals, '  - signal should be stored for this market'

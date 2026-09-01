@@ -456,16 +456,13 @@ class Market(Component):
             # Delete market intervals that are defined by this market object.
             self.time_intervals.destroy()
 
-            # Remove the expired market from the containing Market Series.
-            expired_markets = [x for x in self.series.markets if x == self]
-            for expired in expired_markets:
-                _log.info(f'Removing expired market: {expired}')
-                self.series.markets.discard(expired)
             # Mark completed so this block is not re-entered on subsequent events() calls.
-            # NOTE: Removal from series.markets is NOT done here because events() may be called
-            # during iteration over series.markets. Pruning is handled by
-            # MarketSeries.prune_expired(), called from _state_machine_iteration after the
-            # inner per-market loop completes.
+            # NOTE: Removal from series.markets is deliberately NOT done here. events() may be
+            # called while iterating over series.markets, and an unguarded discard can empty the
+            # series entirely -- including the newest market, which spawn() needs for the
+            # prior_market_in_series chain. Pruning is handled by MarketSeries.prune_expired(),
+            # called from TransactiveNode.step() after the per-market loop completes; it never
+            # removes markets[-1].
             self._stateIsCompleted = True
 
     def transition_from_initial_to_inactive(self):

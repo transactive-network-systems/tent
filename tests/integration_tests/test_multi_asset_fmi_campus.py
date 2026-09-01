@@ -25,6 +25,11 @@ from tent.utils.timer import Timer
 
 from tests.mock_tn import MockTN
 
+# This suite builds a campus node from real pvlib and OCHRE models. Both are
+# optional extras, so skip the module rather than erroring when absent.
+pytest.importorskip("pvlib")
+pytest.importorskip("ochre")
+
 UTC = timezone.utc
 
 

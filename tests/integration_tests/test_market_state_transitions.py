@@ -324,10 +324,12 @@ def test_series_markets_stays_bounded():
     size_at_cycle_5 = None
 
     for i in range(CYCLES):
-        # Advance the clock well past the current cycle's reconciliation so every
-        # market that can expire will do so.  Adding 3 clearing intervals gives
-        # plenty of headroom across all transition phases.
-        t = clock_base + clearing_interval * (i + 3)
+        # Advance one clearing interval per cycle. The clock must not skip a
+        # market's Active window: a market spawns its successor on the
+        # Inactive->Active transition, so jumping several intervals at once
+        # force-expires it straight from Inactive and no successor is ever
+        # created. That is a property of the driving clock, not of pruning.
+        t = clock_base + clearing_interval * (i + 1)
 
         # Mark all live markets as converged/reconciled so Negotiation and
         # Reconcile states complete rather than blocking indefinitely.
