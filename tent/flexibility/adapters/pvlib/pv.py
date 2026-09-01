@@ -35,6 +35,7 @@ change, not a different class.
 
 from __future__ import annotations
 
+import logging
 from datetime import timedelta
 from typing import Any, Mapping, Protocol, Sequence
 
@@ -53,6 +54,8 @@ from ...schema import (
 )
 
 __all__ = ["PvlibPvAdapter", "WeatherSource", "ClearSkyWeather", "CloudCoverWeather", "DataFrameWeather"]
+
+_log = logging.getLogger(__name__)
 
 
 def _require_pvlib():
@@ -125,6 +128,10 @@ class CloudCoverWeather:
     ) -> None:
         if not 0.0 <= cloud_factor <= 1.0:
             raise AdapterError(f"cloud_factor must be in [0, 1], got {cloud_factor}")
+        if volatility < 0.0:
+            # rng.normal raises on a negative scale, which surfaces far from
+            # the misconfiguration that caused it.
+            raise AdapterError(f"volatility must be >= 0, got {volatility}")
         self._location = location
         self._cloud_factor = float(cloud_factor)
         self._volatility = float(volatility)
@@ -173,21 +180,65 @@ class DataFrameWeather:
 
     Reindexes onto the requested times. ``pvlib.iotools`` readers all produce
     frames compatible with this.
+
+    Args:
+        frame: Weather data indexed by a timezone-aware DatetimeIndex.
+        method: Reindex fill method passed to ``DataFrame.reindex``.
+        tolerance: Maximum distance for ``method``-based matching.
+        wrap_year: Map requested timestamps onto the frame's own year by
+            month/day/hour before looking them up. Required for typical-year
+            data (TMY), whose index is stamped with historical years and would
+            otherwise miss any present or future horizon entirely, silently
+            yielding all-NaN.
     """
 
-    def __init__(self, frame: Any, method: str = "nearest", tolerance: str | None = "1h") -> None:
+    def __init__(
+        self,
+        frame: Any,
+        method: str = "nearest",
+        tolerance: str | None = "1h",
+        wrap_year: bool = False,
+    ) -> None:
         self._frame = frame
         self._method = method
         self._tolerance = tolerance
+        self._wrap_year = bool(wrap_year)
 
     def get(self, times: Any) -> Any:
+        import pandas as pd
+
+        lookup = times
+        if self._wrap_year and len(self._frame.index) > 0:
+            # Represent the typical year with whichever year is most common in
+            # the index, then re-stamp the requested instants into it.
+            target_year = int(pd.Series(self._frame.index.year).mode().iloc[0])
+            tz = self._frame.index.tz
+            local = times.tz_convert(tz) if tz is not None else times
+            mapped = []
+            for moment in local:
+                # Feb 29 has no counterpart in a non-leap typical year.
+                day = 28 if (moment.month == 2 and moment.day == 29) else moment.day
+                try:
+                    mapped.append(moment.replace(year=target_year, day=day))
+                except ValueError:  # pragma: no cover - defensive
+                    mapped.append(moment.replace(year=target_year, day=28))
+            lookup = pd.DatetimeIndex(mapped)
+
         try:
-            return self._frame.reindex(times, method=self._method, tolerance=self._tolerance)
+            frame = self._frame.reindex(
+                lookup, method=self._method, tolerance=self._tolerance
+            )
         except Exception as exc:
             raise AdapterError(
                 f"weather frame could not be reindexed onto requested times: {exc}. "
                 f"Check that the frame index is timezone-aware and overlaps the horizon."
             ) from exc
+
+        if self._wrap_year:
+            # Hand back the caller's own timestamps so downstream solar position
+            # is computed for the requested instants, not the typical year's.
+            frame = frame.set_axis(times)
+        return frame
 
 
 class PvlibPvAdapter:
@@ -437,6 +488,13 @@ class PvlibPvAdapter:
                     raise AdapterError(f'weather TMY file not found at: {path}')
 
             frame, _ = read_tmy3(path, map_variables=True)
+            # A TMY3 file splices representative months from different years, so
+            # its index is non-monotonic (e.g. Jan 2000 followed by Feb 2002).
+            # pandas requires a monotonic index for reindex(method=...), so
+            # without this every lookup raises. coerce_year collapses the splice
+            # onto a single year; sort_index guarantees monotonicity.
+            frame = frame.sort_index()
+            config.setdefault("wrap_year", True)
             return DataFrameWeather(frame, **config)
 
         if kind in ("dataframe", "frame"):
@@ -462,7 +520,7 @@ class PvlibPvAdapter:
 
     # -- core computation --------------------------------------------------
 
-    def _ac_kw(self, intervals: Sequence[Interval]) -> list[float]:
+    def _ac_kw(self, intervals: Sequence[Interval]) -> tuple[list[float], list[bool]]:
         """Run the model chain and return AC output in kW, one value per interval.
 
         Each interval is evaluated at its **midpoint**, which is the correct
@@ -480,6 +538,18 @@ class PvlibPvAdapter:
         )
 
         weather = self._weather.get(midpoints)
+
+        # Detect gaps here, at the weather boundary. pvlib coerces missing
+        # irradiance to an AC output of 0.0 rather than NaN, so by the time we
+        # see results.ac a data gap is indistinguishable from a genuine night.
+        gaps: list[bool] = [False] * len(intervals)
+        try:
+            irradiance = [c for c in ("ghi", "dni", "dhi") if c in weather.columns]
+            if irradiance:
+                gaps = weather[irradiance].isna().all(axis=1).tolist()
+        except Exception:  # pragma: no cover - non-DataFrame weather sources
+            pass
+
         try:
             self._mc.run_model(weather)
         except Exception as exc:
@@ -494,15 +564,30 @@ class PvlibPvAdapter:
             values = list(ac)
 
         out: list[float] = []
-        for value in values:
+        missing: list[bool] = []
+        for value, gap in zip(values, gaps):
             watts = float(value)
-            if watts != watts:  # NaN, from a weather gap
-                watts = 0.0
+            if gap or watts != watts:  # weather gap, or NaN AC
+                # Do not pretend a gap is a measurement. A 120 kW array
+                # reporting a confident 0 kW at noon is exactly the failure
+                # Quality exists to prevent, so flag it and let the caller see.
+                out.append(0.0)
+                missing.append(True)
+                continue
             # pvlib inverters can report small negative AC (night tare loss).
             # Clamp: a market cannot act on -3 W of parasitic draw, and letting
             # it through would flip the sign of a generation-only resource.
             out.append(max(watts, 0.0) / 1000.0)
-        return out
+            missing.append(False)
+
+        if all(missing):
+            _log.warning(
+                "%s: weather produced no usable irradiance for any of %d requested "
+                "intervals; envelope will be zero and flagged MISSING",
+                self._identity.resource_id,
+                len(out),
+            )
+        return out, missing
 
     # -- FlexibilityProvider ----------------------------------------------
 
@@ -527,10 +612,10 @@ class PvlibPvAdapter:
         *minimum* and curtailment is the *maximum*. That inversion is why
         :meth:`EnvelopePoint.in_convention` swaps min and max.
         """
-        ac_kw = self._ac_kw(intervals)
+        ac_kw, missing = self._ac_kw(intervals)
         points: list[EnvelopePoint] = []
 
-        for interval, kw in zip(intervals, ac_kw):
+        for interval, kw, gap in zip(intervals, ac_kw, missing):
             generation = self._sign.generation(kw)
             if self._curtailable:
                 curtailed = self._sign.generation(0.0)
@@ -543,7 +628,7 @@ class PvlibPvAdapter:
                     q_min_kw=lo,
                     q_max_kw=hi,
                     q_baseline_kw=generation,
-                    quality=Quality.ESTIMATED,
+                    quality=Quality.MISSING if gap else Quality.ESTIMATED,
                 )
             )
 
@@ -574,12 +659,13 @@ class PvlibPvAdapter:
 
         moment = timestamp or utc_now()
         interval = Interval(moment, 60)
-        kw = self._ac_kw([interval])[0]
+        values, missing = self._ac_kw([interval])
+        kw = values[0]
         return ResourceState(
             identity=self._identity,
             timestamp=moment,
             values={"power_kw": self._sign.generation(kw), "ac_output_kw": kw},
-            quality=Quality.ESTIMATED,
+            quality=Quality.MISSING if missing[0] else Quality.ESTIMATED,
         )
 
     # -- ForecastProvider --------------------------------------------------
@@ -600,15 +686,15 @@ class PvlibPvAdapter:
                 f"{self._identity.resource_id!r} cannot forecast {variable!r}; "
                 f"available: {self.available_forecasts()}"
             )
-        ac_kw = self._ac_kw(intervals)
+        ac_kw, missing = self._ac_kw(intervals)
         normalize = variable == "solar_power_kw"
         points = tuple(
             ForecastPoint(
                 interval=interval,
                 value=self._sign.generation(kw) if normalize else kw,
-                quality=Quality.ESTIMATED,
+                quality=Quality.MISSING if gap else Quality.ESTIMATED,
             )
-            for interval, kw in zip(intervals, ac_kw)
+            for interval, kw, gap in zip(intervals, ac_kw, missing)
         )
         return Forecast(variable, points, source=self._identity.source)
 
