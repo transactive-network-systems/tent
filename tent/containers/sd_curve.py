@@ -2,11 +2,7 @@ import logging
 
 from copy import copy
 from sortedcontainers import SortedSet
-try:  # Python <3.11 compatibility
-    from typing import Self  # type: ignore
-except ImportError:  # pragma: no cover
-    from typing import TypeVar
-    Self = TypeVar("Self")
+from typing import Self
 from weakref import ProxyType, proxy
 
 from tent.base import Archivable, Component

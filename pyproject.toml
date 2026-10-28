@@ -1,29 +1,47 @@
-[tool.poetry]
+[project]
 name = "tent"
 version = "3.0.0"
-description = "TENT package"
-authors = ["riley206-pnnl"]
+description = "TENT: Transactive Energy Network Template"
+authors = [{ name = "Pacific Northwest National Laboratory" }]
+requires-python = ">=3.11"
+dependencies = [
+    "python-dateutil>=2.8.0",
+    "sortedcontainers>=2.4.0",
+    "SQLAlchemy>=2.0.0",
+    "SQLAlchemy-Utils>=0.41.3",
+    "uuid6>=2024.7.10",
+]
 
-[tool.poetry.dependencies]
-python = ">=3.10,<4.0"
-gevent = ">=24.2.1"
-SQLAlchemy = ">=2.0.0"
-python-dateutil = ">=2.8.0"
-tzlocal = ">=4.1,<5.0"
-matplotlib = ">=3.7.0"
-setuptools = ">=68.0.0"
-sqlalchemy-utils = ">=0.41.3"
-intervals = ">=0.9.1"
-six = ">=1.16.0"
-greenlet = ">=3.0.0"
-wheel = ">=0.30.0"
-deepdiff = ">=6.3.0"
-sortedcontainers = ">=2.4.0"
-uuid6 = ">=2025.0.1"
-
-[tool.poetry.group.dev.dependencies]
-pytest = "~7.4.3"
+[project.optional-dependencies]
+dev = ["pytest>=7.4"]
+# Legacy plotting scripts under scripts/. These move to the tent-analysis tool and will be removed.
+scripts = ["matplotlib>=3.7", "pandas>=2.0"]
 
 [build-system]
-requires = ["poetry-core>=1.6.0"]
+requires = ["poetry-core>=2.0.0"]
 build-backend = "poetry.core.masonry.api"
+
+# ---------------------------------------------------------------------------------------------------------------------
+# pixi (https://pixi.sh): conda-forge based development environment and task runner. Optional; `pip install -e .` or
+# Poetry work without it. Runtime dependencies come from [project] above; the conda-forge entries below let pixi fetch
+# prebuilt interpreter and packages instead of building them.
+# ---------------------------------------------------------------------------------------------------------------------
+[tool.pixi.workspace]
+channels = ["conda-forge"]
+platforms = ["linux-64", "win-64", "osx-arm64"]
+
+[tool.pixi.dependencies]
+python = ">=3.11"
+sqlalchemy = ">=2.0"
+sqlalchemy-utils = ">=0.41.3"
+python-dateutil = ">=2.8"
+sortedcontainers = ">=2.4"
+pytest = ">=7.4"
+
+[tool.pixi.pypi-dependencies]
+tent = { path = ".", editable = true }
+
+[tool.pixi.tasks]
+test = "pytest tests -v"
+test-unit = "pytest tests/unit_tests -v"
+test-integration = "pytest tests/integration_tests -v"

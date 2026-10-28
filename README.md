@@ -17,16 +17,21 @@ Important base classes:
 Development
 -----------
 
-This project now uses Poetry for dependency management. For development, run:
+Dependencies are declared once, in `pyproject.toml` (PEP 621). Python 3.11 or newer is required.
 
-1. Start an interactive Poetry shell:
+Install for development with pip:
 
-    poetry shell
+    pip install -e ".[dev]"
 
-2. Install project dependencies:
+or with Poetry:
 
-    poetry install
+    poetry install --with dev
 
-A backup of the old `requirements.txt` is kept at `requirements.txt.bak`.
+or with pixi (https://pixi.sh), which also provisions the interpreter from conda-forge:
+
+    pixi install
+    pixi run test            # whole suite; also test-unit and test-integration
+
+The legacy plotting scripts under `scripts/` need the optional `scripts` extra (`pip install -e ".[scripts]"`).
 
 
