@@ -7,7 +7,6 @@ python = "3.10.*"
 pytest = "*"
 gevent = "*"
 sqlalchemy = "*"
-pandas = "*"
 python-dateutil = "*"
 tzlocal = ">=4.1,<5.0"
 matplotlib = "*"
@@ -17,7 +16,6 @@ sortedcontainers = "*"
 
 [pypi-dependencies]
 tent = { path = ".", editable = true }
-bacpypes = "*"
 
 [tasks]
 test = "pytest tests unit_tests -v"
