@@ -43,7 +43,6 @@ under Contract DE-AC05-76RL01830
 
 import importlib
 import logging
-import numpy as np
 
 from typing import List
 
@@ -77,14 +76,19 @@ class ModelFrame(object):
 
     def model_flexibility(self, params: dict = None) -> List[float]:
         params = params if params else {}
-        q = np.zeros((len(self.models), self.demand_curve_points))
-        for i, model in enumerate(self.models.values()):
+        flexibility = [0.0] * self.demand_curve_points
+        for model in self.models.values():
             try:
-                q[i, :] = model.predict_flexibility(params=params)
+                prediction = list(model.predict_flexibility(params=params))
             except KeyError:
                 _log.debug(f"Error making prediction for {model.subscribe_key}.")
-        flexibility = q.sum(axis=0)
-        return list(flexibility)
+                continue
+            if len(prediction) != self.demand_curve_points:
+                raise ValueError(f"Model {model.subscribe_key} returned {len(prediction)} flexibility points,"
+                                 f" expected {self.demand_curve_points}.")
+            for i, value in enumerate(prediction):
+                flexibility[i] += value
+        return flexibility
 
     def model_power(self, params: dict = None) -> float:
         params = params if params else {}

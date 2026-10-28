@@ -1,7 +1,8 @@
 import logging
-import numpy as np
 
 from datetime import datetime
+
+from tent.utils.helpers import linspace
 
 _log = logging.getLogger(__name__)
 
@@ -21,7 +22,7 @@ class Lighting(object):
     def predict_flexibility(self, params=None):
         interval_time: datetime = params.get('interval_time')
         min_set_point, max_set_point = self.set_point_range(interval_time)
-        csp_flex = np.linspace(min_set_point, max_set_point, num=self.n_points)
+        csp_flex = linspace(min_set_point, max_set_point, num=self.n_points)
         return [self.predict_power(params, csp) for csp in csp_flex]
 
     def predict_power(self, params=None, set_point=None):

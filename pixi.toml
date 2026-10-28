@@ -10,7 +10,6 @@ sqlalchemy = "*"
 python-dateutil = "*"
 tzlocal = ">=4.1,<5.0"
 matplotlib = "*"
-numpy = "*"
 deepdiff = "*"
 sortedcontainers = "*"
 

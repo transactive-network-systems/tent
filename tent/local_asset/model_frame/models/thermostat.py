@@ -41,7 +41,8 @@ operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
 import logging
-import numpy as np
+
+from tent.utils.helpers import linspace
 
 _log = logging.getLogger(__name__)
 
@@ -79,7 +80,7 @@ class Thermostat(object):
             min_set_point, max_set_point = self.unoccupied_set_point, self.unoccupied_set_point
         else:
             min_set_point, max_set_point = self.set_point_range()
-        csp_flex = np.linspace(min_set_point, max_set_point, num=self.n_points)
+        csp_flex = linspace(min_set_point, max_set_point, num=self.n_points)
         return [self.predict_power(params, csp) for csp in csp_flex]
 
     def predict_power(self, params=None, set_point=None):

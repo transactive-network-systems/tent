@@ -53,6 +53,16 @@ _log = logging.getLogger(__name__)
 first_cap_re = re.compile(r'(.)([A-Z][a-z]+)')
 all_cap_re = re.compile(r'([a-z\d])([A-Z])')
 
+def linspace(start: float, stop: float, num: int) -> list[float]:
+    """Return num evenly spaced values from start to stop inclusive (pure-Python replacement for numpy.linspace)."""
+    if num < 1:
+        return []
+    if num == 1:
+        return [float(start)]
+    step = (stop - start) / (num - 1)
+    return [start + step * i for i in range(num)]
+
+
 def camel_to_snake(name):
     s1 = first_cap_re.sub(r'\1_\2', name)
     return all_cap_re.sub(r'\1_\2', s1).lower()
