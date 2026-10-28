@@ -206,20 +206,20 @@ class MarketSeries(Component):
                     {"name": "commitment", "type": "Boolean"},
                     {"name": "default_price", "type": "Float"},
                     {"name": "duality_gap_threshold", "type": "Float"},
-                    {"name": "future_horizon", "type": "DateTimeRangeType"},
+                    {"name": "future_horizon", "type": "Interval"},
                     {"name": "initial_market_state", "enumeration": "MarketState"},
-                    {"name": "market_clearing_interval", "type": "DateTimeRangeType"},
-                    {"name": "market_interval_duration", "type": "DateTimeRangeType"},
+                    {"name": "market_clearing_interval", "type": "Interval"},
+                    {"name": "market_interval_duration", "type": "Interval"},
                     {"name": "number_of_intervals_to_clear", "type": "Integer"},
                     {"name": "market_order", "type": "Integer"},
                     {"name": "method", "enumeration": "Method"},
                     {"name": "delivery_anchor_time", "type": "Time"},
-                    {"name": "active_duration", "type": "DateTimeRangeType"},
-                    {"name": "negotiation_duration", "type": "DateTimeRangeType"},
-                    {"name": "market_lead_duration", "type": "DateTimeRangeType"},
-                    {"name": "delivery_lead_duration", "type": "DateTimeRangeType"},
-                    {"name": "delivery_duration", "type": "DateTimeRangeType"},
-                    {"name": "reconciliation_duration", "type": "DateTimeRangeType"}
+                    {"name": "active_duration", "type": "Interval"},
+                    {"name": "negotiation_duration", "type": "Interval"},
+                    {"name": "market_lead_duration", "type": "Interval"},
+                    {"name": "delivery_lead_duration", "type": "Interval"},
+                    {"name": "delivery_duration", "type": "Interval"},
+                    {"name": "reconciliation_duration", "type": "Interval"}
                 ]
             }
         ])

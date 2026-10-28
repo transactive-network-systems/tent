@@ -47,12 +47,12 @@ import csv
 import logging
 
 from datetime import timedelta
-from dateutil import parser
 from typing import Union
 from zoneinfo import ZoneInfo
 
 from tent.information_service_model import InformationServiceModel
 from tent.enumerations import MeasurementType
+from tent.utils.helpers import parse_datetime
 
 _log = logging.getLogger(__name__)
 
@@ -131,7 +131,7 @@ class TemperatureForecastModel(InformationServiceModel):
                     reader = csv.DictReader(f)
                     self.weather_data = [r for r in reader]
                     for rec in self.weather_data:
-                        rec['Timestamp'] = parser.parse(rec['Timestamp']).replace(minute=0, second=0, microsecond=0)
+                        rec['Timestamp'] = parse_datetime(rec['Timestamp']).replace(minute=0, second=0, microsecond=0)
                         if rec['Timestamp'].tzinfo is None:
                             rec['Timestamp'] = rec['Timestamp'].replace(tzinfo=ZoneInfo(self.tn.tz))
                         rec['Value'] = float(rec['Value'])
@@ -243,7 +243,7 @@ class TemperatureForecastModel(InformationServiceModel):
                      "kwargs": {"primary_key": True}},
                     #{"name": "local_tz", "type": "TimezoneType", "type_args": ['zoneinfo']},  # type": "String", "type_args": [255]},
                     {"name": "location", "type": "JSON"},
-                    {"name": "max_gap_time", "type": "DateTimeRangeType"},
+                    {"name": "max_gap_time", "type": "Interval"},
                     {"name": "temperature_point_name", "type": "String", "type_args": [255]},
                     {"name": "weather_file_path", "type": "String", "type_args": [255]}
                 ]

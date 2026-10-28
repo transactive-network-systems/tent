@@ -113,11 +113,6 @@ class MatchingEngine(Market):
         return strategies
 
     @property
-    def matchingStrategy(self):
-        """Deprecated alias retained for callers written against the pre-refactor API."""
-        return self.matching_strategy
-
-    @property
     def table_name(self):
         return 'matching_engine'
 

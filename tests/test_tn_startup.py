@@ -2,7 +2,7 @@
 import json
 from pathlib import Path
 
-from sqlalchemy import select
+from datetime import timedelta
 
 from tests.mock_tn import MockTN
 
@@ -20,9 +20,8 @@ def test_configure_node_from_sample_config(tmp_path):
     assert tn.market_series, 'the sample config defines market series'
     assert all(series.newest_market is not None for series in tn.market_series)
     assert all(series.market_kwargs == {} for series in tn.market_series)
-    # Read the table directly: query_data() cannot yet decode the legacy DateTimeRangeType duration columns.
-    table = tn.data_manager.tables['market_series']
-    with tn.data_manager.engine.connect() as conn:
-        rows = conn.execute(select(table.c.id)).all()
+    rows = tn.data_manager.query_data('market_series')
     assert len(rows) == len(tn.market_series)
+    # Duration columns are SQLAlchemy Interval and read back as timedelta.
+    assert all(isinstance(r['market_interval_duration'], timedelta) for r in rows)
     # TODO: Step through the state machine.

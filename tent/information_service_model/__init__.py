@@ -113,8 +113,8 @@ class InformationServiceModel(Component):
                     {"name": "id", "foreign_key": "component.id", "kwargs": {"primary_key": True}},
                     {"name": "information_type", "enumeration": "MeasurementType"},
                     {"name": "information_units", "enumeration": "MeasurementUnit"},
-                    {"name": "update_period", "type": "DateTimeRangeType"},
-                    {"name": "update_interval", "type": "DateTimeRangeType"}
+                    {"name": "update_period", "type": "Interval"},
+                    {"name": "update_interval", "type": "Interval"}
                 ]
             },
             {

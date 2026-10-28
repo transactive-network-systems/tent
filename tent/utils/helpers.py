@@ -46,12 +46,82 @@ import importlib
 import logging
 import re
 
-from datetime import datetime
+from datetime import datetime, time, timedelta
 
 _log = logging.getLogger(__name__)
 
 first_cap_re = re.compile(r'(.)([A-Z][a-z]+)')
 all_cap_re = re.compile(r'([a-z\d])([A-Z])')
+
+_DATETIME_FORMATS = ('%m/%d/%Y %H:%M', '%m/%d/%Y %H:%M:%S', '%Y-%m-%d %H:%M', '%Y/%m/%d %H:%M', '%Y/%m/%d %H:%M:%S')
+_TIME_FORMATS = ('%H:%M', '%H:%M:%S', '%I:%M %p', '%I %p')
+_WEEKDAYS = {name: i for i, name in enumerate(('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'))}
+_WEEKDAYS.update({name[:3]: i for name, i in list(_WEEKDAYS.items())})
+
+
+def parse_datetime(value) -> datetime:
+    """Parse a datetime from a datetime, an ISO 8601 string, or one of a few explicit legacy formats
+    (``m/d/Y H:M`` as used by the weather CSVs). Formats are explicit on purpose: ambiguous day/month guessing is not
+    supported, so configurations should use ISO 8601."""
+    if isinstance(value, datetime):
+        return value
+    text = str(value).strip()
+    try:
+        return datetime.fromisoformat(text.replace('Z', '+00:00'))
+    except ValueError:
+        pass
+    for fmt in _DATETIME_FORMATS:
+        try:
+            return datetime.strptime(text, fmt)
+        except ValueError:
+            continue
+    raise ValueError(f'Unrecognised datetime: {value!r}. Use ISO 8601 (YYYY-MM-DDTHH:MM:SS).')
+
+
+def parse_time(value) -> time:
+    """Parse a time of day from a time, an ISO 8601 string (``HH:MM[:SS]``), or ``H:MM`` / ``h:MM am|pm``."""
+    if isinstance(value, time):
+        return value
+    text = str(value).strip()
+    try:
+        return time.fromisoformat(text)
+    except ValueError:
+        pass
+    for fmt in _TIME_FORMATS:
+        try:
+            return datetime.strptime(text.upper(), fmt).time()
+        except ValueError:
+            continue
+    raise ValueError(f'Unrecognised time of day: {value!r}. Use HH:MM or HH:MM:SS.')
+
+
+def parse_weekday(value) -> int:
+    """Weekday index (Monday=0) from an int or an English weekday name or three-letter abbreviation."""
+    if isinstance(value, int):
+        if 0 <= value <= 6:
+            return value
+        raise ValueError(f'Weekday index out of range: {value}')
+    try:
+        return _WEEKDAYS[str(value).strip().lower()]
+    except KeyError:
+        raise ValueError(f'Unrecognised weekday: {value!r}')
+
+
+def parse_timedelta(value) -> timedelta | None:
+    """timedelta from a timedelta, a number of seconds, or the ``str(timedelta)`` form (``1 day, 0:15:00``) that
+    legacy SQLite archives hold in their duration columns."""
+    if value is None or isinstance(value, timedelta):
+        return value
+    if isinstance(value, (int, float)):
+        return timedelta(seconds=float(value))
+    text = str(value).strip()
+    m = re.fullmatch(r'(?:(-?\d+) days?, )?(-?\d+):(\d{2}):(\d{2})(?:\.(\d{1,6}))?', text)
+    if not m:
+        raise ValueError(f'Unrecognised duration: {value!r}')
+    days, hours, minutes, seconds, micros = m.groups()
+    return timedelta(days=int(days or 0), hours=int(hours), minutes=int(minutes), seconds=int(seconds),
+                     microseconds=int((micros or '0').ljust(6, '0')))
+
 
 def linspace(start: float, stop: float, num: int) -> list[float]:
     """Return num evenly spaced values from start to stop inclusive (pure-Python replacement for numpy.linspace)."""

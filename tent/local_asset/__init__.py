@@ -463,7 +463,7 @@ class LocalAsset(Entity):
                     {"name": "engagement_cost_2", "type": "Float"},
                     #{"name": "holding_cost", "type": "Float"},
                     #{"name": "disengagement_cost", "type": "Float"},
-                    {"name": "scheduling_horizon", "type": "DateTimeRangeType"}
+                    {"name": "scheduling_horizon", "type": "Interval"}
                 ]
             }
         ])

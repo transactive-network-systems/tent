@@ -1,7 +1,7 @@
 import logging
 
 from datetime import datetime
-from dateutil import parser
+from tent.utils.helpers import parse_time, parse_weekday
 
 from tent.utils.timer import Timer
 
@@ -15,10 +15,10 @@ class SimpleOccupancyManager:
         if schedule:
             self.always_occupied = False
             for day_str, schedule_info in schedule.items():
-                _day = parser.parse(day_str).weekday()
+                _day = parse_weekday(day_str)
                 if schedule_info not in ["always_on", "always_off"]:
-                    start = parser.parse(schedule_info["start"]).time()
-                    end = parser.parse(schedule_info["end"]).time()
+                    start = parse_time(schedule_info["start"])
+                    end = parse_time(schedule_info["end"])
                     self.schedule[_day] = {"start": start, "end": end}
                 else:
                     self.schedule[_day] = schedule_info

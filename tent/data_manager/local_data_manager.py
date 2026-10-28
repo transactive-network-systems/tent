@@ -1,15 +1,16 @@
 import json
 import logging
 
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 from uuid import UUID
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, select, Interval
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.sqltypes import DateTime, Uuid,  Boolean, Time
 from typing import Mapping, Sequence
 
 from tent.data_manager import DataManager
+from tent.utils.helpers import parse_timedelta
 
 _log = logging.getLogger(__name__)
 
@@ -151,6 +152,8 @@ class LocalDataManager(DataManager):
             return datetime.fromisoformat(value.replace('Z', '+00:00'))
         if isinstance(column.type, Uuid) and isinstance(value, str):
             return UUID(value)
+        if isinstance(column.type, Interval) and not isinstance(value, timedelta):
+            return parse_timedelta(value)  # seconds or the legacy str(timedelta) form
         return value
 
     def _record_to_dict(self, table_name: str, record) -> dict:

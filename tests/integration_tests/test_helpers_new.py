@@ -105,7 +105,6 @@ def test_is_hlh():
         print('test_is_hlh: is_heavyloadhour() not available in modern codebase - skipping test')
         return
         
-    from dateutil import parser
 
     holidays = [
         "2018-01-01",
@@ -130,17 +129,17 @@ def test_is_hlh():
     ]
 
     for ts in holidays:
-        dt = parser.parse(ts)
+        dt = datetime.fromisoformat(ts)
         actual = is_heavyloadhour(dt)
         assert actual == False, f'Holiday {ts} should not be heavy load hour'
 
     for ts in hlhs:
-        dt = parser.parse(ts)
+        dt = datetime.fromisoformat(ts)
         actual = is_heavyloadhour(dt)
         assert actual == True, f'{ts} should be heavy load hour'
 
     for ts in llhs:
-        dt = parser.parse(ts)
+        dt = datetime.fromisoformat(ts)
         actual = is_heavyloadhour(dt)
         assert actual == False, f'{ts} should not be heavy load hour'
 

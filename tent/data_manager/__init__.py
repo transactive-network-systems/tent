@@ -1,7 +1,6 @@
 import abc
 import logging
 
-import sqlalchemy_utils
 import tent.enumerations
 
 from collections import deque
@@ -57,7 +56,9 @@ class DataManager:
         # Handle column type:
         col_type_name: str = column_def.get('type')
         if col_type_name:
-            col_type_class: type = getattr(types, col_type_name, getattr(sqlalchemy_utils, col_type_name, None))
+            col_type_class: type = getattr(types, col_type_name, None)
+            if col_type_class is None:
+                raise ValueError(f'Unknown column type {col_type_name!r} in definition of column {column_def["name"]!r}.')
             col_type_args: list[str] = column_def.get('type_args')
             if col_type_class:
                 args.append(col_type_class(*col_type_args) if col_type_args else col_type_class)

@@ -44,7 +44,6 @@ import abc
 import logging
 
 from datetime import datetime, timezone
-from dateutil import parser
 from itertools import chain
 from sortedcontainers import SortedList
 from typing import Any, Callable
@@ -53,7 +52,7 @@ from zoneinfo import ZoneInfo
 from tent.base import Archivable
 import tent.containers as containers
 from tent.market.market_series import MarketSeries
-from tent.utils.helpers import get_class_from_spec, validate_bool
+from tent.utils.helpers import get_class_from_spec, validate_bool, parse_datetime
 from tent.utils.timer import Timer
 
 _log = logging.getLogger(__name__)
@@ -137,8 +136,8 @@ class TransactiveNode(Archivable):
         # Simulation Configurations:
         self.simulation = validate_bool(config.get('simulation', self.simulation), 'simulation')
         if self.simulation:
-            self.simulation_start_time = parser.parse(config.get('simulation_start_time', self.simulation_start_time)
-                                                      ).replace(tzinfo=ZoneInfo(self.tz))
+            self.simulation_start_time = parse_datetime(config.get('simulation_start_time', self.simulation_start_time)
+                                                        ).replace(tzinfo=ZoneInfo(self.tz))
             self.simulation_one_hour_in_seconds = int(config.get('simulation_one_hour_in_seconds',
                                                                  self.simulation_one_hour_in_seconds))
         Timer.set(sim_one_hr_in_sec=self.simulation_one_hour_in_seconds,
@@ -313,7 +312,7 @@ class TransactiveNode(Archivable):
                     {"name": "simulation", "type": "Boolean"},
                     {"name": "simulation_start_time", "type": "DateTime"},
                     {"name": "simulation_one_hour_in_seconds", "type": "Float"},
-                    {"name": "tz", "type": "TimezoneType", "type_args": ["zoneinfo"]}
+                    {"name": "tz", "type": "String", "type_args": [64]}  # IANA zone name
                 ],
                 "indices": [
                     {"name": "idx_tn_instance", "columns": ["registry_id", "name", "created"], "unique": True}

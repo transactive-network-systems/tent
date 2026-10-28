@@ -170,7 +170,7 @@ class MeterPoint(Component):
                     {"name": "class", "type": "String", "type_args": [255]},
                     {"name": "measurement_type", "enumeration": "MeasurementType"},
                     {"name": "measurement_unit", "enumeration": "MeasurementUnit"},
-                    {"name": "measurement_interval", "type": "DateTimeRangeType"},
+                    {"name": "measurement_interval", "type": "Interval"},
                     {"name": "data_period_seconds", "type": "Float"},
                     {"name": "max_buffer_seconds", "type": "Float"},
                     {"name": "scale_factor", "type": "Float"}
