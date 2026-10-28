@@ -54,28 +54,32 @@ class TimeSeriesBuffer(deque):
         if not self._expired(value):
             super(TimeSeriesBuffer, self).appendleft(value)
 
-    def extend(self, values):
+    def _as_point_records(self, values) -> list:
+        values = list(values)
         if not all(isinstance(x, PointRecord) for x in values):
-            if all(len(x) == 2 and isinstance(x[1], datetime) for x in values):
+            try:
+                if not all(len(x) == 2 and isinstance(x[1], datetime) for x in values):
+                    raise ValueError
                 values = [PointRecord(*x) for x in values]
-            else:
+            except (TypeError, ValueError):
                 raise ValueError('Values must be iterable and all elements must be compatible with PointRecord.')
+        return [x for x in values if not self._expired(x)]
+
+    def extend(self, values):
+        values = self._as_point_records(values)
         values.sort(key=lambda x: x[1])
-        values = list(filter(lambda x: x[1] + self.expiry > self.dt_class.now(timezone.utc).astimezone(self.tz), values))
         if len(values) > 0:
             self._prune_expired()
             self.last = values[-1]
             super(TimeSeriesBuffer, self).extend(values)
 
     def extendleft(self, values):
-        if not all(isinstance(x, PointRecord) for x in values):
-            if all(len(x) == 2 and isinstance(x[1], datetime)for x in values):
-                values = [PointRecord(*x) for x in values]
-            else:
-                raise ValueError('Values must be iterable and all elements must be compatible with PointRecord.')
+        values = self._as_point_records(values)
         values.sort(key=lambda x: x[1], reverse=True)
-        values = list(filter(lambda x: x[1] + self.expiry > self.dt_class.now(timezone.utc).astimezone(self.tz), values))
         if len(values) > 0:
+            self._prune_expired()
+            if self.last.d_time is None:
+                self.last = values[0]
             super(TimeSeriesBuffer, self).extendleft(values)
 
     def get(self, since=None, until=None, columns=False):
