@@ -17,8 +17,9 @@ class Entity(Component, abc.ABC):
         super(Entity, self).__init__(description, name, transactive_node)
         # cost_parameters: [float, float, float] Coefficients of quadratic cost function
         # TODO: What are reasonable defaults for cost parameters? Is [1,1,1] better than [0,0,0]?
-        self.cost_parameters: list[float] = [float(cp) for cp in
-                                             cost_parameters] if cost_parameters is not None else [0.0, 0.0, 0.0]
+        self.cost_parameters: list[float] = [float(cp) for cp in cost_parameters] if cost_parameters else [0.0, 0.0, 0.0]
+        if len(self.cost_parameters) != 3:
+            raise ValueError(f'{name}: cost_parameters must have three coefficients, got {cost_parameters!r}')
         self.location = str(location)  # [text]
         self.maximum_power = float(maximum_power)  # [avg.kW, signed] Asset's physical "hard" constraint
         self.minimum_power = float(minimum_power)  # [avg.kW, signed] Asset's physical "hard" constraint
@@ -56,12 +57,13 @@ class Entity(Component, abc.ABC):
         ##################################
         # Dynamically assigned attributes:
         ##################################
-        self.active_vertices = SDMeasurement(self, MeasurementType.ActiveVertex)
-        self.dual_costs = Measurement(self, MeasurementType.DualCost, MeasurementUnit.Monetary)
-        self.production_costs = Measurement(self, MeasurementType.ProductionCost, MeasurementUnit.Monetary)
-        self.reserve_margins = Measurement(self, MeasurementType.ReserveMargin, MeasurementUnit.kW)  # [avg.kW, signed]
+        # Owned measurements are archived with this entity's row (Component.archive), not on construction.
+        self.active_vertices = SDMeasurement(self, MeasurementType.ActiveVertex, archive_now=False)
+        self.dual_costs = Measurement(self, MeasurementType.DualCost, MeasurementUnit.Monetary, archive_now=False)
+        self.production_costs = Measurement(self, MeasurementType.ProductionCost, MeasurementUnit.Monetary, archive_now=False)
+        self.reserve_margins = Measurement(self, MeasurementType.ReserveMargin, MeasurementUnit.kW, archive_now=False)  # [avg.kW, signed]
         self.scheduled_powers = Measurement(self, MeasurementType.ScheduledPower,
-                                            MeasurementUnit.kW)  # [avg.kW, signed]
+                                            MeasurementUnit.kW, archive_now=False)  # [avg.kW, signed]
         self.total_dual_cost = 0.0  # [$] Sum of dual costs in forward time intervals
         self.total_production_cost = 0.0  # [$, non-negative] Sum of production costs in forward intervals
 

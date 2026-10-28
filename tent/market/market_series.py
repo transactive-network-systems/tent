@@ -104,6 +104,8 @@ class MarketSeries(Component):
 
         # Instantiate the first market in the series.
         self.next_clearing_time: datetime = self.duration.get_first_clearing_time()
+        # The series row must exist before its first market references it (foreign-key order on PostgreSQL).
+        self.archive()
         self.spawn(MarketState.Initial)
 
     def __iter__(self):

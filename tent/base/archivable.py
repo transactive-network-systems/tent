@@ -21,6 +21,12 @@ class Archivable(abc.ABC):
         return self.__real_time_created
 
     @property
+    def archived(self) -> bool:
+        """True once archive() has been called at least once (components that must precede their children archive
+        themselves in __init__; see Market and MarketSeries)."""
+        return self.__last_archived_record is not None
+
+    @property
     @abc.abstractmethod
     def data_manager(self):
         raise NotImplementedError
@@ -30,20 +36,22 @@ class Archivable(abc.ABC):
     def table_name(self):
         raise NotImplementedError
 
-    def archive(self, records: list[dict] = None):
-        records = records if records else []
-
+    def archive_record(self) -> dict:
+        """This object's own archive record ({'table_name', 'data'}), marking it as archived. Used by archive() and by
+        owners that write a dependent's row in the same unit of work as their own (see Component.archive)."""
         base_record = {
             'table_name': self.table_name,
             'data': self.get_record()
         }
-
         # Warn if this exact record (same id, same data) was already archived.
         if self.__last_archived_record is not None and base_record == self.__last_archived_record:
             _log.warning(f'Duplicate archive: {self.table_name} (id={self.id}) archived with identical data.')
-
-        records.append(base_record)
         self.__last_archived_record = base_record
+        return base_record
+
+    def archive(self, records: list[dict] = None):
+        records = records if records else []
+        records.append(self.archive_record())
 
         try:
             self.data_manager.archive_data(records)

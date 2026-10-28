@@ -98,9 +98,9 @@ class LocalAsset(Entity):
             else timedelta(seconds=scheduling_horizon)) # [time duration] Future that price and energy shift are relevant
 
         # These following properties are dynamically managed and should not normally be manually configured:
-        self.engagement_schedule: Measurement = Measurement(self, MeasurementType.EngagementSchedule, MeasurementUnit.Boolean)  # True = engaged
+        self.engagement_schedule: Measurement = Measurement(self, MeasurementType.EngagementSchedule, MeasurementUnit.Boolean, archive_now=False)  # True = engaged
         self.schedule_calculated: bool = False            # Flag set True after asset has scheduled power
-        self.transition_costs: Measurement = Measurement(self, MeasurementType.TransitionCost, MeasurementUnit.Monetary)
+        self.transition_costs: Measurement = Measurement(self, MeasurementType.TransitionCost, MeasurementUnit.Monetary, archive_now=False)
 
     def cost(self, power=0):
         # Calculate production (consumption) cost at the given power level.

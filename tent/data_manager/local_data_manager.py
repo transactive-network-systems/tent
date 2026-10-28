@@ -5,8 +5,9 @@ from datetime import datetime, time, timedelta, timezone
 from uuid import UUID
 
 from sqlalchemy import create_engine, select, Interval
+from sqlalchemy.schema import sort_tables
 from sqlalchemy.orm import Session
-from sqlalchemy.sql.sqltypes import DateTime, Uuid,  Boolean, Time
+from sqlalchemy.sql.sqltypes import DateTime, Uuid, Boolean, Float, Time
 from typing import Mapping, Sequence
 
 from tent.data_manager import DataManager
@@ -46,24 +47,38 @@ class LocalDataManager(ArchiveReader, DataManager):
             self.archival_queue.extend(records)
             return
 
-        def _add_to_session(sess, rec):
-            table_name = rec['table_name']
-            table_orm = self.orm.get(table_name)
-            if not table_orm:
-                _log.warning(f'Attempted to archive data to non-existent table: {table_name}')
-                # Early return so we don't attempt to call a NoneType (regression fix for unit test failure)
-                return
-            #_log.debug(rec['data'])
-            record_object = table_orm(**self._normalize_data(table_name, rec['data']))
-            # The archive is append-only: rows are inserted, never updated. Archivables whose state evolves (SDCurve,
-            # Order, MeasurementValue) carry record_time in their primary key, so every archive() is a new version row.
-            sess.add(record_object)
-
+        # Drain the queue oldest-first (self-references such as market.prior_market_id point backwards in time), then
+        # insert table by table in foreign-key dependency order. The ORM only orders INSERTs across mappers when
+        # relationships are declared, and these imperative mappings declare none, so the order is made explicit here.
+        pending = []
+        while self.archival_queue:
+            pending.append(self.archival_queue.popleft())
+        pending.extend(records)
+        by_table: dict[str, list] = {}
+        for rec in pending:
+            by_table.setdefault(rec['table_name'], []).append(rec)
+        unknown = [name for name in by_table if name not in self.orm]
+        for name in unknown:
+            _log.warning(f'Attempted to archive data to non-existent table: {name}')
+            by_table.pop(name)
+        if not by_table:
+            return
+        # Records name their leaf table, and joined inheritance writes the ancestor rows (component, entity, ...) as
+        # part of that insert. A table must therefore be flushed before anything that references any table in its
+        # inheritance chain: rank each leaf by the earliest position of its chain in the dependency sort.
+        position = {table.name: i for i, table in enumerate(sort_tables(self.registry.metadata.tables.values()))}
+        def rank(name):
+            chain = self.table_chain(name) if name in self.definitions else [name]
+            return (min(position.get(t, len(position)) for t in chain), position.get(name, len(position)))
+        order = sorted(by_table, key=rank)
         with Session(self.engine) as session:
-            while self.archival_queue:
-                _add_to_session(session, self.archival_queue.pop())
-            for record in records:
-                _add_to_session(session, record)
+            for table_name in order:
+                table_orm = self.orm[table_name]
+                for rec in by_table[table_name]:
+                    # The archive is append-only: rows are inserted, never updated. Archivables whose state evolves
+                    # (SDCurve, Order, MeasurementValue) carry record_time in their primary key.
+                    session.add(table_orm(**self._normalize_data(table_name, rec['data'])))
+                session.flush()
             # TODO: Error handling, if this fails we should end up with everything still in the archival_queue.
             session.commit()
 
@@ -149,6 +164,10 @@ class LocalDataManager(ArchiveReader, DataManager):
                 return True
             elif value in ['F', 'False', 'FALSE', 'f', 'false', '0', '0.0', 0, 0.0, 'no', 'No', 'NO']:
                 return False
+        if isinstance(column.type, Float) and isinstance(value, bool):
+            # Boolean-valued measurements (convergence flags, engagement schedules) share measurement_value.value; the
+            # measurement header's unit says they are booleans. PostgreSQL will not coerce bool to double precision.
+            return 1.0 if value else 0.0
         if isinstance(column.type, Time) and isinstance(value, str):
             return time.fromisoformat(value.replace('Z', '+00:00'))
         if isinstance(column.type, DateTime):

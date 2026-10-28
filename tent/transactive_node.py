@@ -117,8 +117,10 @@ class TransactiveNode(Archivable):
         self._setup_timer(updated_configs)
         self._setup_data_manager(updated_configs)
         self._setup_component_objects(updated_configs)
+        # The run's row: identity, simulation anchor and ratio (see Timer.set), timezone. Queued before init_archive()
+        # so it is flushed in the same unit of work as the components that reference it (foreign-key order).
+        self.archive()
         self.data_manager.init_archive()
-        self.archive()  # The run's row: identity, simulation anchor and ratio (see Timer.set), timezone.
 
     def _update_node_configurations(self, configs):
         _log.debug('IN _UPDATE_NODE_CONFIGURATIONS')
@@ -193,7 +195,8 @@ class TransactiveNode(Archivable):
             component = component_class(**config)
             if issubclass(component_class, MarketSeries):
                 self.data_manager.add_tables(component.market_class.get_archive_definitions())
-            component.archive()
+            if not component.archived:  # MarketSeries archives itself before spawning its first market
+                component.archive()
             components.append(component)
         dep_names = [d.name for d in components]
         if len(dep_names) != len(set(dep_names)):

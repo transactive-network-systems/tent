@@ -128,10 +128,9 @@ class TestLocalDataManagerUnits:
         # Should not raise exception
         ldm.archive_data(records)
         
-        # Should still commit (even though no records were added)
-        mock_session.commit.assert_called_once()
-        # No records should be added to session for nonexistent table
+        # Nothing to write, so no session work at all; the record is dropped with a warning.
         mock_session.add.assert_not_called()
+        mock_session.commit.assert_not_called()
 
     @patch('tent.data_manager.local_data_manager.Session')
     def test_archive_data_processes_queue_first(self, mock_session_class):

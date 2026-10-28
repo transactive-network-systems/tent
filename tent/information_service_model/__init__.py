@@ -75,7 +75,7 @@ class InformationServiceModel(Component):
 
         # These are dynamic properties that are assigned in code and should not be manually configured:
         self.last_modified: datetime | None = None
-        self.predicted_values: Measurement = Measurement(self, self.information_type, self.information_units)
+        self.predicted_values: Measurement = Measurement(self, self.information_type, self.information_units, archive_now=False)
 
     @abc.abstractmethod
     def update_information(self, market):

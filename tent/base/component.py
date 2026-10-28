@@ -13,6 +13,19 @@ class Component(Archivable, abc.ABC):
     def data_manager(self):
         return self.tn.data_manager
 
+    def archive(self, records: list[dict] = None):
+        """
+        Archive this component together with the headers of any Measurement it owns that has not been archived yet.
+        Components create their Measurements in __init__, before their own row exists; writing the headers in the same
+        unit of work keeps measurement.source_id valid under foreign-key enforcement (PostgreSQL).
+        """
+        from tent.containers.measurement import Measurement  # local import: containers import this module
+        records = list(records) if records else []
+        for value in list(vars(self).values()):
+            if isinstance(value, Measurement) and not value.archived:
+                records.append(value.archive_record())
+        super(Component, self).archive(records)
+
     @abc.abstractmethod
     def get_record(self) -> dict:
         record = super(Component, self).get_record()
