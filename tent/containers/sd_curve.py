@@ -1,4 +1,3 @@
-from datetime import datetime, timezone
 import logging
 
 from copy import copy
@@ -16,6 +15,7 @@ from tent.containers.time_interval import TimeInterval
 from tent.containers.vertex import Vertex
 from tent.enumerations import MeasurementType, MeasurementUnit
 from tent.utils.helpers import safe_weak_proxy_callback
+from tent.utils.timer import Timer
 
 _log = logging.getLogger(__name__)
 
@@ -450,9 +450,9 @@ class SDCurve(Archivable):
 
     def get_record(self) -> dict:
         record = super(SDCurve, self).get_record()
-        # Each archive() writes a new version of this curve, keyed by (id, record_time). record_time is wall-clock, not
-        # Timer.now(): in a stepped simulation several versions can be written within one simulated instant.
-        self.last_record_time = datetime.now(timezone.utc).astimezone()
+        # Each archive() writes a new version of this curve, keyed by (id, record_time). Timer.now() is the canonical
+        # clock everywhere (simulation time when simulating); real time is recoverable from the run's anchor and ratio.
+        self.last_record_time = Timer.now()
         record.update({
             "record_time": self.last_record_time,
             # NOTE: identity checks, not truthiness: Measurement.__bool__ is False while it holds no values, which would

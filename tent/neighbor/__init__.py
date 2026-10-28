@@ -66,7 +66,7 @@ class Neighbor(Entity):
                  convergence_threshold=0.05,
                  cost_parameters=None,
                  default_vertices=None,
-                 demand_month=datetime.today().month,
+                 demand_month: int | None = None,  # Defaults to the current (simulation) month.
                  demand_rate=4.5,
                  demand_threshold=1e9,
                  demand_threshold_coef=1,
@@ -88,7 +88,7 @@ class Neighbor(Entity):
                                        maximum_power, meter_points, minimum_power, name, transactive_node)
 
         self.convergence_threshold = float(convergence_threshold)      # [Small positive fraction]: May affect negotiations
-        self.demand_month = int(demand_month)                          # [month number]: Used to reset demand charges
+        self.demand_month = int(demand_month) if demand_month is not None else Timer.now().month  # [month number]: Used to reset demand charges
         self.demand_rate = float(demand_rate)                          # [$ / kW (/h)]: rate determinant
         self.demand_threshold = float(demand_threshold)                # [kW]; current power above which demand charges accrue
         self.demand_threshold_coef = float(demand_threshold_coef)      # Factor by which threshold is reduced in new month

@@ -174,9 +174,9 @@ class Vertex(Archivable):
                     {"name": "curve_id", "type": "Uuid", "kwargs": {"primary_key": True}},
                     {"name": "curve_record_time", "type": "DateTime", "kwargs": {"primary_key": True}},
                     {"name": "id", "type": "Uuid", "identity": True, "kwargs": {"primary_key": True}},
-                    {"name": "marginal_price", "type": "Float"},
-                    {"name": "power", "type": "Float"},
-                    {"name": "prod_cost", "type": "Float"},
+                    {"name": "price", "type": "Float"},
+                    {"name": "quantity", "type": "Float"},  # commodity-neutral: power, energy, or anything else traded
+                    {"name": "cost", "type": "Float"},
                     {"name": "continuity", "type": "Boolean"},
                     {"name": "uncertainty", "type": "Float"},
                     {"name": "record", "type": "Integer"}

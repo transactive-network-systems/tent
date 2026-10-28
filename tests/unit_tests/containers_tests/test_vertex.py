@@ -130,7 +130,7 @@ def test_get_archive_definitions_appends_vertex_table(monkeypatch):
 
     vertex_def = next(d for d in defs if d["name"] == "vertex")
     colnames = {c["name"] for c in vertex_def["columns"]}
-    expected = {"curve_id", "id", "marginal_price", "power", "prod_cost", "continuity", "uncertainty", "record"}
+    expected = {"curve_id", "curve_record_time", "id", "price", "quantity", "cost", "continuity", "uncertainty", "record"}
     assert expected <= colnames
 
 

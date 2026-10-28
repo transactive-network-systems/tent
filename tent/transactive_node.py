@@ -144,7 +144,8 @@ class TransactiveNode(Archivable):
         Timer.set(sim_one_hr_in_sec=self.simulation_one_hour_in_seconds,
                   sim_start_time=self.simulation_start_time,
                   simulation=self.simulation,
-                  tz=ZoneInfo(self.tz)
+                  tz=ZoneInfo(self.tz),
+                  anchor=self.real_time_created
         )
 
     def _setup_component_objects(self, config):

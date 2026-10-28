@@ -75,12 +75,17 @@ class Timer(object):
         return now
 
     @classmethod
-    def set(cls, sim_one_hr_in_sec=None, sim_start_time=None, simulation=False, tz=None):
+    def set(cls, sim_one_hr_in_sec=None, sim_start_time=None, simulation=False, tz=None, anchor: datetime = None):
+        """
+        Configure the clock. `anchor` is the real time at which simulation time equals sim_start_time (default: now).
+        TransactiveNode passes its own creation time, so the archived transactive_node.created value is the exact anchor
+        from which any recorded simulation time can be converted back to real time.
+        """
         # TODO: This could guard against stopped simulation after restart
         #  by tracking the current and simulation times while simulating and comparing on set.
         #  Is this worthwhile? too much overhead? May need the agent to provide an asynchronous event system.
         cls.tz = tz if isinstance(tz, ZoneInfo) else ZoneInfo(tz) if isinstance(tz, str) else cls.tz
-        cls.created_time = datetime.now(timezone.utc).astimezone(cls.tz)
+        cls.created_time = (anchor if anchor is not None else datetime.now(timezone.utc)).astimezone(cls.tz)
         cls.simulation = simulation
         if simulation and (not sim_one_hr_in_sec or not sim_start_time):
             raise ValueError("sim_one_hr_in_sec and sim_start_time must be provided when simulation is True")

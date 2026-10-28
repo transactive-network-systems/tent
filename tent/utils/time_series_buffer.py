@@ -29,7 +29,7 @@ PointRecord = namedtuple('PointRecord', ['value', 'd_time'])
 # TODO: Implement comparison methods (__lt__, __eq__, etc)
 class TimeSeriesBuffer(deque):
     def __init__(self, iterable: Iterable = (), maxlen: int = None, tz: Union[tzinfo, str] = 'UTC',
-                 dt_class: Union[datetime, type(Timer)] = datetime, expiry: timedelta = None):
+                 dt_class: Union[datetime, type(Timer)] = Timer, expiry: timedelta = None):
         super(TimeSeriesBuffer, self).__init__(iterable, maxlen)
         # TODO: Is self.tz necessary now that the Timer is aware?
         self.tz = tz if isinstance(tz, tzinfo) else ZoneInfo(tz)
