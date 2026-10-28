@@ -1,7 +1,7 @@
 import json
 import logging
 
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, timezone
 from uuid import UUID
 
 from sqlalchemy import create_engine, select, Interval
@@ -10,12 +10,13 @@ from sqlalchemy.sql.sqltypes import DateTime, Uuid,  Boolean, Time
 from typing import Mapping, Sequence
 
 from tent.data_manager import DataManager
+from tent.data_manager.reader import ArchiveReader
 from tent.utils.helpers import parse_timedelta
 
 _log = logging.getLogger(__name__)
 
 
-class LocalDataManager(DataManager):
+class LocalDataManager(ArchiveReader, DataManager):
     def __init__(self, parent, db_params: dict, *args, **kwargs):
         super(LocalDataManager, self).__init__(parent, *args, **kwargs)
         # TODO: Should this just be checking for a db_type of local? Is this the same code for postgres or others?
@@ -36,6 +37,8 @@ class LocalDataManager(DataManager):
 
     def archive_data(self, records: Mapping|Sequence = None):
         # TODO: Would it be better to move db write logic into a periodic and always append here to the archival_queue?
+        if self.read_only:
+            raise RuntimeError('This data manager was opened for reading (LocalDataManager.from_url); it does not archive.')
         records = records if records else []
         records = [records] if isinstance(records, Mapping) else records
         #_log.info(f'@@@@@@@ Archiving data: {records}')
@@ -148,8 +151,12 @@ class LocalDataManager(DataManager):
                 return False
         if isinstance(column.type, Time) and isinstance(value, str):
             return time.fromisoformat(value.replace('Z', '+00:00'))
-        if isinstance(column.type, DateTime) and isinstance(value, str):
-            return datetime.fromisoformat(value.replace('Z', '+00:00'))
+        if isinstance(column.type, DateTime):
+            if isinstance(value, str):
+                value = datetime.fromisoformat(value.replace('Z', '+00:00'))
+            if isinstance(value, datetime) and value.tzinfo is not None:
+                return value.astimezone(timezone.utc)  # one convention in the archive: UTC
+            return value
         if isinstance(column.type, Uuid) and isinstance(value, str):
             return UUID(value)
         if isinstance(column.type, Interval) and not isinstance(value, timedelta):
@@ -157,10 +164,8 @@ class LocalDataManager(DataManager):
         return value
 
     def _record_to_dict(self, table_name: str, record) -> dict:
-        return {
-            column.name: getattr(record, column.name)
-            for column in self.tables[table_name].columns
-        }
+        return self.decode_row({column.name: getattr(record, column.name) for column in self.tables[table_name].columns},
+                               self.tables[table_name].columns)
 
 
 # TODO: Move to TransactiveNodeAgent.

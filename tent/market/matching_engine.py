@@ -125,6 +125,7 @@ class MatchingEngine(Market):
     @classmethod
     def get_archive_definitions(cls) -> list[dict]:
         definitions = super(MatchingEngine, cls).get_archive_definitions()
+        definitions.extend(Order.get_archive_definitions())  # the order book's rows
         definitions.extend([
             {
                 "name": "matching_engine",

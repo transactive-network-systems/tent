@@ -60,7 +60,9 @@ class DataManager:
             if col_type_class is None:
                 raise ValueError(f'Unknown column type {col_type_name!r} in definition of column {column_def["name"]!r}.')
             col_type_args: list[str] = column_def.get('type_args')
-            if col_type_class:
+            if col_type_class is types.DateTime:
+                args.append(types.DateTime(timezone=True))  # TENT datetimes are always aware; stored as UTC
+            elif col_type_class:
                 args.append(col_type_class(*col_type_args) if col_type_args else col_type_class)
 
         # Handle enums:
