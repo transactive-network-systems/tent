@@ -79,3 +79,45 @@ def test_curve_versions_carry_vertex_rows(configured):
     latest = by_version[max(by_version)]
     assert sorted((v['price'], v['quantity'], v['record']) for v in latest) == [(0.1, 0.0, 0), (0.2, 50.0, 1), (0.3, 80.0, 2)]
     assert all(set(v) >= {'price', 'quantity', 'cost', 'continuity', 'uncertainty'} for v in vertices)
+
+
+def test_full_consensus_recorded_per_interval(configured):
+    from tent.containers.vertex import Vertex  # noqa: F401 (kept for symmetry with the other tests)
+    dm = configured.data_manager
+    market = configured.market_series[0].newest_market
+    transactive = [n for n in configured.neighbors if n.transactive]
+    assert transactive, 'the campus config has transactive neighbors'
+    ti0, ti1 = market.time_intervals[0], market.time_intervals[1]
+    for n in transactive:
+        n.convergence_flags.update(ti0, True)
+        n.convergence_flags.update(ti1, False)
+    market.converged = True
+    market.record_consensus()
+    headers = dm.query_data('measurement', conditions={'source_id': market.id})
+    consensus = [h for h in headers if h['measurement_type'] is MeasurementType.FullConsensus]
+    assert len(consensus) == 1
+    rows = dm.query_data('measurement_value', conditions={'measurement_id': consensus[0]['id']})
+    by_interval = {r['interval_id']: r['value'] for r in rows}
+    assert by_interval[ti0.id] == 1.0 and by_interval[ti1.id] == 0.0
+    assert all(by_interval[ti.id] == 0.0 for ti in market.time_intervals[2:]), 'intervals without flags are not consensus'
+    market.converged = False
+    market.record_consensus()
+    rows = dm.query_data('measurement_value', conditions={'measurement_id': consensus[0]['id'], 'interval_id': ti0.id})
+    assert sorted(r['value'] for r in rows) == [0.0, 1.0], 'append-only: both versions kept'
+
+
+def test_transactive_signal_archives_its_curves(configured):
+    from tent.containers.transactive_signal import TransactiveSignal
+    dm = configured.data_manager
+    market = configured.market_series[0].newest_market
+    neighbor = next(n for n in configured.neighbors if n.transactive)
+    ti = market.time_intervals[0]
+    signal = TransactiveSignal(market=market, neighbor=neighbor, direction='sent')
+    signal.update(ti, [Vertex(price=0.05, quantity=-10.0), Vertex(price=0.10, quantity=40.0)], archive=False)
+    signal.archive()
+    rows = dm.query_data('transactive_signal', conditions={'id': signal.id})
+    assert len(rows) == 1 and rows[0]['market_id'] == market.id and rows[0]['direction'] == 'sent'
+    curves = dm.query_data('sd_curve', conditions={'measurement_id': signal.id})
+    assert len(curves) == 1 and curves[0]['time_interval_id'] == ti.id
+    vertices = dm.query_data('vertex', conditions={'curve_id': curves[0]['id']})
+    assert sorted((v['price'], v['quantity']) for v in vertices) == [(0.05, -10.0), (0.10, 40.0)]

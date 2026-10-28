@@ -189,6 +189,7 @@ class ConsensusMarket(Market):
             if k == 100:
                 self.converged = True
 
+        self.record_consensus()
         # Signal that negotiation work is complete so the state machine can transition.
         self._stateIsCompleted = True
 

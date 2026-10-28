@@ -260,6 +260,12 @@ class TransactiveSignal(SDMeasurement):
                         return True
             return False
 
+    def archive(self, records: list[dict] = None):
+        """Archive the signal header and, with it, every interval's curve (sd_curve + vertex rows) as one version."""
+        super(TransactiveSignal, self).archive(records)
+        for _, curve in self.all:
+            curve.archive()
+
     @property
     def table_name(self):
         return 'transactive_signal'
@@ -283,7 +289,7 @@ class TransactiveSignal(SDMeasurement):
                 "inherits": "measurement",
                 "columns": [
                     {"name": "id", "type": "Uuid", "foreign_key": "measurement.id", "kwargs": {"primary_key": True}},
-                    {"name": "direction", "enumeration": "Direction"},
+                    {"name": "direction", "type": "String", "type_args": [16]},  # sent or received
                     {"name": "protocol_version", "type": "Float"},
                     {"name": "market_id", "foreign_key": "market.id"},
                     {"name": "signal_time", "type": "DateTime"}

@@ -117,6 +117,7 @@ class Market(Component):
         self.total_demand: Measurement = Measurement(self, MeasurementType.TotalDemand, MeasurementUnit.kW)  # [avg.kW]
         self.total_dual_cost: float = 0.0  # [$]
         self.total_generation: Measurement = Measurement(self, MeasurementType.TotalGeneration, MeasurementUnit.kW)  # [avg.kW]
+        self.full_consensus: Measurement = Measurement(self, MeasurementType.FullConsensus, MeasurementUnit.Boolean)  # per interval, see record_consensus()
         self.total_production_cost: float = 0.0  # [$]
 
         # Set up market
@@ -144,6 +145,19 @@ class Market(Component):
         if new_state != self._market_state:
             self._market_state = new_state
             self.record_state(new_state)
+
+    def record_consensus(self) -> None:
+        """
+        Record, per active time interval, whether full consensus holds: this market has converged AND every transactive
+        neighbor's convergence flag for the interval is set (a neighbor with no flag yet counts as not converged).
+        Called at the end of each ConsensusMarket negotiation pass and when any market leaves Negotiation, so the
+        archive carries the consensus history the 2023 negotiation-record analyses relied on.
+        """
+        neighbors = [n for n in getattr(self.tn, 'neighbors', []) if getattr(n, 'transactive', False)]
+        for time_interval in self.time_intervals:
+            flags = [n.convergence_flags.get_by_interval(time_interval) for n in neighbors]
+            agreed = all(f is not None and bool(f.value) for f in flags)
+            self.full_consensus.update(time_interval, bool(self.converged and agreed))
 
     def record_state(self, state: MarketState) -> None:
         self.data_manager.archive_data({'table_name': 'market_state_change',
@@ -539,6 +553,7 @@ class Market(Component):
 
         :return: None
         """
+        self.record_consensus()
         _log.debug(f'MARKET: {self.name} STATE IS NOW TRANSITIONING: Negotiation to Market Lead')
         return None
 
