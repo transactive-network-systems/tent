@@ -65,7 +65,7 @@ class Vertex(Archivable):
                      #  Order.Vertex had this explanation: This should be updated by the market agent to reflect the time that the Vertex is
                      #    received by the market agent. Defaults to datetime.datetime.now().
         super(Vertex, self).__init__()
-        self.curve = proxy(curve, safe_weak_proxy_callback(self, 'measurement')) if curve else None
+        self.curve = proxy(curve, safe_weak_proxy_callback(self, 'curve')) if curve else None
         # TODO: Clean up explanations.
         # Production cost. A dynamic representation of the delivered cost. An ideal is that the cost of electricity
         # using this price should be equivalent to revenue payments over extended time periods. Local assets and
@@ -171,7 +171,8 @@ class Vertex(Archivable):
             {
                 "name": "vertex",
                 "columns": [
-                    {"name": "curve_id", "foreign_key": "sd_curve.id"},
+                    {"name": "curve_id", "type": "Uuid", "kwargs": {"primary_key": True}},
+                    {"name": "curve_record_time", "type": "DateTime", "kwargs": {"primary_key": True}},
                     {"name": "id", "type": "Uuid", "identity": True, "kwargs": {"primary_key": True}},
                     {"name": "marginal_price", "type": "Float"},
                     {"name": "power", "type": "Float"},
@@ -179,6 +180,11 @@ class Vertex(Archivable):
                     {"name": "continuity", "type": "Boolean"},
                     {"name": "uncertainty", "type": "Float"},
                     {"name": "record", "type": "Integer"}
+                ],
+                "constraints": [
+                    {"name": "fk_vertex_sd_curve_version",
+                     "foreign_key": {"columns": ["curve_id", "curve_record_time"],
+                                     "references": ["sd_curve.id", "sd_curve.record_time"]}}
                 ]
             }
         ])

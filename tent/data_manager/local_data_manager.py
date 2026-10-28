@@ -51,6 +51,8 @@ class LocalDataManager(DataManager):
                 return
             #_log.debug(rec['data'])
             record_object = table_orm(**self._normalize_data(table_name, rec['data']))
+            # The archive is append-only: rows are inserted, never updated. Archivables whose state evolves (SDCurve,
+            # Order, MeasurementValue) carry record_time in their primary key, so every archive() is a new version row.
             sess.add(record_object)
 
         with Session(self.engine) as session:

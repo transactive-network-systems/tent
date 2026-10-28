@@ -12,6 +12,10 @@ from tent.utils.helpers import get_class_from_spec, safe_weak_proxy_callback, va
 
 
 class MarketSeries(Component):
+    # Keyword arguments that spawn() supplies to the market class; see __init__(**market_kwargs).
+    SPAWN_KEYWORDS = frozenset({'transactive_node', 'market_series', 'initial_market_state', 'transition_times',
+                                'market_to_be_refined', 'prior_market_in_series', 'price_model'})
+
     """
     An object of this class contains all the critical timing and initialization properties of the market objects in a
     series of similar market objects. These properties were initially owned by the market objects and had to be passed
@@ -45,8 +49,17 @@ class MarketSeries(Component):
                  method: Union[Method, str, int] = Method.Interpolation,#Solution method {1:subgradient,2:interpolation}
                  price_model: dict = None,                  # Configuration spec for a PriceModel class.
                  refined_series=None,
+                 **market_kwargs                            # Any further keywords are passed to market_class on spawn.
                  ):
         super(MarketSeries, self).__init__(description, name, transactive_node)
+        # Keywords that are not MarketSeries parameters belong to the configured market class (e.g. MatchingEngine's
+        # matching_strategy). They are stored as configured and forwarded verbatim by spawn(); the market class parses
+        # them and records them in its own extension table. Names that spawn() sets itself cannot be configured.
+        reserved = self.SPAWN_KEYWORDS.intersection(market_kwargs)
+        if reserved:
+            raise TypeError(f'MarketSeries {name}: {sorted(reserved)} are set by the series when it spawns markets '
+                            f'and cannot be configured as market keywords.')
+        self.market_kwargs: dict = dict(market_kwargs)
         self.duration: MarketDurations = MarketDurations.new(duration_active, duration_negotiation,
                                                              duration_market_lead, duration_delivery_lead,
                                                              duration_reconciliation, interval_duration,
@@ -145,7 +158,8 @@ class MarketSeries(Component):
             transition_times=self.duration.get_timings(self.next_clearing_time),
             market_to_be_refined=self.get_refined_market(self.next_clearing_time),
             prior_market_in_series=self.newest_market if self.newest_market else None,
-            price_model=price_model_obj
+            price_model=price_model_obj,
+            **self.market_kwargs
         )
         self.next_clearing_time += self.duration.market_clearing_interval
         self.newest_market = new_market

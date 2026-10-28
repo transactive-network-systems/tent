@@ -42,9 +42,9 @@ def test_record_with_real_list_and_weakref(monkeypatch):
     # record uses real list.index with the actual vertex
     assert v.record == 0
 
-    # callback factory was called with (self, 'measurement')
+    # callback factory was called with (self, 'curve'): a dead curve clears the vertex's curve reference
     assert captured["args"][0] is v
-    assert captured["args"][1] == "measurement"
+    assert captured["args"][1] == "curve"
 
 
 def test_defaults_and_continuity_is_validated(monkeypatch):

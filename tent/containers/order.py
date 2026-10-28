@@ -38,71 +38,71 @@ class Order(SDCurve):
                  interval: TimeInterval,  # PROTECTED
                  actor: Neighbor or LocalAsset,  # PROTECTED. Not using default because this association is critical for
                  #                                 an Order
-                 expire_by: datetime = Timer.now() + OFFER_DURATION,  # Protected
-                 parent_order_id: int or None = None,
-                 vertices: list or None = None,
+                 expire_by: datetime | None = None,  # Protected. Defaults to Timer.now() + OFFER_DURATION.
+                 parent_order_id=None,
+                 vertices: list | None = None,
                  supply_or_demand: SupplyOrDemand or bool or None = None
                  ):
-        # TODO: Can we pass in a measurement here, for orders?
-        super(Order, self).__init__(interval=interval, vertices=vertices)
+        # Orders archive through the market's order-book Measurement (see MatchingEngine.order_measurement), which
+        # gives them the same measurement/owner linkage as every other SDCurve. Markets without one still work; their
+        # orders are simply not archived.
+        measurement = getattr(market, 'order_measurement', None)
+        super(Order, self).__init__(measurement, interval, vertices=vertices if vertices is not None else [],
+                                    archive=False)
+        # Order algorithms depend on list semantics: supply and demand vertices are sorted in opposite directions
+        # (see sort_order) and duplicate (price, quantity) pairs are meaningful during matching, so the SortedSet used by
+        # SDCurve is replaced with a plain list here.
+        self.vertices: list = list(self.vertices)
         self.time_stamp: datetime = Timer.now()
-
-        self.__market__ = market # TODO: Shouldn't this refer to self.interval.market?
-        self.__marketSeries__: str = market.series.name
+        self.__market__ = market  # TODO: Shouldn't this refer to self.interval.market?
         if actor:
             self.__actor__: Neighbor or LocalAsset = actor
         else:
             raise TypeError("A Neighbor or LocalAsset object must own every bid or offer.")
         self.status: OrderStatus = OrderStatus.NEW
-        # self.allowPartialMatch: bool = allow_partial_match
-        if parent_order_id:
-            self.parent_order_id: int or None = parent_order_id
-        else:
-            self.parent_order_id: int or None = None
+        self.parent_order_id = parent_order_id if parent_order_id else None
         self.child_order_ids: list = []
-        self.__expireBy__: datetime = expire_by
+        self.__expireBy__: datetime = expire_by if expire_by is not None else Timer.now() + OFFER_DURATION
         self.supply_or_demand: SupplyOrDemand = supply_or_demand
-
+        self.description = ''
+        # A side-less order is split into a supply order and a demand order (either may be empty). The children are
+        # returned through child_orders for the caller to book; this constructor does not touch the market's book.
+        self.child_orders: list[Order] = []
         if self.supply_or_demand is None:
-            supply_order = Order(market=self.market,
-                                 interval=self.interval,
-                                 actor=self.actor,
-                                 expire_by=self.expire_by,
-                                 parent_order_id=self.id,
-                                 vertices=self.vertices,
-                                 supply_or_demand=SupplyOrDemand.SUPPLY)
-            self.child_order_ids.append(supply_order.id)
-            supply_order = supply_order.check_supply_order()
-            if supply_order and supply_order.order_or_none():
-                self.market.orderList.append(supply_order)
-                if any([x == self for x in self.market.orderList]):
-                    self.market.orderList = [x for x in self.market.orderList if x != self]
-
-            demand_order = Order(market=self.market, interval=self.interval, actor=self.actor,
-                                 expire_by=self.expire_by,
-                                 parent_order_id=self.id, vertices=self.vertices,
-                                 supply_or_demand=SupplyOrDemand.DEMAND)
-            self.child_order_ids.append(demand_order.id)
-            demand_order = demand_order.check_demand_order()
-            if demand_order and demand_order.order_or_none():
-                self.market.orderList.append(demand_order)
-                if any([x == self for x in self.market.orderList]):
-                    self.market.orderList = [x for x in self.market.orderList if x != self]
-
+            for side, check in ((SupplyOrDemand.SUPPLY, Order.check_supply_order),
+                                (SupplyOrDemand.DEMAND, Order.check_demand_order)):
+                child = Order(market=self.market, interval=self.interval, actor=self.actor, expire_by=self.expire_by,
+                              parent_order_id=self.id, vertices=[copy(v) for v in self.vertices], supply_or_demand=side)
+                self.child_order_ids.append(child.id)
+                child = check(child)
+                if child and child.order_or_none():
+                    self.child_orders.append(child)
             self.status = OrderStatus.SUPERSEDED
-            self.description = []
-
         self.seller = None
         self.buyer = None
         self.assign_buyer_or_seller()
+        # Orders are archived by the MatchingEngine when they are booked (submitted, matched, or left standing) and
+        # when they are superseded, not on construction: matching creates transient copies that are never booked.
+
+    @classmethod
+    def from_curve(cls, market, interval: TimeInterval, actor, curve: SDCurve, expire_by: datetime | None = None
+                   ) -> list['Order']:
+        """
+        Build the order(s) that express an entity's supply/demand curve for one interval: a supply order for the
+        positive-quantity part and a demand order for the negative-quantity part, omitting empty sides. The vertices are
+        copied, so later changes to the curve do not alter the orders. Returns the (zero to two) non-empty orders.
+        """
+        parent = cls(market=market, interval=interval, actor=actor, expire_by=expire_by,
+                     vertices=[copy(v) for v in curve.vertices], supply_or_demand=None)
+        return parent.child_orders
 
     @property
     def market(self):
         return self.__market__
 
     @property
-    def market_series(self):
-        return self.__marketSeries__
+    def market_series(self) -> str:
+        return self.market.series.name
 
     @property
     def actor(self):
@@ -201,8 +201,7 @@ class Order(SDCurve):
                     price=pp.price,
                     quantity=remainder,
                     continuity=pp.continuity,
-                    curve_id=self.id,
-                    timestamp=self.time_stamp
+                    curve=self
                 )
             )
 
@@ -227,8 +226,7 @@ class Order(SDCurve):
                     price=match_price,
                     quantity=quantity,
                     continuity=False,
-                    curve_id=self.id,
-                    timestamp=self.time_stamp
+                    curve=self
                 )
             ]
             matched_order.status = OrderStatus.MATCHED
@@ -241,15 +239,13 @@ class Order(SDCurve):
                     price=match_price,
                     quantity=0.0,
                     continuity=False,
-                    curve_id=self.id,
-                    timestamp=self.time_stamp
+                    curve=self
                 ),
                 Vertex(
                     price=match_price,
                     quantity=quantity,
                     continuity=False,
-                    curve_id=self.id,
-                    timestamp=self.time_stamp
+                    curve=self
                 )
             ]
             matched_order.status = OrderStatus.MATCHED
@@ -380,8 +376,7 @@ class Order(SDCurve):
                         price=price_at_q0,
                         quantity=0.0,
                         continuity=point.continuity,
-                        curve_id=self.id,
-                        timestamp=self.time_stamp
+                        curve=self
                     )
                     revised_vertices.append(
                         new_point
@@ -422,8 +417,7 @@ class Order(SDCurve):
                 price=test_price,
                 quantity=0.0,
                 continuity=False,
-                curve_id=self.id,
-                timestamp=self.time_stamp
+                curve=self
             )
             qVertex.vType = VTypes.NONE
             return qVertex
@@ -436,8 +430,7 @@ class Order(SDCurve):
                 price=test_price,
                 quantity=self.vertices[0].quantity,
                 continuity=self.vertices[0].continuity,
-                curve_id=self.id,
-                timestamp=self.time_stamp
+                curve=self
             )
             qVertex.vType = VTypes.MARKET_ORDER
             return qVertex
@@ -459,8 +452,7 @@ class Order(SDCurve):
                     price=test_price,
                     quantity=self.vertices[0].quantity,
                     continuity=self.vertices[0].continuity,
-                    curve_id=self.id,
-                    timestamp=self.time_stamp
+                    curve=self
                 )
                 qVertex.vType = VTypes.LIMIT_ORDER
                 return qVertex
@@ -472,8 +464,7 @@ class Order(SDCurve):
                     price=test_price,
                     quantity=self.vertices[-1].quantity,
                     continuity=self.vertices[-1].continuity,
-                    curve_id=self.id,
-                    timestamp=self.time_stamp
+                    curve=self
                 )
                 if len(self.vertices) == 2:
                     qVertex.vType = VTypes.LIMIT_ORDER
@@ -498,8 +489,7 @@ class Order(SDCurve):
                             price=test_price,
                             quantity=self.vertices[i + 1].quantity,
                             continuity=self.vertices[i + 1].continuity,
-                            curve_id=self.id,
-                            timestamp=self.time_stamp
+                            curve=self
                         )
                         if len(self.vertices) == 2:
                             qVertex.vType = VTypes.LIMIT_ORDER
@@ -525,8 +515,7 @@ class Order(SDCurve):
                             price=test_price,
                             quantity=q,
                             continuity=self.vertices[i + 1].continuity,
-                            curve_id=self.id,
-                            timestamp=self.time_stamp
+                            curve=self
                         )
                         if len(self.vertices) == 2:
                             qVertex.vType = VTypes.LINEAR
@@ -543,8 +532,7 @@ class Order(SDCurve):
                             price=test_price,
                             quantity=0.0,
                             continuity=False,
-                            curve_id=self.id,
-                            timestamp=self.time_stamp
+                            curve=self
                         )
                         qVertex.vType = VTypes.NONE
                         return qVertex
@@ -559,8 +547,7 @@ class Order(SDCurve):
                     price=test_price,
                     quantity=self.vertices[0].quantity,
                     continuity=self.vertices[0].continuity,
-                    curve_id=self.id,
-                    timestamp=self.time_stamp
+                    curve=self
                 )
                 qVertex.vType = VTypes.MARKET_ORDER
                 return qVertex
@@ -572,8 +559,7 @@ class Order(SDCurve):
                     price=test_price,
                     quantity=self.vertices[-1].quantity,
                     continuity=self.vertices[-1].continuity,
-                    curve_id=self.id,
-                    timestamp=self.time_stamp
+                    curve=self
                 )
                 if len(self.vertices) == 2:
                     qVertex.vType = VTypes.LIMIT_ORDER
@@ -597,8 +583,7 @@ class Order(SDCurve):
                             price=test_price,
                             quantity=self.vertices[i + 1].quantity,
                             continuity=self.vertices[i + 1].continuity,
-                            curve_id=self.id,
-                            timestamp=self.time_stamp
+                            curve=self
                         )
                         if len(self.vertices) == 2:
                             qVertex.vType = VTypes.LIMIT_ORDER
@@ -623,8 +608,7 @@ class Order(SDCurve):
                             price=test_price,
                             quantity=q,
                             continuity=self.vertices[i + 1].continuity,
-                            curve_id=self.id,
-                            timestamp=self.time_stamp
+                            curve=self
                         )
                         if len(self.vertices) == 2:
                             qVertex.vType = VTypes.LINEAR
@@ -641,8 +625,7 @@ class Order(SDCurve):
                             price=test_price,
                             quantity=0.0,
                             continuity=False,
-                            curve_id=self.id,
-                            timestamp=self.time_stamp
+                            curve=self
                         )
                         qVertex.vType = VTypes.NONE
                         return qVertex
@@ -727,8 +710,7 @@ class Order(SDCurve):
                         price=price_at_q0,
                         quantity=0.0,
                         continuity=point.continuity,
-                        curve_id=self.id,
-                        timestamp=self.time_stamp
+                        curve=self
                     )
                     revised_vertices.append(
                         new_point
@@ -877,12 +859,10 @@ class Order(SDCurve):
         copiedOrder.time_stamp = self.time_stamp
         copiedOrder.status = self.status
         copiedOrder.child_order_ids = []
-        copiedOrder.market_series = self.market_series
-        copiedOrder.vertices = []
+        copiedOrder.description = self.description
         copiedOrder.buyer = self.buyer
         copiedOrder.seller = self.seller
-        for pp in self.vertices:
-            copiedOrder.vertices.append(copy(pp))
+        copiedOrder.vertices = [copy(pp) for pp in self.vertices]
         return copiedOrder
 
     def __deepcopy__(self, memodict=None):
@@ -911,7 +891,18 @@ class Order(SDCurve):
         return 'order'
 
     def get_record(self) -> dict:
-        raise NotImplementedError
+        record = super(Order, self).get_record()
+        record.update({
+            'actor_id': self.actor.id if self.actor is not None else None,
+            'buyer_id': getattr(self.buyer, 'id', None),
+            'seller_id': getattr(self.seller, 'id', None),
+            'parent_order_id': self.parent_order_id,
+            'status': self.status,
+            'supply_or_demand': self.supply_or_demand,
+            'time_stamp': self.time_stamp,
+            'expire_by': self.expire_by
+        })
+        return record
 
     @classmethod
     def get_archive_definitions(cls) -> list[dict]:
@@ -921,10 +912,20 @@ class Order(SDCurve):
                 "name": "order",
                 "inherits": "sd_curve",
                 "columns": [
-                    {"name": "id", "foreign_key": "sd_curve.id", "kwargs": {"primary_key": True}},
-                    # {"name": "status", "enumeration": "enum"},
-                    # {"name": "supply_or_demand", "enumeration": "enum"},
+                    {"name": "id", "type": "Uuid", "kwargs": {"primary_key": True}},
+                    {"name": "record_time", "type": "DateTime", "kwargs": {"primary_key": True}},
+                    {"name": "actor_id", "foreign_key": "component.id"},
+                    {"name": "buyer_id", "foreign_key": "component.id"},
+                    {"name": "seller_id", "foreign_key": "component.id"},
+                    {"name": "parent_order_id", "type": "Uuid"},
+                    {"name": "status", "enumeration": "OrderStatus"},
+                    {"name": "supply_or_demand", "enumeration": "SupplyOrDemand"},
+                    {"name": "time_stamp", "type": "DateTime"},
                     {"name": "expire_by", "type": "DateTime"}
+                ],
+                "constraints": [
+                    {"name": "fk_order_sd_curve_version",
+                     "foreign_key": {"columns": ["id", "record_time"], "references": ["sd_curve.id", "sd_curve.record_time"]}}
                 ]
             }
         ])

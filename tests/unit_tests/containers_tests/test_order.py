@@ -351,12 +351,13 @@ def test_init_with_none_creates_child_orders(market, interval, actor, crossing_v
 	parent = Order(market=market, interval=interval, actor=actor, vertices=crossing_vertices, supply_or_demand=None)
 	# Parent becomes SUPERSEDED
 	assert parent.status == OrderStatus.SUPERSEDED
-	# Market now has exactly two child orders (supply + demand)
-	assert len(market.orderList) == 2
-	sod_values = {o.supply_or_demand for o in market.orderList}
+	# The split yields exactly two child orders (supply + demand) for the caller to book; the market's book is untouched.
+	assert len(parent.child_orders) == 2
+	sod_values = {o.supply_or_demand for o in parent.child_orders}
 	assert sod_values == {SupplyOrDemand.SUPPLY, SupplyOrDemand.DEMAND}
-	# Parent not in orderList
-	assert parent not in market.orderList
+	assert all(o.parent_order_id == parent.id for o in parent.child_orders)
+	assert [o.id for o in parent.child_orders] == parent.child_order_ids
+	assert market.orderList == []
 
 
 #############################################

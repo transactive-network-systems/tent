@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 import logging
 
 from copy import copy
@@ -449,12 +450,17 @@ class SDCurve(Archivable):
 
     def get_record(self) -> dict:
         record = super(SDCurve, self).get_record()
+        # Each archive() writes a new version of this curve, keyed by (id, record_time). record_time is wall-clock, not
+        # Timer.now(): in a stepped simulation several versions can be written within one simulated instant.
+        self.last_record_time = datetime.now(timezone.utc).astimezone()
         record.update({
-            "measurement_id": self.measurement.id if self.measurement else None,
-            "owner_id": self.measurement.source.id if self.measurement else None,
-            # "parent_curve_id": self.parent.id if self.measurement else None,
-            "time_interval_id": self.interval.id if self.interval else None,
-            "timestamp": self.interval.start_time if self.interval else None
+            "record_time": self.last_record_time,
+            # NOTE: identity checks, not truthiness: Measurement.__bool__ is False while it holds no values, which would
+            # silently drop the link for every curve archived before its measurement is populated.
+            "measurement_id": self.measurement.id if self.measurement is not None else None,
+            "owner_id": self.measurement.source.id if self.measurement is not None else None,
+            "time_interval_id": self.interval.id if self.interval is not None else None,
+            "timestamp": self.interval.start_time if self.interval is not None else None
         })
         return record
 
@@ -466,6 +472,7 @@ class SDCurve(Archivable):
                 "name": "sd_curve",
                 "columns": [
                     {"name": "id", "type": "Uuid", "identity": True, "kwargs": {"primary_key": True}},
+                    {"name": "record_time", "type": "DateTime", "kwargs": {"primary_key": True}},
                     {"name": "measurement_id", "foreign_key": "measurement.id"},
                     {"name": "owner_id", "foreign_key": "component.id"},
                     # {"name": "parent_curve_id", "foreign_key": "sd_curve.id"}, # TODO: Is this needed for order?

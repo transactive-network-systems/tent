@@ -379,7 +379,7 @@ def test_asset_schedule_archiving():
     assert total_schedules > 0, f"Assets should have scheduled power data, found {total_schedules} schedules"
 
 
-def test_archive_interval_value_data():
+def test_archive_interval_value_data(tmp_path):
     """
     Test archiving measurement/schedule data (replaces old IntervalValue test).
     
@@ -413,6 +413,9 @@ def test_archive_interval_value_data():
             ism['weather_file_path'] = None
     
     with patch.object(Timer, 'now', return_value=datetime(2017, 7, 1, 0, 0, tzinfo=timezone.utc)):
+        # Write to a fresh temporary database, not the persistent sample file: create_all() does not alter
+        # existing tables, so a leftover file with an older schema would fail on new columns.
+        configs['data_manager']['db_params']['url'] = f'sqlite:///{tmp_path / "test_archive_interval_value_data.sqlite"}'
         tn.configure_node(configs)
     
     # Get test objects
@@ -553,7 +556,7 @@ def test_archive_interval_value_data():
     assert hasattr(tn.data_manager, 'archive_data'), "Data manager should have archive_data method"
 
 
-def test_archive_transactive_record_data():
+def test_archive_transactive_record_data(tmp_path):
     """
     Test archiving transactive negotiation data (replaces old TransactiveRecord test).
     
@@ -585,6 +588,9 @@ def test_archive_transactive_record_data():
             ism['weather_file_path'] = None
     
     with patch.object(Timer, 'now', return_value=datetime(2017, 7, 1, 0, 0, tzinfo=timezone.utc)):
+        # Write to a fresh temporary database, not the persistent sample file: create_all() does not alter
+        # existing tables, so a leftover file with an older schema would fail on new columns.
+        configs['data_manager']['db_params']['url'] = f'sqlite:///{tmp_path / "test_archive_transactive_record_data.sqlite"}'
         tn.configure_node(configs)
     
     # Get test objects
@@ -676,7 +682,7 @@ def test_archive_transactive_record_data():
     assert hasattr(tn.data_manager, 'archive_data'), "Data manager should have archive_data method"
 
 
-def test_archive_market_object_data():
+def test_archive_market_object_data(tmp_path):
     """
     Test archiving market object data (replaces old MarketObject test).
     
@@ -707,6 +713,9 @@ def test_archive_market_object_data():
             ism['weather_file_path'] = None
     
     with patch.object(Timer, 'now', return_value=datetime(2017, 7, 1, 0, 0, tzinfo=timezone.utc)):
+        # Write to a fresh temporary database, not the persistent sample file: create_all() does not alter
+        # existing tables, so a leftover file with an older schema would fail on new columns.
+        configs['data_manager']['db_params']['url'] = f'sqlite:///{tmp_path / "test_archive_market_object_data.sqlite"}'
         tn.configure_node(configs)
     
     # Get test objects

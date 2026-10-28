@@ -7,7 +7,7 @@ import tent.enumerations
 from collections import deque
 from typing import Mapping, Sequence
 
-from sqlalchemy import Column, Enum, ForeignKey, Identity, Index, Table, types
+from sqlalchemy import Column, Enum, ForeignKey, ForeignKeyConstraint, Identity, Index, Table, types
 from sqlalchemy.orm import registry
 
 _log = logging.getLogger(__name__)
@@ -85,12 +85,21 @@ class DataManager:
     def _parse_index_def(index_def: dict):
         return Index(index_def['name'], *index_def['columns'], unique=index_def.get('unique', False))
 
+    @staticmethod
+    def _parse_constraint_def(constraint_def: dict):
+        """Table-level constraints. Currently: {"foreign_key": {"columns": [...], "references": ["table.col", ...]}}."""
+        if 'foreign_key' in constraint_def:
+            fk = constraint_def['foreign_key']
+            return ForeignKeyConstraint(fk['columns'], fk['references'], name=constraint_def.get('name'))
+        raise ValueError(f'Unsupported table constraint definition: {constraint_def}')
+
     def _parse_table_definition(self, definition: dict):
         kwargs = definition.get('kwargs', {})
         name = definition['name']
         columns = [self._parse_column_def(c) for c in definition['columns']]
         indices = [self._parse_index_def(i) for i in definition.get('indices', [])]
-        return Table(name, self.registry.metadata, *columns, *indices, **kwargs)
+        constraints = [self._parse_constraint_def(c) for c in definition.get('constraints', [])]
+        return Table(name, self.registry.metadata, *columns, *indices, *constraints, **kwargs)
 
     @abc.abstractmethod
     def init_archive(self):

@@ -83,4 +83,5 @@ class MeasurementType(Enum):
     ConvergenceFlag = 33
     PredictedValue = 34
     SignalVertex = 35
+    Order = 36  # Matching-engine bid/offer curves (see tent.containers.order.Order)
     Unknown = 40

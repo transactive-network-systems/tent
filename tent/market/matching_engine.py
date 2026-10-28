@@ -1,15 +1,17 @@
+import logging
+
 from copy import copy
-from datetime import datetime, timedelta
+from dataclasses import dataclass, field
+from datetime import timedelta
 from enum import Enum
 
-from tent.market import Market
+from tent.containers.measurement import Measurement
 from tent.containers.order import Order, OrderStatus, SupplyOrDemand, Vertex, VTypes
-from tent.enumerations import MarketTypes
-from tent.enumerations import MarketState
-from tent.transactive_node import TransactiveNode
-from tent.local_asset import LocalAsset
+from tent.enumerations import MarketTypes, MeasurementType, MeasurementUnit
+from tent.market import Market
+from tent.utils.timer import Timer
 
-
+_log = logging.getLogger(__name__)
 
 # Constants:
 INF = float('Inf')
@@ -36,12 +38,16 @@ class MatchingStrategy(Enum):
     # partially-fillable order quantity before proceeding.
 
 
-# The following constants may be assigned here and will affect instantiated MatchingEngine objects.
-MATCHING_STRATEGY: list = [MatchingStrategy.ORDER_VOLUME]  # order of matching strategies - See Enum MatchingStrategy.
-HAS_MARKET: bool = True  # set True if this agent performs market matching
-NEGOTIATION_LEAD_TIME: timedelta = timedelta(hours=24.0)  # time prior to the delivery time with orders become permitted
-DELIVERY_LEAD_TIME: timedelta = timedelta(minutes=15.0)  # time prior to deliver that orders become disallowed
-INTERVAL_DURATION: timedelta = timedelta(hours=1.0)  # duration of delivery period
+# Default order of matching strategies when neither the MarketSeries nor the constructor supplies one.
+MATCHING_STRATEGY: list = [MatchingStrategy.ORDER_VOLUME]
+
+
+@dataclass
+class Quote:
+    """The orders currently standing in the book for one entity and interval, and the curve version they express."""
+    version: object
+    orders: list = field(default_factory=list)
+
 
 # TODO: Make sure that IDs can work as UUID, instead of int.
 class MatchingEngine(Market):
@@ -50,118 +56,175 @@ class MatchingEngine(Market):
     trading. Typically, a market or limit order is matched from among standing orders in an "order book." New orders
     can be formulated, sent, and received asynchronously at any time within the Negotiation market state.
 
-    Protected Parameters: (Cannot be altered after object initialization)
-        matching_strategy: (MatchingStrategy) See enumeration MatchingStrategy.
-        has_market: (boolean) True if this TransactiveNode hosts a MatchingEngine marketplace.
-        negotiation_lead_time: (timedelta) Duration of Negotiation market state.
-        delivery_lead_time: (timedelta) Duration of time between Negotiation stop and Delivery start.
-        interval_duration: (timedelta) Duration of market time interval.
-        delivery_start_time: (datetime) Time and data tha Delivery market state begins.
-        prior_market_in_series: (Market) Market object that precedes this one.
+    Construction, timing, and the market lifecycle are inherited from Market and driven by the owning MarketSeries,
+    exactly as for Auction: configure a MarketSeries with ``market_class`` set to this class. Extra keywords on the
+    series configuration are forwarded to every spawned market, so ``matching_strategy`` is configured there, e.g.
+    ``"matching_strategy": ["ORDER_VOLUME", "ORDER_AGE"]`` (names, values, or MatchingStrategy members).
+
+    Orders enter the book in two ways. Any caller may submit_order() a ready-made Order. In addition, on every pass of
+    while_in_negotiation() the engine quotes the local system itself: each local asset's and neighbor's active_vertices
+    curve for each interval is turned into orders (Order.from_curve), so assets' scheduled flexibility and neighbors'
+    received transactive signals are offered into the book without those classes knowing about orders. A quote is
+    revised only when its curve changes, detected by the curve's archived version (SDCurve.last_record_time) or, for
+    curves that are never archived, by their vertex values.
 
     Attributes:
-        See Note [1].
-        orderList: (list or None) of Order objects aka an "order book"
-        matchList: (list or None) of Order objects that have been matched, transacted
-        __matchingStrategy__: (MatchingStrategy enumeration)
-        __hasMarket__: (boolean)
-        __deliveryStartTime__: (datetime)
-        __priorMarketInSeries__: (Market object)
-        __nextMarketClearingTime__: (datetime) Scheduled "clearing time" of the next market. See Note [2].
-
-    Returns: (MatchingEngine object)
+        orderList: (list) of standing Order objects, aka the "order book".
+        matchList: (list) of Order objects that have been matched (transacted).
+        matching_strategy: (list of MatchingStrategy) Tie-break order for same-price orders.
+        order_expiry: (timedelta | None) Lifetime of quoted orders; None means they expire at market clearing.
+        order_measurement: (Measurement) Archival header under which every Order of this market is recorded.
+        quotes: (dict) (entity id, interval id) -> Quote for the orders the engine has placed on entities' behalf.
 
     Notes:
-    [1] This class inherits many attributes from base class Market. See base class Market for documentation.
-    [2] A MatchingEngine market does not formally have a market clearing or market clearing time. However,
-        the market clearing time refers to the end of the Negotiation period within its market state engine.
-    - Protected properties may be read, but they should not be changeable after an object is initialized.
+    - A MatchingEngine market does not formally have a market clearing or market clearing time. The clearing time
+      inherited from Market marks the end of the Negotiation period within its market state engine.
     """
     MARKET_TYPE = MarketTypes.matching_engine
 
-    def __init__(
-            self,
-            matching_strategy: list or None = None,  # PROTECTED
-            has_market: bool = HAS_MARKET,  # PROTECTED
-            negotiation_lead_time: timedelta = NEGOTIATION_LEAD_TIME,  # PROTECTED. duration of negotiation period
-            delivery_lead_time: timedelta = DELIVERY_LEAD_TIME,  # PROTECTED. time when negotiations stop prior to
-            #                                                      delivery
-            interval_duration: timedelta = INTERVAL_DURATION,  # PROTECTED
-            delivery_start_time=datetime.now().replace(  # PROTECTED
-                hour=(datetime.now().hour + 1) % 24,
-                minute=0, second=0, microsecond=0
-            ),
-            prior_market_in_series=None  # PROTECTED
-    ):
-        super(MatchingEngine, self).__init__(
-
-            activation_lead_time=timedelta(hours=0.0),
-            delivery_lead_time=delivery_lead_time,
-            initial_market_state=MarketState.Negotiation,
-            interval_duration=interval_duration,
-            intervals_to_clear=1,
-            market_clearing_interval=interval_duration,
-            market_clearing_time=delivery_start_time - delivery_lead_time,
-            market_lead_time=timedelta(hours=0.0),
-            market_to_be_refined="Subscription_Market",
-            negotiation_lead_time=negotiation_lead_time,
-            prior_market_in_series=prior_market_in_series
-        )  # Note: Before market_order was moved up to the MarketSeries, this class had a default of 2.
+    def __init__(self, *args, matching_strategy: list | str | MatchingStrategy | None = None,
+                 order_expiry: timedelta | float | None = None, **kwargs):
+        super(MatchingEngine, self).__init__(*args, **kwargs)
+        self.order_measurement: Measurement = Measurement(self, MeasurementType.Order, MeasurementUnit.kW)
         self.orderList: list[Order] = []  # List of standing orders not yet matched
         self.matchList: list[Order] = []  # List of orders successfully matched
-        if matching_strategy:
-            self.__matchingStrategy__: list = matching_strategy
-        else:
-            self.__matchingStrategy__: list = list(MATCHING_STRATEGY)
-        self.__hasMarket__: bool = has_market
-        self.isNewestMarket: bool = True
-        self.__deliveryStartTime__ = delivery_start_time
-        self._stateIsCompleted: bool = False
-        self.__priorMarketInSeries__: Market or None = prior_market_in_series
-        self.__nextMarketClearingTime__: datetime = (self.transition_times.delivery_lead
-                                                     + self.series.duration.market_clearing_interval)
+        self.matching_strategy: list[MatchingStrategy] = self._parse_matching_strategy(matching_strategy)
+        self.order_expiry: timedelta | None = (order_expiry if isinstance(order_expiry, timedelta) or order_expiry is None
+                                               else timedelta(seconds=float(order_expiry)))
+        self.quotes: dict[tuple, Quote] = {}
+
+    @staticmethod
+    def _parse_matching_strategy(spec) -> list[MatchingStrategy]:
+        """Accept MatchingStrategy members, their names, or their values, singly or as a list; default if empty."""
+        if spec is None or spec == []:
+            return list(MATCHING_STRATEGY)
+        if isinstance(spec, (str, int, MatchingStrategy)):
+            spec = [spec]
+        strategies = []
+        for item in spec:
+            if isinstance(item, MatchingStrategy):
+                strategies.append(item)
+            elif isinstance(item, int):
+                strategies.append(MatchingStrategy(item))
+            elif isinstance(item, str):
+                strategies.append(MatchingStrategy[item.upper()])
+            else:
+                raise TypeError(f'Unrecognised matching strategy: {item!r}')
+        return strategies
 
     @property
     def matchingStrategy(self):
-        return self.__matchingStrategy__
-
-    @matchingStrategy.setter
-    def matchingStrategy(self, _):
-        pass
+        """Deprecated alias retained for callers written against the pre-refactor API."""
+        return self.matching_strategy
 
     @property
-    def hasMarket(self):
-        return self.__hasMarket__
+    def table_name(self):
+        return 'matching_engine'
 
-    @hasMarket.setter
-    def hasMarket(self, _):
-        pass
+    def get_record(self) -> dict:
+        record = super(MatchingEngine, self).get_record()
+        record.update({'matching_strategy': [strategy.name for strategy in self.matching_strategy]})
+        return record
 
-    @property
-    def deliveryStartTime(self):
-        return self.__deliveryStartTime__
+    @classmethod
+    def get_archive_definitions(cls) -> list[dict]:
+        definitions = super(MatchingEngine, cls).get_archive_definitions()
+        definitions.extend([
+            {
+                "name": "matching_engine",
+                "inherits": "market",
+                "columns": [
+                    {"name": "id", "foreign_key": "market.id", "kwargs": {"primary_key": True}},
+                    {"name": "matching_strategy", "type": "JSON"}  # ordered list of MatchingStrategy names
+                ]
+            }
+        ])
+        return definitions
 
-    @deliveryStartTime.setter
-    def deliveryStartTime(self, _):
-        pass
+    def submit_order(self, order: Order) -> None:
+        """
+        Place a new order into this market's order book. Orders submitted while the market is in its Negotiation state
+        are matched on the next pass of while_in_negotiation(); any unmatched remainder becomes a standing order.
+        """
+        if order.market is not self:
+            raise ValueError(f'Order {order.id} belongs to market {order.market.name}, not {self.name}.')
+        if order.status not in (OrderStatus.NEW, OrderStatus.NEW_REVISED):
+            order.status = OrderStatus.NEW
+        if not any(x is order for x in self.orderList):
+            self.orderList.append(order)
+            self._archive_orders([order])
 
-    @property
-    def nextMarketClearingTime(self):
-        return self.__nextMarketClearingTime__
+    @staticmethod
+    def _curve_version(curve):
+        """Archived version if the curve has one, else its vertex values (for curves created with archive=False)."""
+        archived = getattr(curve, 'last_record_time', None)
+        return archived if archived is not None else tuple((v.price, v.quantity, v.continuity) for v in curve.vertices)
 
-    @nextMarketClearingTime.setter
-    def nextMarketClearingTime(self, _):
-        pass
+    def _quote_expiry(self):
+        return Timer.now() + self.order_expiry if self.order_expiry is not None else self.transition_times.delivery_lead
 
-    @property
-    def priorMarketInSeries(self):
-        return self.__priorMarketInSeries__
+    def quote_entities(self) -> None:
+        """
+        Offer every local asset's and neighbor's current active_vertices curve into the book, one quote per entity and
+        interval. Unchanged curves are left alone. A changed curve cancels the entity's standing orders for that interval
+        and submits revised ones; a curve that has emptied just cancels them.
+        """
+        for entity in list(self.tn.local_assets) + list(self.tn.neighbors):
+            curves = getattr(entity, 'active_vertices', None)
+            if curves is None:
+                continue
+            for time_interval in self.time_intervals:
+                key = (entity.id, time_interval.id)
+                curve = curves.get_by_interval(time_interval)
+                quote = self.quotes.get(key)
+                if curve is None or curve.empty:
+                    if quote:
+                        self._cancel_quote(quote)
+                        del self.quotes[key]
+                    continue
+                version = self._curve_version(curve)
+                if quote is not None and quote.version == version:
+                    continue
+                if quote is not None:
+                    self._cancel_quote(quote)
+                orders = Order.from_curve(self, time_interval, entity, curve, expire_by=self._quote_expiry())
+                for order in orders:
+                    order.status = OrderStatus.NEW_REVISED if quote is not None else OrderStatus.NEW
+                    self.submit_order(order)
+                self.quotes[key] = Quote(version, orders)
 
-    @priorMarketInSeries.setter
-    def priorMarketInSeries(self, _):
-        pass
+    def _cancel_quote(self, quote: Quote) -> None:
+        """Withdraw whatever of a quote is still standing; matched legs are transactions and stay."""
+        standing = [o for o in quote.orders if any(o is x for x in self.orderList)]
+        for order in standing:
+            order.status = OrderStatus.CANCELLED
+        self.orderList = [x for x in self.orderList if not any(x is o for o in standing)]
+        self._archive_orders(standing)
+
+    def _archive_orders(self, orders) -> None:
+        for order in orders:
+            if order is not None and order.measurement is not None:
+                order.archive()
 
     def match(self, new_order: Order or None = None):
+        """
+        Match a new (aggressive) order against the order book, then archive the book changes: every order newly booked
+        in matchList or orderList, and every order removed from the book (superseded by its matched/remainder copies).
+        See _match for the matching algorithm.
+        """
+        before = self.orderList + self.matchList
+        self._match(new_order)
+        after = self.orderList + self.matchList
+        booked = [x for x in after if not any(x is y for y in before)]
+        superseded = [x for x in before if not any(x is y for y in after)]
+        changed = superseded + booked
+        if new_order is not None and not any(new_order is y for y in changed):
+            # The aggressive order always ends in a new state: superseded by its matched legs, resting as a standing
+            # order, or cancelled. Archive that final state even when it never left the book.
+            changed.append(new_order)
+        self._archive_orders(changed)
+
+    def _match(self, new_order: Order or None = None):
 
         # Perform qualifications
         if not new_order:
@@ -176,9 +239,7 @@ class MatchingEngine(Market):
             raise RuntimeError("There should be no case where the new order is neither supply nor demand.")
 
         # Get Vertex prices
-        prices: list = Order.get_prices_from_curves(
-            order_list=standing_orders + [new_order]
-        )
+        prices: list = Order.get_prices_from_curves(standing_orders + [new_order])
 
         # Make sure price is a unique list that includes either -INF or INF, but not both
         if new_order.supply_or_demand == SupplyOrDemand.SUPPLY:
@@ -271,7 +332,7 @@ class MatchingEngine(Market):
                     for so in limit_orders:
 
                         # Find the standing order for this limit order Vertex.
-                        so_order: Order = self.get_order_by_id(an_id=so.order_id)
+                        so_order: Order = self.get_order_by_id(an_id=so.curve.id)
 
                         # Create and matched and unmatched orders for so quantity at indexed price.
                         matched_order, unmatched_order = so_order.match(
@@ -324,7 +385,7 @@ class MatchingEngine(Market):
             elif abs(ao.quantity) < abs(total_limit_order_quantity):
 
                 # Index through list of matching priorities
-                for mp in self.matchingStrategy:
+                for mp in self.matching_strategy:
 
                     # CASE: Matching priority is by proportion
                     if mp == MatchingStrategy.PROPORTIONAL_VOLUME:
@@ -334,7 +395,7 @@ class MatchingEngine(Market):
                     #  CASE: Matching priority is age
                     elif mp == MatchingStrategy.ORDER_AGE:
                         # Sort active so limit order quantities by age.
-                        limit_orders.sort(key=lambda x: (x.time_stamp, x.continuity, -abs(x.quantity)))
+                        limit_orders.sort(key=lambda x: (x.curve.time_stamp, x.continuity, -abs(x.quantity)))
 
                         # Insert <Code Logic Block A>
                         new_order = self.limit_order_code_block(
@@ -347,7 +408,7 @@ class MatchingEngine(Market):
                     elif mp == MatchingStrategy.ORDER_VOLUME:
 
                         # Sort active so limit order quantities by volume
-                        limit_orders.sort(key=lambda x: (-abs(x.quantity), x.continuity, x.time_stamp))
+                        limit_orders.sort(key=lambda x: (-abs(x.quantity), x.continuity, x.curve.time_stamp))
 
                         # Insert <Code Logic Block A>
                         new_order = self.limit_order_code_block(
@@ -363,7 +424,9 @@ class MatchingEngine(Market):
                 raise RuntimeError("Code logic should not have reached this line.")
 
         if new_order and new_order.order_or_none():
-            self.orderList.append(new_order)
+            new_order.status = OrderStatus.STANDING_ORDER
+            if not any(x is new_order for x in self.orderList):  # An untouched submission is already in the book.
+                self.orderList.append(new_order)
 
     def get_order_by_id(self, an_id: int or None = None):
         """
@@ -399,62 +462,23 @@ class MatchingEngine(Market):
         else:
             return None
 
-    def spawn_markets(self, my_transactive_node: TransactiveNode, new_market_clearing_time: datetime):
+    def while_in_negotiation(self):
         """
-        Creates a MatchingEngine market object as needed for each market delivery period. The new market is appended to
-        the list of market objects owned by myTransactiveNode. Any orders placed in the corresponding new market's
-        delivery period should reference this new market object.
-
-        Parameters:
-            my_transactive_node: (TransactiveNode)
-            new_market_clearing_time: (datetime)
-
-        Returns: None
+        In this market state, actors may submit from zero to many offer or bid orders to secure a position in this
+        market object's delivery period. Each pass matches any new (or newly revised) orders against the order book.
+        The state ends on the negotiation timing inherited from Market; there is nothing further for this market to
+        complete, so the state is marked complete as soon as the book has no unprocessed orders.
         """
-        new_market = MatchingEngine(
-            delivery_lead_time=self.deliveryLeadTime,
-            delivery_start_time=new_market_clearing_time + self.deliveryLeadTime,
-            has_market=True,
-            interval_duration=self.series.duration.market_interval,
-            matching_strategy=self.matchingStrategy,
-            # name=self.name,
-            negotiation_lead_time=self.negotiationLeadTime,
-            prior_market_in_series=self
-        )
-        self.isNewestMarket: bool = False
-        new_market.isNewestMarket = True
-        my_transactive_node.markets.append(
-            new_market
-        )
-        return None
-
-    def while_in_negotiation(self, my_transactive_node):
-        """
-        In this market state, the transactive agent may prepare and submit from zero to many offer or bid orders to
-        secure a position in this market object's delivery period. This state ends after the negotiation period, which
-        should be a delivery delay period prior to the delivery period.
-
-        Parameters:
-            my_transactive_node: (TransactiveNOde)
-
-        Returns: None
-
-        Notes:
-        - The transition out of the negotiation state corresponds to the assigned market clearing time which is not
-          truly used by the market matching engine.
-        """
-        # Tend to any new aggressive orders that have been received.
-        # NOTE: In some instances, a new order may have been revised.
-        new_orders = [
-            x for x in self.orderList if x.status in [OrderStatus.NEW, OrderStatus.NEW_REVISED]
-        ]
+        self.quote_entities()
+        new_orders = [x for x in self.orderList if x.status in (OrderStatus.NEW, OrderStatus.NEW_REVISED)]
         for new_order in new_orders:
-            self.match(
-                new_order
-            )
-        # Terminate the state Negotiation at this market's "marketClearingTime."
-        if datetime.now() >= self.marketClearingTime:
-            self._stateIsCompleted = True
+            self.match(new_order)
+        # Order.match() removes every order it supersedes from the book and match() re-adds unmatched remainders as
+        # standing orders, so after a pass the book should hold standing orders only. Anything else (e.g. a new order
+        # that cancelled itself for having no quantity) is dropped here.
+        self.orderList = [x for x in self.orderList
+                          if x.status in (OrderStatus.STANDING_ORDER, OrderStatus.REVISED_STANDING_ORDER)]
+        self._stateIsCompleted = True
         return None
 
     def get_counteroffers(self, supply_or_demand: SupplyOrDemand or bool or None = SupplyOrDemand.SUPPLY):
@@ -504,7 +528,7 @@ class MatchingEngine(Market):
             vertices = [x for x in vertices if x.vType == vertex_type]
         return vertices
 
-    def get_market_orders_by_actor(self, an_actor: TransactiveNode or LocalAsset, role: str = Role.ACTOR.name):
+    def get_market_orders_by_actor(self, an_actor, role: str = Role.ACTOR.name):
         """
         Returns a list of matched Order objects for this actor in this market period.
 
@@ -522,7 +546,7 @@ class MatchingEngine(Market):
         if role in [x.name for x in Role if x.value == Role.BUYER.value]:
             return [x for x in self.matchList if x.buyer == an_actor]
         elif role in [x.name for x in Role if x.value == Role.SELLER.value]:
-            return [x for x in self.matchList if x.actor == an_actor]
+            return [x for x in self.matchList if x.seller == an_actor]
         else:
             return [x for x in self.matchList if x.actor == an_actor]
 
@@ -564,7 +588,7 @@ class MatchingEngine(Market):
 
             # Retrieve the standing order from this Vertex.
             standing_order: Order = self.get_order_by_id(
-                an_id=so.order_id
+                an_id=so.curve.id
             )
 
             # CASE: ao remainder quantity < so quantity

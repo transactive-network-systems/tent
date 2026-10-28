@@ -49,10 +49,8 @@ class ConsensusMarket(Market):
     MARKET_TYPE = MarketTypes.consensus
 
     def __init__(self, *args, **kwargs):
-        super(ConsensusMarket, self).__init__(
-            method='Interpolation',
-            *args, **kwargs
-        )
+        # The solution method is a MarketSeries setting (series.method); Market.__init__ does not take it.
+        super(ConsensusMarket, self).__init__(*args, **kwargs)
 
     def while_in_negotiation(self):
         # Almost all consensus balancing activities will occur while the market is in its negotiation state.
