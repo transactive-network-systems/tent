@@ -62,7 +62,7 @@ def test_calculate_reserve_margin():
     series = SimpleMarketSeries()
     transition_times = series.duration.get_timings(now)
     
-    test_mkt = Market(test_node, series, transition_times)
+    test_mkt = Market(test_node, series, series.initial_market_state, transition_times)
     test_node.markets = [test_mkt]
 
     # Get the time interval created by Market
@@ -310,7 +310,7 @@ def test_schedule_engagement():
     series = SimpleMarketSeries()
     transition_times = series.duration.get_timings(now)
     
-    test_mkt = Market(test_node, series, transition_times)
+    test_mkt = Market(test_node, series, series.initial_market_state, transition_times)
     test_node.markets = [test_mkt]
 
     # Establish test model that is a LocalAsset with modern API
@@ -364,7 +364,7 @@ def test_schedule_engagement():
     
     series3 = SimpleMarketSeries3()
     transition_times3 = series3.duration.get_timings(now)
-    test_mkt = Market(test_node, series3, transition_times3)
+    test_mkt = Market(test_node, series3, series3.initial_market_state, transition_times3)
     test_node.markets = [test_mkt]
 
     # Run next test case
@@ -432,7 +432,7 @@ def test_schedule_power():
     series = SimpleMarketSeries()
     transition_times = series.duration.get_timings(now)
     
-    test_mkt = Market(test_node, series, transition_times)
+    test_mkt = Market(test_node, series, series.initial_market_state, transition_times)
     test_node.markets = [test_mkt]
 
     # Establish test model that is a LocalAsset with a default power property
@@ -489,7 +489,7 @@ def test_schedule_power():
     
     series3 = SimpleMarketSeries3()
     transition_times3 = series3.duration.get_timings(now)
-    test_mkt = Market(test_node, series3, transition_times3)
+    test_mkt = Market(test_node, series3, series3.initial_market_state, transition_times3)
     test_node.markets = [test_mkt]
 
     # Run next test case
@@ -561,7 +561,7 @@ def test_update_dual_costs():
     series = SimpleMarketSeries()
     transition_times = series.duration.get_timings(now)
     
-    test_market = Market(test_node, series, transition_times)
+    test_market = Market(test_node, series, series.initial_market_state, transition_times)
     test_node.markets = [test_market]
 
     # Get the time interval created by Market
@@ -654,7 +654,7 @@ def test_update_production_costs():
     series = SimpleMarketSeries()
     transition_times = series.duration.get_timings(now)
     
-    test_market = Market(test_node, series, transition_times)
+    test_market = Market(test_node, series, series.initial_market_state, transition_times)
     test_node.markets = [test_market]
 
     # Get the time interval created by Market
@@ -719,6 +719,7 @@ def test_update_vertices():
     class SimpleMarketSeries:
         def __init__(self):
             self.name = "test_market"
+            self.description = ""
             self.default_price = 0.05
             self.market_order = 1
             self.duration = MarketDurations.new(
@@ -740,7 +741,7 @@ def test_update_vertices():
     transition_times = series.duration.get_timings(now)
     
     # Create test market
-    test_market = Market(test_node, series, transition_times)
+    test_market = Market(test_node, series, series.initial_market_state, transition_times)
     test_node.markets = [test_market]
     
     # Get the first time interval

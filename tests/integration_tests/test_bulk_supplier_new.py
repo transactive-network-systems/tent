@@ -126,7 +126,7 @@ def _create_market(transactive_node, anchor_time):
     """Create a test Market with appropriate series and timings."""
     series = _SimpleMarketSeries()
     transition_times: MarketTimings = series.duration.get_timings(anchor_time)
-    market = Market(transactive_node, series, transition_times, price_model=_NoOpPriceModel())
+    market = Market(transactive_node, series, series.initial_market_state, transition_times, price_model=_NoOpPriceModel())
     return market
 
 

@@ -23,6 +23,7 @@ class _DummyMarket:
     """Minimal market for testing."""
     def __init__(self):
         self.time_intervals = []
+        self.name = "Test_Market"
         self.market_series_name = "Test_Market"
         self.data_manager = _DummyDataManager()
     

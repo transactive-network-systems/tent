@@ -22,8 +22,9 @@ def timings():
 
 
 def build_rta(tn):
-    series = Mock(); series.intervals_to_clear=1; series.duration=Mock(); series.duration.market_interval=timedelta(hours=1)
-    return RealTimeAuction(transactive_node=tn, market_series=series, transition_times=timings())
+    series = Mock(); series.name = "TestSeries"; series.description = ""; series.intervals_to_clear=1; series.duration=Mock(); series.duration.market_interval=timedelta(hours=1)
+    return RealTimeAuction(transactive_node=tn, market_series=series, initial_market_state=MarketState.Inactive,
+                           transition_times=timings())
 
 
 def test_real_time_auction_inherits_auction():

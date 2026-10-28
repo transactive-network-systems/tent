@@ -1,3 +1,4 @@
+import pytest
 from unittest import TestCase
 from tent.market.matching_engine import MatchingEngine, MatchingStrategy
 from tent.neighbor import Neighbor
@@ -15,6 +16,11 @@ from tent.enumerations import MeasurementType, MeasurementUnit
 from tent.utils.timer import Timer
 from tests.mock_tn import MockTN
 
+
+# This module targets the pre-refactor MatchingEngine API: it monkeypatches Order and Vertex at import time and builds
+# its fixtures at module level, which leaks those patches into every other test module. Its test classes are also
+# lower-case (``test_match`` etc.), so pytest has never collected them. Skip at collection until it is ported.
+pytest.skip("Legacy MatchingEngine tests need porting to the current Order/SDCurve API.", allow_module_level=True)
 
 tc = TestCase()
 INF = float('inf')
@@ -74,7 +80,6 @@ def _patched_order_init(self,
     finally:
         SDCurve.__init__ = _original_sdcurve_init
 
-Order.__init__ = _patched_order_init
 
 # Monkey-patch Order.__copy__ to handle read-only properties
 _original_order_copy = Order.__copy__
@@ -102,7 +107,6 @@ def _patched_order_copy(self):
         copiedOrder.vertices.append(copy(pp))
     return copiedOrder
 
-Order.__copy__ = _patched_order_copy
 
 # Monkey-patch Vertex to accept old-style parameters (curve_id, timestamp)
 _original_vertex_init = Vertex.__init__
@@ -117,7 +121,18 @@ def _patched_vertex_init(self, price, cost=0.0, quantity=0.0, continuity=True,
     if timestamp is not None:
         self.timestamp = timestamp
 
-Vertex.__init__ = _patched_vertex_init
+
+@pytest.fixture(scope="module", autouse=True)
+def _legacy_api_patches():
+    """Install the legacy-API shims for this module only, so they cannot leak into other test modules."""
+    Order.__init__ = _patched_order_init
+    Order.__copy__ = _patched_order_copy
+    Vertex.__init__ = _patched_vertex_init
+    yield
+    Order.__init__ = _original_order_init
+    Order.__copy__ = _original_order_copy
+    Vertex.__init__ = _original_vertex_init
+
 
 # Create a mock transactive node for the market
 MOCK_TN = MockTN()
@@ -141,6 +156,7 @@ timings = MARKET_SERIES.duration.get_timings(MARKET_CLEARING_TIME)
 MARKET = Market(
     transactive_node=MOCK_TN,
     market_series=MARKET_SERIES,
+    initial_market_state=MARKET_SERIES.initial_market_state,
     transition_times=timings
 )
 # Add matching engine specific attributes

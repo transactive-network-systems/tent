@@ -47,7 +47,7 @@ def test_assign_system_vertices():
     
     series = SimpleMarketSeries()
     transition_times = series.duration.get_timings(now)
-    test_market = Market(test_node, series, transition_times)
+    test_market = Market(test_node, series, series.initial_market_state, transition_times)
     test_node.markets = [test_market]
     
     # Create LocalAsset and Neighbor with modern API
@@ -131,7 +131,7 @@ def test_balance():
     
     series = SimpleMarketSeries()
     transition_times = series.duration.get_timings(now)
-    test_market = Market(test_node, series, transition_times)
+    test_market = Market(test_node, series, series.initial_market_state, transition_times)
     test_node.markets = [test_market]
     
     # Create LocalAsset and Neighbor with modern API
@@ -232,7 +232,7 @@ def test_check_intervals():
     series = SimpleMarketSeries()
     market_clearing_time = datetime(year=2020, month=1, day=1, hour=0, minute=0, second=0)
     transition_times = series.duration.get_timings(market_clearing_time)
-    test_market = Market(test_node, series, transition_times)
+    test_market = Market(test_node, series, series.initial_market_state, transition_times)
 
     print(' - The case ran without errors.')
 
@@ -285,7 +285,7 @@ def test_check_marginal_prices():
 
     series = SimpleMarketSeries()
     transition_times = series.duration.get_timings(datetime.now())
-    test_mkt = Market(test_node, series, transition_times)
+    test_mkt = Market(test_node, series, series.initial_market_state, transition_times)
     
     test_ti = test_mkt.time_intervals[0]
     pi = 3.14159
@@ -332,7 +332,7 @@ def test_check_marginal_prices():
 
     series = SimpleMarketSeries()
     transition_times = series.duration.get_timings(datetime.now())
-    test_mkt = Market(test_node, series, transition_times)
+    test_mkt = Market(test_node, series, series.initial_market_state, transition_times)
     test_mkt.price_model = None  # Ensure no price model
     
     test_ti = test_mkt.time_intervals[0]
@@ -381,7 +381,7 @@ def test_check_marginal_prices():
 
     series = SimpleMarketSeries()
     transition_times = series.duration.get_timings(datetime.now())
-    test_mkt = Market(test_node, series, transition_times)
+    test_mkt = Market(test_node, series, series.initial_market_state, transition_times)
     test_mkt.price_model = None  # Ensure no price model
     
     test_ti = test_mkt.time_intervals[0]
@@ -558,7 +558,7 @@ def test_sum_vertices():
     transition_times = series.duration.get_timings(now)
     
     # Create market with minimal setup
-    test_market = Market(test_node, series, transition_times)
+    test_market = Market(test_node, series, series.initial_market_state, transition_times)
     test_node.markets = [test_market]
 
     # Get the time interval (created by Market constructor)

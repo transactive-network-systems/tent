@@ -208,8 +208,8 @@ def test_measurement_get_record_and_metadata(monkeypatch):
     rec = m.get_record()
     assert rec["id"] == "meas-uuid"
     assert rec["source_id"] == "component-7"
-    assert rec["measurement_type"] == MeasurementType.Unknown
-    assert rec["measurement_unit"] == MeasurementUnit.Unknown
+    assert rec["measurement_type"] == MeasurementType.Unknown.name
+    assert rec["measurement_unit"] == MeasurementUnit.Unknown.name
 
     # metadata helpers
     assert m.data_manager is src.data_manager

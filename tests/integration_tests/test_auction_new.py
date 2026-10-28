@@ -86,7 +86,8 @@ def _build_auction(transactive_node, base_time=None):
     timings = _make_timings(base_time)
     auction = Auction(
         transactive_node=transactive_node, 
-        market_series=series, 
+        market_series=series,
+        initial_market_state=MarketState.Inactive,
         transition_times=timings,
         price_model=price_model
     )

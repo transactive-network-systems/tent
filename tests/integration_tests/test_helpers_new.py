@@ -190,6 +190,7 @@ def test_production():
     class SimpleMarketSeries:
         def __init__(self):
             self.name = "test_market"
+            self.description = ""
             self.default_price = 0.05
             self.market_order = 1
             self.duration = MarketDurations.new(
@@ -210,7 +211,7 @@ def test_production():
     series = SimpleMarketSeries()
     transition_times = series.duration.get_timings(now)
     
-    test_market = Market(test_node, series, transition_times)
+    test_market = Market(test_node, series, series.initial_market_state, transition_times)
     test_node.markets = [test_market]
     
     # Get the time interval
@@ -291,6 +292,7 @@ def test_prod_cost_from_formula():
     class SimpleMarketSeries:
         def __init__(self):
             self.name = "test_market"
+            self.description = ""
             self.default_price = 0.05
             self.market_order = 1
             self.duration = MarketDurations.new(
@@ -311,7 +313,7 @@ def test_prod_cost_from_formula():
     series = SimpleMarketSeries()
     transition_times = series.duration.get_timings(now)
     
-    test_market = Market(test_node, series, transition_times)
+    test_market = Market(test_node, series, series.initial_market_state, transition_times)
     test_node.markets = [test_market]
 
     # Create a test LocalAsset with cost parameters
@@ -371,6 +373,7 @@ def test_prod_cost_from_vertices():
     class SimpleMarketSeries:
         def __init__(self):
             self.name = "test_market"
+            self.description = ""
             self.default_price = 0.05
             self.market_order = 1
             self.duration = MarketDurations.new(
@@ -391,7 +394,7 @@ def test_prod_cost_from_vertices():
     series = SimpleMarketSeries()
     transition_times = series.duration.get_timings(now)
     
-    test_market = Market(test_node, series, transition_times)
+    test_market = Market(test_node, series, series.initial_market_state, transition_times)
     test_node.markets = [test_market]
 
     # Create a test LocalAsset
@@ -478,6 +481,7 @@ def test_are_different2():
     class SimpleMarketSeries:
         def __init__(self):
             self.name = "TEST"
+            self.description = ""
             self.default_price = 0.05
             self.market_order = 1
             self.duration = MarketDurations.new(
@@ -498,7 +502,7 @@ def test_are_different2():
     series = SimpleMarketSeries()
     transition_times = series.duration.get_timings(now)
     
-    mkt = Market(test_node, series, transition_times)
+    mkt = Market(test_node, series, series.initial_market_state, transition_times)
     test_node.markets = [mkt]
     
     # Get the time interval

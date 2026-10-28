@@ -9,6 +9,7 @@ from tent.containers.time_interval import TimeInterval, IntervalSeries, timedelt
 class DummyMarket:
     def __init__(self, id_="mkt-1", name="DA", data_manager=None):
         self.id = id_
+        self.name = name
         self.market_series_name = name
         self.data_manager = object() if data_manager is None else data_manager
 
@@ -45,8 +46,8 @@ def test_timeinterval_initialization_with_seconds_duration_and_weakref(monkeypat
     assert isinstance(ti.market, ProxyType)
     assert ("calls" in captured) and captured["calls"][-1][0] is ti and captured["calls"][-1][1] == "market"
 
-    # name format includes market_series_name and ISO start_time
-    assert ti.name == f"{mkt.market_series_name}@{start.isoformat()}"
+    # name format includes market name and ISO start_time
+    assert ti.name == f"{mkt.name}@{start.isoformat()}"
 
     # data_manager property proxies to market.data_manager
     assert ti.data_manager is mkt.data_manager

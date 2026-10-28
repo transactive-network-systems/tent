@@ -42,6 +42,7 @@ class DummyMeasurement:
 def market_like():
 	class M:
 		def __init__(self):
+			self.name = "SERIES"
 			self.market_series_name = "SERIES"
 			self.data_manager = DummyDataManager()
 	return M()

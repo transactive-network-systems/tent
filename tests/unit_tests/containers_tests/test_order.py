@@ -30,6 +30,7 @@ class DummySeries:
 class DummyMarket:
 	def __init__(self, name="MKT"):
 		self.series = DummySeries(name)
+		self.name = name
 		self.market_series_name = self.series.name
 		self.orderList = []
 		self.data_manager = DummyDataManager()
