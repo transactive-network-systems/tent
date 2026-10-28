@@ -1,3 +1,4 @@
+from uuid6 import uuid7
 from datetime import datetime, timedelta
 
 from tent.containers.vertex import Vertex
@@ -41,6 +42,7 @@ def test_calculate_reserve_margin():
     class SimpleMarketSeries:
         def __init__(self):
             self.name = 'TestMarket'
+            self.id = uuid7()
             self.description = 'TestMarket'
             self.default_price = 0.05
             self.market_order = 1
@@ -289,6 +291,7 @@ def test_schedule_engagement():
     class SimpleMarketSeries:
         def __init__(self):
             self.name = 'TestMarket'
+            self.id = uuid7()
             self.description = 'TestMarket'
             self.default_price = 0.05
             self.market_order = 1
@@ -345,6 +348,7 @@ def test_schedule_engagement():
     class SimpleMarketSeries3:
         def __init__(self):
             self.name = 'TestMarket'
+            self.id = uuid7()
             self.description = 'TestMarket'
             self.default_price = 0.05
             self.market_order = 1
@@ -411,6 +415,7 @@ def test_schedule_power():
     class SimpleMarketSeries:
         def __init__(self):
             self.name = 'TestMarket'
+            self.id = uuid7()
             self.description = 'TestMarket'
             self.default_price = 0.05
             self.market_order = 1
@@ -470,6 +475,7 @@ def test_schedule_power():
     class SimpleMarketSeries3:
         def __init__(self):
             self.name = 'TestMarket'
+            self.id = uuid7()
             self.description = 'TestMarket'
             self.default_price = 0.05
             self.market_order = 1
@@ -540,6 +546,7 @@ def test_update_dual_costs():
     class SimpleMarketSeries:
         def __init__(self):
             self.name = 'TestMarket'
+            self.id = uuid7()
             self.description = 'TestMarket'
             self.default_price = 0.05
             self.market_order = 1
@@ -633,6 +640,7 @@ def test_update_production_costs():
     class SimpleMarketSeries:
         def __init__(self):
             self.name = 'TestMarket'
+            self.id = uuid7()
             self.description = 'TestMarket'
             self.default_price = 0.05
             self.market_order = 1
@@ -719,6 +727,7 @@ def test_update_vertices():
     class SimpleMarketSeries:
         def __init__(self):
             self.name = "test_market"
+            self.id = uuid7()
             self.description = ""
             self.default_price = 0.05
             self.market_order = 1

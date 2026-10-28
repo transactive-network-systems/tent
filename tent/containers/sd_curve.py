@@ -444,11 +444,35 @@ class SDCurve(Archivable):
     def table_name(self):
         return 'sd_curve'
 
+    def archive(self, records: list[dict] = None):
+        """
+        Write one version of this curve: the sd_curve row plus one vertex row per vertex, all stamped with the same
+        record_time. Timer.now() is the canonical clock everywhere (simulation time when simulating); real time is
+        recoverable from the run's anchor and ratio.
+        """
+        self.last_record_time = Timer.now()
+        records = list(records) if records else []
+        records.extend({'table_name': 'vertex', 'data': self._vertex_record(i, vertex)}
+                       for i, vertex in enumerate(self.vertices))
+        super(SDCurve, self).archive(records)
+
+    def _vertex_record(self, index: int, vertex: Vertex) -> dict:
+        return {
+            "curve_id": self.id,
+            "curve_record_time": self.last_record_time,
+            "id": vertex.id,
+            "price": vertex.price,
+            "quantity": vertex.quantity,
+            "cost": vertex.cost,
+            "continuity": vertex.continuity,
+            "uncertainty": vertex.uncertainty,
+            "record": index
+        }
+
     def get_record(self) -> dict:
         record = super(SDCurve, self).get_record()
-        # Each archive() writes a new version of this curve, keyed by (id, record_time). Timer.now() is the canonical
-        # clock everywhere (simulation time when simulating); real time is recoverable from the run's anchor and ratio.
-        self.last_record_time = Timer.now()
+        if getattr(self, 'last_record_time', None) is None:
+            self.last_record_time = Timer.now()
         record.update({
             "record_time": self.last_record_time,
             # NOTE: identity checks, not truthiness: Measurement.__bool__ is False while it holds no values, which would

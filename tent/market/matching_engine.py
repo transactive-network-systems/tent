@@ -84,11 +84,12 @@ class MatchingEngine(Market):
 
     def __init__(self, *args, matching_strategy: list | str | MatchingStrategy | None = None,
                  order_expiry: timedelta | float | None = None, **kwargs):
+        # Recorded by get_record(), so it must exist before Market.__init__ archives the market row.
+        self.matching_strategy: list[MatchingStrategy] = self._parse_matching_strategy(matching_strategy)
         super(MatchingEngine, self).__init__(*args, **kwargs)
         self.order_measurement: Measurement = Measurement(self, MeasurementType.Order, MeasurementUnit.kW)
         self.orderList: list[Order] = []  # List of standing orders not yet matched
         self.matchList: list[Order] = []  # List of orders successfully matched
-        self.matching_strategy: list[MatchingStrategy] = self._parse_matching_strategy(matching_strategy)
         self.order_expiry: timedelta | None = (order_expiry if isinstance(order_expiry, timedelta) or order_expiry is None
                                                else timedelta(seconds=float(order_expiry)))
         self.quotes: dict[tuple, Quote] = {}

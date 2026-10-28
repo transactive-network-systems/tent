@@ -60,7 +60,7 @@ _WEEKDAYS.update({name[:3]: i for name, i in list(_WEEKDAYS.items())})
 
 
 def parse_datetime(value) -> datetime:
-    """Parse a datetime from a datetime, an ISO 8601 string, or one of a few explicit legacy formats
+    """Parse a datetime from a datetime, an ISO 8601 string, or one of a few explicit alternative formats
     (``m/d/Y H:M`` as used by the weather CSVs). Formats are explicit on purpose: ambiguous day/month guessing is not
     supported, so configurations should use ISO 8601."""
     if isinstance(value, datetime):
@@ -108,19 +108,12 @@ def parse_weekday(value) -> int:
 
 
 def parse_timedelta(value) -> timedelta | None:
-    """timedelta from a timedelta, a number of seconds, or the ``str(timedelta)`` form (``1 day, 0:15:00``) that
-    legacy SQLite archives hold in their duration columns."""
+    """timedelta from a timedelta or a number of seconds (the form used in configuration files)."""
     if value is None or isinstance(value, timedelta):
         return value
     if isinstance(value, (int, float)):
         return timedelta(seconds=float(value))
-    text = str(value).strip()
-    m = re.fullmatch(r'(?:(-?\d+) days?, )?(-?\d+):(\d{2}):(\d{2})(?:\.(\d{1,6}))?', text)
-    if not m:
-        raise ValueError(f'Unrecognised duration: {value!r}')
-    days, hours, minutes, seconds, micros = m.groups()
-    return timedelta(days=int(days or 0), hours=int(hours), minutes=int(minutes), seconds=int(seconds),
-                     microseconds=int((micros or '0').ljust(6, '0')))
+    raise ValueError(f'Unrecognised duration: {value!r}. Give a number of seconds.')
 
 
 def linspace(start: float, stop: float, num: int) -> list[float]:

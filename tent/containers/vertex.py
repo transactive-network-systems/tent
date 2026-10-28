@@ -155,9 +155,10 @@ class Vertex(Archivable):
         record = super(Vertex, self).get_record()
         record.update({
             "curve_id": self.curve.id if self.curve else None,
-            "marginal_price": self.price,
-            "power": self.quantity,
-            "prod_cost": self.cost,
+            "curve_record_time": getattr(self.curve, 'last_record_time', None) if self.curve else None,
+            "price": self.price,
+            "quantity": self.quantity,
+            "cost": self.cost,
             "continuity": self.continuity,
             "uncertainty": self.uncertainty,
             "record": self.record

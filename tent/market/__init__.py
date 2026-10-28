@@ -93,13 +93,18 @@ class Market(Component):
                                              safe_weak_proxy_callback(self, 'prior_market_in_series'))
                                        if isinstance(prior_market_in_series, Market) else None)
 
+        # The market row must exist before anything that references it (measurements, time intervals, state changes).
+        # NOTE for subclasses: any attribute your get_record() reports must be set BEFORE calling Market.__init__.
+        self._market_state: MarketState = initial_market_state
+        self.archive()
+        self.record_state(initial_market_state)
+
         # These are dynamic properties that are assigned in code and should not be manually configured:
         self.active_vertices: SDMeasurement = SDMeasurement(self, measurement_type=MeasurementType.SystemVertex)
         self.blended_prices1: Measurement = Measurement(self, MeasurementType.BlendedPrice, MeasurementUnit.Monetary)  # (future functionality)
         self.blended_prices2: Measurement = Measurement(self, MeasurementType.BlendedPrice, MeasurementUnit.Monetary)  # (future functionality)
         self.converged: bool = False
         self.dual_costs: Measurement = Measurement(self, MeasurementType.DualCost, MeasurementUnit.Monetary)  # Values are [$]
-        self.market_state: MarketState = initial_market_state
         self.marginal_prices: Measurement = Measurement(self, MeasurementType.MarginalPrice, MeasurementUnit.Monetary) # [$/kWh]
         self.net_powers: Measurement = Measurement(self, MeasurementType.NetPower, MeasurementUnit.kW)  # [avg.kW]
         self.price_model = price_model
@@ -128,6 +133,21 @@ class Market(Component):
         # This flag should be made False in each transition.
         # It should be made True after all the tasks have been completed in the ensuing market state.
         self._stateIsCompleted = False
+
+    @property
+    def market_state(self) -> MarketState:
+        return self._market_state
+
+    @market_state.setter
+    def market_state(self, new_state: MarketState):
+        """Every state change is recorded in market_state_change (append-only), including the initial state."""
+        if new_state != self._market_state:
+            self._market_state = new_state
+            self.record_state(new_state)
+
+    def record_state(self, state: MarketState) -> None:
+        self.data_manager.archive_data({'table_name': 'market_state_change',
+                                        'data': {'market_id': self.id, 'state': state, 'record_time': Timer.now()}})
 
     def events(self):
         """
@@ -1018,7 +1038,7 @@ class Market(Component):
         record.update({
             'prior_market_id': self.prior_market_in_series.id if self.prior_market_in_series else None,
             'market_to_be_refined_id': self.market_to_be_refined.id if self.market_to_be_refined else None,
-            'market_type': self.series.market_type,
+            'market_type': self.MARKET_TYPE,
             'active_start_time': self.transition_times.active,
             'negotiation_start_time': self.transition_times.negotiation,
             'market_lead_start_time': self.transition_times.market_lead,
@@ -1050,6 +1070,14 @@ class Market(Component):
                     {"name": "reconciliation_start_time", "type": "DateTime"},
                     {"name": "expiration_time", "type": "DateTime"},
                     {"name": "market_series_id", "foreign_key": "market_series.id"}
+                ]
+            },
+            {
+                "name": "market_state_change",
+                "columns": [
+                    {"name": "market_id", "foreign_key": "market.id", "kwargs": {"primary_key": True}},
+                    {"name": "record_time", "type": "DateTime", "kwargs": {"primary_key": True}},
+                    {"name": "state", "enumeration": "MarketState"}
                 ]
             }
         ])

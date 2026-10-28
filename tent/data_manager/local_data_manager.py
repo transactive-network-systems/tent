@@ -153,7 +153,7 @@ class LocalDataManager(DataManager):
         if isinstance(column.type, Uuid) and isinstance(value, str):
             return UUID(value)
         if isinstance(column.type, Interval) and not isinstance(value, timedelta):
-            return parse_timedelta(value)  # seconds or the legacy str(timedelta) form
+            return parse_timedelta(value)  # seconds
         return value
 
     def _record_to_dict(self, table_name: str, record) -> dict:

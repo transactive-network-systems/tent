@@ -69,7 +69,8 @@ class TransactiveNode(Archivable):
         self.loop_sleep_duration = loop_sleep_duration
         self.mechanism = mechanism                              # future, unused in Version 2
         self.name = name                                        # [text]
-        self.registry_id = None                                 # string: An out-of-band identifier from a node registry.
+        self.actor_id: str | None = None         # Permanent, configured identity of the actor this node represents.
+        self.organization_id: str | None = None  # Optional identity of the business entity the actor belongs to.
         self.simulation = False
         self.simulation_start_time = Timer.now()
         self.simulation_one_hour_in_seconds = 3600
@@ -92,7 +93,8 @@ class TransactiveNode(Archivable):
             "loop_sleep_duration": self.loop_sleep_duration,
             "mechanism": self.mechanism,
             "name": self.name,
-            "registry_id": self.registry_id,
+            "actor_id": self.actor_id,
+            "organization_id": self.organization_id,
             "simulation": self.simulation,
             "status": self.status,
             "tz": self.tz,
@@ -116,6 +118,7 @@ class TransactiveNode(Archivable):
         self._setup_data_manager(updated_configs)
         self._setup_component_objects(updated_configs)
         self.data_manager.init_archive()
+        self.archive()  # The run's row: identity, simulation anchor and ratio (see Timer.set), timezone.
 
     def _update_node_configurations(self, configs):
         _log.debug('IN _UPDATE_NODE_CONFIGURATIONS')
@@ -127,7 +130,8 @@ class TransactiveNode(Archivable):
         self.loop_sleep_duration = updated_configs.get('loop_sleep_duration', self.loop_sleep_duration)
         self.mechanism = updated_configs.get('mechanism', self.mechanism)
         self.name = updated_configs.get('name', self.name)
-        self.registry_id = updated_configs.get('registry_id', self.registry_id)
+        self.actor_id = updated_configs.get('actor_id', self.actor_id)
+        self.organization_id = updated_configs.get('organization_id', self.organization_id)
         self.status = updated_configs.get('status', self.status)
         self.tz = updated_configs.get('tz', self.tz)
         return updated_configs
@@ -280,16 +284,19 @@ class TransactiveNode(Archivable):
         return 'transactive_node'
 
     def get_record(self) -> dict:
-        return {
+        record = super(TransactiveNode, self).get_record()
+        record.update({
             "created": self.real_time_created,
             "description": self.description,
             "name": self.name,
-            "registry_id": self.registry_id,
+            "actor_id": self.actor_id,
+            "organization_id": self.organization_id,
             "simulation": self.simulation,
             "simulation_start_time": self.simulation_start_time,
             "simulation_one_hour_in_seconds": self.simulation_one_hour_in_seconds,
             "tz": self.tz
-        }
+        })
+        return record
 
     @classmethod
     def get_archive_definitions(cls):
@@ -308,14 +315,15 @@ class TransactiveNode(Archivable):
                     {"name": "description", "type": "String", "type_args": [255]},
                     {"name": "id", "type": "Uuid", "identity": True, "kwargs": {"primary_key": True}},
                     {"name": "name", "type": "String", "type_args": [255]},
-                    {"name": "registry_id", "type": "String", "type_args": [255], "kwargs": {"nullable": True}},
+                    {"name": "actor_id", "type": "String", "type_args": [255], "kwargs": {"nullable": True}},
+                    {"name": "organization_id", "type": "String", "type_args": [255], "kwargs": {"nullable": True}},
                     {"name": "simulation", "type": "Boolean"},
                     {"name": "simulation_start_time", "type": "DateTime"},
                     {"name": "simulation_one_hour_in_seconds", "type": "Float"},
                     {"name": "tz", "type": "String", "type_args": [64]}  # IANA zone name
                 ],
                 "indices": [
-                    {"name": "idx_tn_instance", "columns": ["registry_id", "name", "created"], "unique": True}
+                    {"name": "idx_tn_instance", "columns": ["actor_id", "name", "created"], "unique": True}
                 ]
             }
         ])

@@ -41,6 +41,7 @@ operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
 
+from uuid6 import uuid7
 from datetime import datetime, timedelta
 
 import pytest
@@ -97,6 +98,7 @@ class _SimpleMarketSeries:
 
     def __init__(self, name='TestMarketSeries'):
         self.name = name
+        self.id = uuid7()
         self.description = name
         self.market_order = 1
         self.default_price = 0.05

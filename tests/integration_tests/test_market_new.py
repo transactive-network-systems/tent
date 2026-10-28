@@ -1,3 +1,4 @@
+from uuid6 import uuid7
 import weakref
 
 from datetime import datetime, timedelta
@@ -28,6 +29,7 @@ def test_assign_system_vertices():
     class SimpleMarketSeries:
         def __init__(self):
             self.name = 'TestMarket'
+            self.id = uuid7()
             self.description = 'TestMarket'
             self.default_price = 0.05
             self.market_order = 1
@@ -111,6 +113,7 @@ def test_balance():
     class SimpleMarketSeries:
         def __init__(self):
             self.name = 'TestMarket'
+            self.id = uuid7()
             self.description = 'TestMarket'
             self.default_price = 0.05
             self.market_order = 1
@@ -211,6 +214,7 @@ def test_check_intervals():
     class SimpleMarketSeries:
         def __init__(self):
             self.name = 'TestMarket'
+            self.id = uuid7()
             self.description = 'TestMarket'
             self.default_price = 0.05
             self.market_order = 1
@@ -269,6 +273,7 @@ def test_check_marginal_prices():
     class SimpleMarketSeries:
         def __init__(self):
             self.name = 'TestMarket'
+            self.id = uuid7()
             self.description = 'TestMarket'
             self.default_price = 0.05
             self.market_order = 1
@@ -315,6 +320,7 @@ def test_check_marginal_prices():
     class SimpleMarketSeries:
         def __init__(self):
             self.name = 'TestMarket'
+            self.id = uuid7()
             self.description = 'TestMarket'
             pi = 3.14159
             self.default_price = pi  # Set default price
@@ -365,6 +371,7 @@ def test_check_marginal_prices():
     class SimpleMarketSeries:
         def __init__(self):
             self.name = 'TestMarket'
+            self.id = uuid7()
             self.description = 'TestMarket'
             self.default_price = None  # No default price
             self.market_order = 1
@@ -536,6 +543,7 @@ def test_sum_vertices():
     class SimpleMarketSeries:
         def __init__(self):
             self.name = 'TestMarket'
+            self.id = uuid7()
             self.description = 'TestMarket'
             self.default_price = 0.05
             self.market_order = 1

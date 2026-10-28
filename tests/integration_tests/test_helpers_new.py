@@ -41,6 +41,7 @@ operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
 
+from uuid6 import uuid7
 from datetime import datetime, timedelta
 
 from tent.containers.vertex import Vertex
@@ -189,6 +190,7 @@ def test_production():
     class SimpleMarketSeries:
         def __init__(self):
             self.name = "test_market"
+            self.id = uuid7()
             self.description = ""
             self.default_price = 0.05
             self.market_order = 1
@@ -291,6 +293,7 @@ def test_prod_cost_from_formula():
     class SimpleMarketSeries:
         def __init__(self):
             self.name = "test_market"
+            self.id = uuid7()
             self.description = ""
             self.default_price = 0.05
             self.market_order = 1
@@ -372,6 +375,7 @@ def test_prod_cost_from_vertices():
     class SimpleMarketSeries:
         def __init__(self):
             self.name = "test_market"
+            self.id = uuid7()
             self.description = ""
             self.default_price = 0.05
             self.market_order = 1
@@ -480,6 +484,7 @@ def test_are_different2():
     class SimpleMarketSeries:
         def __init__(self):
             self.name = "TEST"
+            self.id = uuid7()
             self.description = ""
             self.default_price = 0.05
             self.market_order = 1

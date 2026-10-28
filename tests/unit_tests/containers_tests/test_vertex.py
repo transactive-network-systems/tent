@@ -104,9 +104,9 @@ def test_get_record_includes_fields(monkeypatch):
     rec = v.get_record()
     assert rec["id"] == "uuid-1"
     assert rec["curve_id"] == "curve-123"
-    assert rec["marginal_price"] == 3.0
-    assert rec["power"] == 10.0
-    assert rec["prod_cost"] == 2.0
+    assert rec["price"] == 3.0
+    assert rec["quantity"] == 10.0
+    assert rec["cost"] == 2.0
     assert rec["continuity"] is True
     assert rec["uncertainty"] == 0.25
     assert rec["record"] == 0
