@@ -104,19 +104,75 @@ These were all latent in the pieces that the consensus loop depends on and would
 - ``Market.while_in_negotiation`` and ``Auction`` passed the node where ``balance`` expects an iteration counter.
 - The relative-distance criterion divided by the average price even when both prices were infinite or zero.
 
-What is still open
-------------------
+Remaining work: plan (31 October 2026)
+--------------------------------------
 
-- **Subgradient** has not been exercised; the loop supports it but every test uses Interpolation.
-- **Convergence per market.** ``Neighbor.converged`` and ``signal_due`` are single flags per neighbor, computed for the
-  market last checked. A node with two consensus series negotiating at once would need them keyed by market.
-- **Periodic reconsideration.** The legacy agents re-ran balancing on a timer. Here a local change must be reported
-  through ``on_local_change``; nothing re-runs on its own while a market has declared consensus.
-- **Clock skew.** "Received at or after sent" compares the sender's ``signal_time`` with the local send time. In a
-  simulation the clocks are one; across real agents they are not, and a skew larger than a negotiation round could hide
-  or invent disagreement. A sequence number per signal would be more robust than a timestamp.
-- **Multiple intervals from rolling markets.** The tests use one market with two intervals. Overlapping rolling markets
-  (``intervals_to_clear > 1`` with a shorter clearing interval) have not been run through consensus.
-- **The VOLTTRON agent** (``TransactiveNodeAgent``) still carries the auction wiring only; its ``issue_signal`` and
-  subscription setup need the naming conventions above, and the ``full_consensus`` publication the 2023 analyses read
-  from the ``negotiation_record`` topic is now an archived measurement instead.
+The items below are ordered so that each one needs only what precedes it. Sizes are relative: S is an afternoon, M a
+day or two, L several days including a container run. Each item names its tests; everything stays under the existing
+suites (``pytest tests``) and the two-node harness.
+
+1. **Acknowledged signals instead of timestamp ordering (M).** Today "a reply arrived at or after my last send" is
+   decided by comparing the sender's ``signal_time`` with the local send time. In a simulation the clocks are one;
+   across agents they are not, and whoever sends last never learns that the other side accepted it. Give every signal
+   a per-neighbor, per-market ``sequence`` and an ``in_reply_to``: the sequence of the last signal received from that
+   neighbor when this one was prepared. The second convergence criterion becomes "the neighbor has seen my latest
+   (``received.in_reply_to >= my last sequence``) and still disagrees at the balance point"; *converged* becomes "the
+   neighbor has seen my latest and agrees, and nothing changed locally". A reply to an older signal is neither due nor
+   converged: wait. Bump ``PROTOCOL_VERSION`` to 1.1; ``parse_signal`` accepts 1.0 without the fields and falls back to
+   the timestamp rule. Archive both fields on ``transactive_signal``. Tests: the two-node harness with the city's
+   signals delayed one tick (a reply to a stale signal must not close consensus); clocks deliberately skewed between
+   the two nodes (consensus still reached). Decision needed: this is a protocol change that every deployed agent must
+   carry at once.
+
+2. **Neighbor coordination state per market (S).** ``Neighbor.converged``, ``signal_due`` and the sequence counters
+   from item 1 become ``WeakKeyDictionary`` entries keyed by market, like the three signal dictionaries already are, with
+   ``converged_in(market)`` and ``signal_due_in(market)`` accessors. ``ConsensusMarket`` and ``record_consensus`` read
+   the per-market values. Keep the bare attributes as "the market last checked" for the single-market case and the
+   existing tests. Test: one node with two consensus series negotiating at once; flags of one must not leak into the
+   other.
+
+3. **Periodic reconsideration (S).** Add a base hook ``Market.on_tick()`` that ``events()`` calls once per iteration in
+   every state (default no-op), so a market type can act while a state is complete without changing the state machine.
+   ``ConsensusMarket`` takes a market keyword ``reconsider_interval`` (seconds, default ``None`` = off) and, when set,
+   reopens Negotiation from ``on_tick`` once that long has passed since its last balancing pass. ``on_local_change``
+   remains the event-driven path; the agent's asset models (``ModelFrameAsset``, the open-loop load predictor) call it
+   when a forecast or meter update changes their schedule. Tests: a settled negotiation reopens after the interval; an
+   asset's ``schedule`` that changes its vertices triggers a resend.
+
+4. **Rolling, overlapping markets (M; needs 2).** Run the harness with ``intervals_to_clear`` greater than one and a
+   clearing interval shorter than the horizon, so two or three markets of one series negotiate concurrently and later
+   markets start from the prices of earlier ones (``check_marginal_prices`` method 2). Signals are already per market;
+   item 2 makes the neighbor state follow. Check that the horizon heatmap in the analysis tool shows prices firming
+   across successive markets from such a run. Test: three overlapping markets reach consensus independently and the
+   later ones open at the earlier ones' cleared prices.
+
+5. **Subgradient: exercise or retire (M).** ``balance_locally`` keeps the Subgradient path but it has never run: the
+   subgradient step reads ``net_powers`` that are not computed until after the first ``balance``. Either (a) order the
+   first pass so ``update_supply_demand`` precedes ``balance``, make the step size a series setting instead of the
+   hard-coded ``1e-1 / (10 + k)``, and add a two-node test that converges within ``max_balance_iterations``; or (b)
+   remove ``Method.Subgradient`` from the market and the series. Decision needed; the recommendation is (b) unless there
+   is a planned use, since Interpolation is exact for the piece-wise linear curves every TENT entity produces.
+
+6. **One simulation clock for all agents (S).** ``TransactiveNode._setup_timer`` anchors simulated time to the node's
+   own creation time, so agents started seconds apart disagree on the simulated hour (at 100 real seconds per simulated
+   hour a 10 s start gap is 6 simulated minutes) and may even name their markets differently. Add an optional config
+   key ``simulation_anchor_time`` (real, ISO 8601) that every agent in a run shares; when absent, keep the current
+   behaviour. The container compose files set it once for the whole run. ``transactive_node.created`` continues to
+   record the actual start, so the archive can still convert simulation time to real time per run. Test: two
+   ``MockTN`` nodes created at different real times with the same anchor report the same ``Timer.now()``.
+
+7. **Run it in the containers (L; needs 1, 2, 6).** Add a consensus series to the campus and city node configs under
+   ``containers/tent`` with identical name and timing (the auctions stay for comparison), bring the stack up with
+   ``docker-compose-tent.yml``, and confirm in the central historian database that both nodes archive
+   ``FullConsensus`` rows and matching sent and received signals. The agent needs no new code paths for routing, but
+   the following must be checked on a real run: the gevent loop keeps up with ``loop_sleep_duration`` while signals
+   arrive asynchronously; ``VolttronDataManager`` carries the new measurement type and the signal columns to the
+   historian; the legacy ``negotiation_record`` topic is dropped from the agent now that consensus is archived. Output:
+   a tent-analysis report over the historian database with the negotiation trace, signal pairs and consensus strip from
+   real rounds (the current samples use synthetic archives).
+
+8. **Analysis tool follow-up (S; after 7).** Add the acknowledgement fields to ``load_signals`` and a small "rounds to
+   consensus" metric per market and neighbor, and refresh the OneDrive samples from the container run.
+
+Decisions for the user before starting: the protocol change in item 1; keep or retire Subgradient in item 5; whether
+periodic reconsideration (item 3) is wanted at all or event-driven reopening is enough.
