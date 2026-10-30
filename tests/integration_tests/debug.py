@@ -50,6 +50,7 @@ from tent.base.component import Component
 from tent.containers.time_interval import TimeInterval
 from tent.containers.transactive_signal import TransactiveSignal
 from tent.containers.vertex import Vertex
+from tent.enumerations import SignalDirection
 
 
 class _StubDataManager:
@@ -117,7 +118,7 @@ def _build_time_interval(market, timestamp):
 
 
 def _build_signal(points, direction, time_interval, market, tn):
-    neighbor = _StubNeighbor(transactive_node=tn, name=f'{direction.title()}Neighbor')
+    neighbor = _StubNeighbor(transactive_node=tn, name=f'{direction.name.title()}Neighbor')
     signal = TransactiveSignal(market=market, neighbor=neighbor, direction=direction)
     vertices = [Vertex(price=point[3], quantity=point[2]) for point in points]
     signal.update(time_interval, vertices, archive=False)
@@ -139,8 +140,8 @@ def test_balance_points_differ(sent_points, received_points, threshold, expected
     market = _StubMarket(data_manager)
     time_interval = _build_time_interval(market, sent_points[0][0])
 
-    sent_signal = _build_signal(sent_points, 'sent', time_interval, market, transactive_node)
-    received_signal = _build_signal(received_points, 'received', time_interval, market, transactive_node)
+    sent_signal = _build_signal(sent_points, SignalDirection.sent, time_interval, market, transactive_node)
+    received_signal = _build_signal(received_points, SignalDirection.received, time_interval, market, transactive_node)
 
     assert (
         TransactiveSignal.balance_points_differ(sent_signal, received_signal, time_interval, threshold)

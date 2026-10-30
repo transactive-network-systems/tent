@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from tent.containers.vertex import Vertex
 from tent.containers.time_interval import TimeInterval
 from tent.containers.sd_curve import SDCurve
+from tent.enumerations import SignalDirection
 from tent.market import Market
 from tent.neighbor import Neighbor
 from tent.utils.timer import Timer
@@ -189,14 +190,14 @@ def test_check_for_convergence():
     test_model.converged = False  # Reset to ensure test changes status
     
     # Create matching signals (sent exports +100, received imports -100)
-    sent_signal = TransactiveSignal(test_market, test_model, signal_time=dt, direction='sent')
+    sent_signal = TransactiveSignal(test_market, test_model, signal_time=dt, direction=SignalDirection.sent)
     sent_vertex = Vertex(price=0.05, quantity=100.0, cost=0.0)
     sent_signal.update(time_interval, [sent_vertex])
     # Mark the vertex as the balance point
     sent_signal._TransactiveSignal__balance_vertices[time_interval] = sent_vertex
     test_model.last_sent_signals[test_market] = sent_signal
     
-    received_signal = TransactiveSignal(test_market, test_model, signal_time=dt + one_hour, direction='received')
+    received_signal = TransactiveSignal(test_market, test_model, signal_time=dt + one_hour, direction=SignalDirection.received)
     received_vertex = Vertex(price=0.05, quantity=-100.0, cost=0.0)
     received_signal.update(time_interval, [received_vertex])
     # Mark the vertex as the balance point  
@@ -1635,7 +1636,7 @@ def test_update_vertices():
     
     # Create and store a received transactive signal with vertices
     # In modern API, we create a TransactiveSignal with SDCurve containing the vertices
-    transactive_signal = TransactiveSignal(market=test_market, neighbor=test_model, direction='received')
+    transactive_signal = TransactiveSignal(market=test_market, neighbor=test_model, direction=SignalDirection.received)
     
     # Create vertices to represent the flexibility curve
     # Legacy: TransactiveRecord(time_interval, record=1, marginal_price=0.15, power=0)

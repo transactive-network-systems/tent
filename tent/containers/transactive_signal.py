@@ -48,7 +48,7 @@ from weakref import WeakKeyDictionary
 from typing import TYPE_CHECKING, Self
 
 from tent.containers import SDCurve, SDMeasurement, TimeInterval, Vertex
-from tent.enumerations import MeasurementType, MeasurementUnit
+from tent.enumerations import MeasurementType, MeasurementUnit, SignalDirection
 from tent.utils.timer import Timer
 
 if TYPE_CHECKING:
@@ -61,10 +61,12 @@ _log = logging.getLogger(__name__)
 class TransactiveSignal(SDMeasurement):
     PROTOCOL_VERSION = 1.0
 
-    def __init__(self, market, neighbor, direction=None, signal_time=None, **kwargs):
+    def __init__(self, market, neighbor, direction: SignalDirection | None = None, signal_time=None, **kwargs):
         self.market: Market = market
         self.neighbor: Neighbor = neighbor
-        self.direction = direction
+        if direction is not None and not isinstance(direction, SignalDirection):
+            raise TypeError(f'direction must be a SignalDirection, not {direction!r}')
+        self.direction: SignalDirection | None = direction
         self.signal_time: datetime | None = signal_time
         self.__balance_vertices: WeakKeyDictionary[TimeInterval, Vertex] = WeakKeyDictionary()
         super(TransactiveSignal, self).__init__(source=neighbor, measurement_type=MeasurementType.SignalVertex,
@@ -94,7 +96,7 @@ class TransactiveSignal(SDMeasurement):
         if scheduled_powers is not None:
             self._add_balance_vertices(scheduled_powers)
         self.signal_time = Timer.now()
-        self.direction = 'sent'
+        self.direction = SignalDirection.sent
         # self.archive()
         intervals = {}
         for ti, sd in self.all:
@@ -140,7 +142,7 @@ class TransactiveSignal(SDMeasurement):
             if not (neighbor := tn.get_neighbors_by_attribute('name', message['neighbor'], first_only=True)):
                 _log.warning(f'Unable to find valid neighbor "{neighbor}" from received transactive signal.')
             signal_time = datetime.fromisoformat(message['signal_time']) if message.get('signal_time') else None
-            signal = cls(market=market, neighbor=neighbor, direction='received',
+            signal = cls(market=market, neighbor=neighbor, direction=SignalDirection.received,
                          signal_time=signal_time, measurement_unit=message['unit'])
         except KeyError as e:
             _log.warning(f'Missing required field in transactive signal: {e}.')
@@ -213,7 +215,7 @@ class TransactiveSignal(SDMeasurement):
         received: Vertex = received_signal.balance_point(time_interval)
 
         # Determine whether there are a mixture of received and sent or calculated signals.
-        are_received = [s.direction == 'received' for s in [sent_signal, received_signal]]
+        are_received = [s.direction is SignalDirection.received for s in [sent_signal, received_signal]]
         mixed_direction = True if any(are_received) and not all(are_received) else False
         no_flexibility = True if len(sent_signal) == 1 or len(received_signal) == 1 else False
 
@@ -289,7 +291,7 @@ class TransactiveSignal(SDMeasurement):
                 "inherits": "measurement",
                 "columns": [
                     {"name": "id", "type": "Uuid", "foreign_key": "measurement.id", "kwargs": {"primary_key": True}},
-                    {"name": "direction", "type": "String", "type_args": [16]},  # sent or received
+                    {"name": "direction", "enumeration": "SignalDirection"},
                     {"name": "protocol_version", "type": "Float"},
                     {"name": "market_id", "foreign_key": "market.id"},
                     {"name": "signal_time", "type": "DateTime"}

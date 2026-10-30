@@ -41,7 +41,8 @@ operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
 
-from tent.enumerations import MarketTypes, Method
+from tent.containers.measurement import Measurement
+from tent.enumerations import MarketTypes, MeasurementType, MeasurementUnit, Method
 from tent.market import Market
 
 
@@ -51,6 +52,22 @@ class ConsensusMarket(Market):
     def __init__(self, *args, **kwargs):
         # The solution method is a MarketSeries setting (series.method); Market.__init__ does not take it.
         super(ConsensusMarket, self).__init__(*args, **kwargs)
+        # Per interval: this market converged AND every transactive neighbor agrees. See record_consensus().
+        self.full_consensus: Measurement = Measurement(self, MeasurementType.FullConsensus, MeasurementUnit.Boolean)
+
+    def record_consensus(self) -> None:
+        """
+        Record, per active time interval, whether full consensus holds: this market has converged AND every transactive
+        neighbor's convergence flag for the interval is set (a neighbor with no flag yet counts as not converged).
+        Called at the end of each negotiation pass and when the market leaves Negotiation, so the archive carries the
+        consensus history the 2023 negotiation-record analyses relied on. Consensus is a property of this market type
+        only: Auction.converged means local scheduling finished and says nothing about agreement between nodes.
+        """
+        neighbors = [n for n in getattr(self.tn, 'neighbors', []) if getattr(n, 'transactive', False)]
+        for time_interval in self.time_intervals:
+            flags = [n.convergence_flags.get_by_interval(time_interval) for n in neighbors]
+            agreed = all(f is not None and bool(f.value) for f in flags)
+            self.full_consensus.update(time_interval, bool(self.converged and agreed))
 
     def while_in_negotiation(self):
         # Almost all consensus balancing activities will occur while the market is in its negotiation state.
@@ -196,4 +213,6 @@ class ConsensusMarket(Market):
     def transition_from_negotiation_to_market_lead(self):
         # This is an opportunity to wrap up any loose negotiation ends before the market fully closes.
         # No big activities should be undertaken here, however, so we don't risk working into the delivery period.
-        pass  # TBD
+        # Negotiation may have ended by timeout rather than convergence; record the consensus state either way.
+        self.record_consensus()
+        super(ConsensusMarket, self).transition_from_negotiation_to_market_lead()

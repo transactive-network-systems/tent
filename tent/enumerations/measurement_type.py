@@ -84,5 +84,5 @@ class MeasurementType(Enum):
     PredictedValue = 34
     SignalVertex = 35
     Order = 36  # Matching-engine bid/offer curves (see tent.containers.order.Order)
-    FullConsensus = 37  # Per interval: the market converged and every transactive neighbor agrees (Boolean)
+    FullConsensus = 37  # ConsensusMarket only, per interval: converged and every transactive neighbor agrees (Boolean)
     Unknown = 40
