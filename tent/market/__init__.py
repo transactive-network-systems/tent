@@ -521,7 +521,7 @@ class Market(Component):
         # A convergence flag is available to distinguish actions to be undertaken while actively negotiating and others
         # while convergence has been obtained.
         if not self.converged:
-            self.balance(self.tn)  # A consensus method conducts negotiations while in negotiation state.
+            self.balance()
 
         else:
             pass
@@ -529,6 +529,22 @@ class Market(Component):
             #            completed in this next method or its replacements.
             self._stateIsCompleted = True
 
+        return None
+
+    def on_signal_received(self, neighbor) -> None:
+        """
+        Called by Neighbor.receive_transactive_signal after a transactive signal addressed to this market has been
+        stored. Market types that negotiate (see ConsensusMarket) use it to react to new information; the base market
+        and auctions read received signals at their scheduled points in the state machine and need nothing here.
+        """
+        return None
+
+    def on_local_change(self, entity=None) -> None:
+        """
+        Called when a local asset or neighbor model has new information that may move this market's solution (a revised
+        forecast, a new meter reading, a changed constraint). Market types that negotiate (see ConsensusMarket) use it
+        to reopen the Negotiation state; the base market needs nothing here.
+        """
         return None
 
     def transition_from_negotiation_to_market_lead(self):

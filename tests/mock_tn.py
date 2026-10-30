@@ -57,6 +57,16 @@ class MockTN(TransactiveNode):
         else:
             _log.warning(f"No recipient registered for: {recipient}")
 
+    def connect_peer(self, peer: 'MockTN') -> None:
+        """
+        Wire this node's signals to a peer node in the same process, as a message bus would: a signal this node issues to
+        the neighbor named like the peer is delivered to the peer's neighbor object that represents this node. Call once
+        in each direction. Both nodes share the class-level Timer, so their clocks agree.
+        """
+        mine = next(n for n in self.neighbors if n.name == peer.name)
+        theirs = next(n for n in peer.neighbors if n.name == self.name)
+        self.register_recipient(mine.name, lambda message: theirs.receive_transactive_signal(None, None, message))
+
     def register_subscription(self, subscribe_key: str, callback: Callable):
         """Register a subscription callback for receiving data."""
         self.subscriptions[subscribe_key] = callback

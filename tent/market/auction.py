@@ -244,7 +244,7 @@ class Auction(Market):
 
             # Sum all the agent's active local asset and neighbor vertices and determine the LMP at which local power is
             # balanced.
-            self.balance(self.tn)
+            self.balance()
 
             # Have the upstream agent neighbor model now schedule its power, based on the local agent's calculated LMPs.
             upstream_agent.schedule_power(self)

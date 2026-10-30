@@ -27,6 +27,7 @@ documentation for details.
    design/identify_components
    design/build_component_configurations
    design/deploy_tn_agents
+   design/consensus_market
 
 .. toctree::
    :maxdepth: 1

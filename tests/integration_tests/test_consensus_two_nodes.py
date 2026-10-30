@@ -1,0 +1,315 @@
+"""
+Two nodes negotiate a ConsensusMarket to full consensus in one process.
+
+"campus" has an inelastic 100 kW load and buys from "city"; "city" has a flexible generator whose price rises from 0.04
+to 0.08 $/kWh over 0 to 1000 kW. Each node is a MockTN with one transactive neighbor representing the other, wired
+together with MockTN.connect_peer so a sent signal lands in the peer's receive callback, as a message bus would deliver
+it. Both nodes share the Timer, which the test drives through the market state machine: Active, Negotiation (opening
+signals, replies, convergence), then MarketLead.
+
+The expected equilibrium: the city supplies 100 kW at 0.04 + 0.04 * 100 / 1000 = 0.044 $/kWh, both nodes clear at that
+price, campus schedules +100 kW from its city neighbor and city schedules -100 kW to its campus neighbor, and every
+interval records full consensus on both sides.
+"""
+from copy import copy
+from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
+
+import pytest
+
+from tent.enumerations import MarketState, MeasurementType
+from tent.local_asset import LocalAsset
+from tent.market.consensus_market import ConsensusMarket
+from tent.market.market_series import MarketSeries
+from tent.neighbor import Neighbor
+from tent.utils.timer import Timer
+from tests.mock_tn import MockTN
+
+T0 = datetime(2017, 7, 1, 0, 0, tzinfo=timezone.utc)
+INF = float('inf')
+
+
+class FlexibleAsset(LocalAsset):
+    """A local resource whose flexibility is its default_vertices curve and that schedules at the market price."""
+
+    def update_vertices(self, market):
+        for time_interval in market.time_intervals:
+            self.active_vertices.update(time_interval, [copy(v) for v in self.default_vertices.vertices],
+                                        archive=False, replace=True)
+
+    def schedule_power(self, market):
+        for time_interval in market.time_intervals:
+            mp = market.marginal_prices.get_by_interval(time_interval)
+            price = market.series.default_price if mp is None or mp.value is None else mp.value
+            self.scheduled_powers.update(time_interval, self.default_vertices.power_from_vertices(price))
+        self.schedule_calculated = True
+
+
+class RecordingDataManager:
+    def __init__(self):
+        self.records = []
+
+    def archive_data(self, records):
+        self.records.extend(records if isinstance(records, (list, tuple)) else [records])
+
+    def by_table(self, name):
+        return [r['data'] for r in self.records if r.get('table_name') == name]
+
+
+SERIES = dict(name='Consensus', duration_active=300.0, duration_negotiation=600.0, duration_market_lead=300.0,
+              duration_delivery_lead=300.0, interval_duration=3600.0, intervals_to_clear=2,
+              market_clearing_interval=3600.0, method='Interpolation', duality_gap_threshold=0.01,
+              default_price=0.05)
+
+
+def build_node(name, peer, asset_curve, asset_limits, neighbor_curve, neighbor_limits, up_or_down, loss_factor=0.0):
+    return build_node_multi(name, asset_curve, asset_limits,
+                            [dict(peer=peer, curve=neighbor_curve, limits=neighbor_limits, up_or_down=up_or_down,
+                                  loss_factor=loss_factor)])
+
+
+def build_node_multi(name, asset_curve, asset_limits, neighbors):
+    tn = MockTN(name=name)
+    tn._data_manager = RecordingDataManager()
+    asset = FlexibleAsset(transactive_node=tn, name=f'{name} asset', cost_parameters=[0.0, 0.0, 0.0],
+                          default_vertices=asset_curve, minimum_power=asset_limits[0], maximum_power=asset_limits[1])
+    tn.local_assets = [asset]
+    tn.neighbors = [Neighbor(transactive_node=tn, name=n['peer'], transactive=True, up_or_down=n['up_or_down'],
+                             default_vertices=n['curve'], minimum_power=n['limits'][0], maximum_power=n['limits'][1],
+                             loss_factor=n.get('loss_factor', 0.0), demand_rate=0.0, convergence_threshold=0.02,
+                             cost_parameters=[0.0, 0.0, 0.0]) for n in neighbors]
+    tn.market_series = [MarketSeries(transactive_node=tn, market_class=ConsensusMarket, **SERIES)]
+    return tn
+
+
+def negotiate(all_nodes, markets, clock, times, max_ticks=12):
+    """Drive every node through Active and into Negotiation, then tick until all markets declare consensus."""
+    step_both(all_nodes, clock, times.active)
+    step_both(all_nodes, clock, times.negotiation)
+    for seconds in range(1, max_ticks + 1):
+        step_both(all_nodes, clock, times.negotiation + timedelta(seconds=seconds))
+        if all(m._stateIsCompleted for m in markets):
+            return seconds
+    return None
+
+
+@pytest.fixture
+def clock():
+    Timer.simulation = False
+    state = {'t': T0}
+    with patch.object(Timer, 'now', side_effect=lambda *a, **k: state['t']):
+        yield state
+
+
+@pytest.fixture
+def nodes(clock):
+    # Vertex lists are [price, cost, quantity, continuity].
+    campus = build_node('campus', 'city',
+                        asset_curve=[[INF, 0.0, -100.0, True]], asset_limits=(-100.0, 0.0),
+                        neighbor_curve=[[0.04, 0.0, 0.0, True], [0.08, 0.0, 1000.0, True]],
+                        neighbor_limits=(0.0, 1000.0), up_or_down='upstream')
+    city = build_node('city', 'campus',
+                      asset_curve=[[0.04, 0.0, 0.0, True], [0.08, 0.0, 1000.0, True]], asset_limits=(0.0, 1000.0),
+                      neighbor_curve=[[INF, 0.0, -50.0, True]], neighbor_limits=(-1000.0, 0.0),
+                      up_or_down='downstream')
+    campus.connect_peer(city)
+    city.connect_peer(campus)
+    return campus, city
+
+
+def market_of(tn):
+    return tn.market_series[0].newest_market
+
+
+def step_both(nodes, clock, t):
+    clock['t'] = t
+    for tn in nodes:
+        tn.step()
+
+
+def test_two_nodes_reach_full_consensus(nodes, clock):
+    campus, city = nodes
+    m_campus, m_city = market_of(campus), market_of(city)
+    assert m_campus.name == m_city.name, 'a signal is routed to the market of the same name on the peer'
+    times = m_campus.transition_times
+    assert m_city.transition_times == times
+
+    step_both(nodes, clock, times.active)
+    assert m_campus.market_state is MarketState.Active and m_city.market_state is MarketState.Active
+
+    # Entering Negotiation: each node balances with its neighbor's default curve and sends an opening signal, which is
+    # delivered synchronously to the peer, whose market reopens negotiation on receipt.
+    step_both(nodes, clock, times.negotiation)
+    assert m_campus.market_state is MarketState.Negotiation and m_city.market_state is MarketState.Negotiation
+    for tn, market in ((campus, m_campus), (city, m_city)):
+        neighbor = tn.neighbors[0]
+        assert market in neighbor.last_sent_signals, f'{tn.name} sent an opening signal'
+        assert market in neighbor.last_received_signals, f'{tn.name} received the peer\'s opening signal'
+
+    # A few ticks of negotiation: absorb the peer's signal, rebalance, reply only while not converged.
+    for seconds in range(1, 8):
+        step_both(nodes, clock, times.negotiation + timedelta(seconds=seconds))
+        if m_campus._stateIsCompleted and m_city._stateIsCompleted:
+            break
+    assert m_campus._stateIsCompleted and m_city._stateIsCompleted, 'both nodes declared full consensus'
+
+    for market in (m_campus, m_city):
+        assert market.converged
+        for ti in market.time_intervals:
+            assert market.marginal_prices.get_by_interval(ti).value == pytest.approx(0.044, abs=1e-6)
+            assert bool(market.full_consensus.get_by_interval(ti).value) is True
+    for ti in m_campus.time_intervals:
+        assert campus.neighbors[0].scheduled_powers.get_by_interval(ti).value == pytest.approx(100.0, abs=0.5)
+        assert campus.local_assets[0].scheduled_powers.get_by_interval(ti).value == pytest.approx(-100.0)
+    for ti in m_city.time_intervals:
+        assert city.neighbors[0].scheduled_powers.get_by_interval(ti).value == pytest.approx(-100.0, abs=0.5)
+        assert city.local_assets[0].scheduled_powers.get_by_interval(ti).value == pytest.approx(100.0, abs=0.5)
+
+    # Sent and received signals agree at the balance point, in each node's own perspective.
+    for tn, market in ((campus, m_campus), (city, m_city)):
+        neighbor = tn.neighbors[0]
+        sent, received = neighbor.last_sent_signals[market], neighbor.last_received_signals[market]
+        for ti in market.time_intervals:
+            assert sent.balance_point(ti) is not None and received.balance_point(ti) is not None
+            assert sent.balance_point(ti).quantity == pytest.approx(-received.balance_point(ti).quantity, abs=0.5)
+        assert neighbor.converged
+
+    # Nothing further is sent once consensus holds.
+    sent_before = {tn.name: tn.neighbors[0].last_sent_signals[m].id for tn, m in ((campus, m_campus), (city, m_city))}
+    step_both(nodes, clock, times.negotiation + timedelta(seconds=30))
+    assert {tn.name: tn.neighbors[0].last_sent_signals[m].id for tn, m in ((campus, m_campus), (city, m_city))} == sent_before
+
+    # The negotiation deadline moves both markets on, and the consensus history is in the archive.
+    step_both(nodes, clock, times.market_lead)
+    assert m_campus.market_state is MarketState.MarketLead and m_city.market_state is MarketState.MarketLead
+    for tn in nodes:
+        headers = [h for h in tn.data_manager.by_table('measurement')
+                   if h['measurement_type'] in (MeasurementType.FullConsensus, MeasurementType.FullConsensus.name)]
+        assert headers, f'{tn.name} archived a FullConsensus measurement header'
+        values = tn.data_manager.by_table('measurement_value')
+        consensus_values = [v['value'] for v in values if v['measurement_id'] == headers[0]['id']]
+        assert consensus_values and consensus_values[-1] in (True, 1.0)
+
+
+def test_signal_arriving_after_consensus_reopens_negotiation(nodes, clock):
+    campus, city = nodes
+    m_campus, m_city = market_of(campus), market_of(city)
+    times = m_campus.transition_times
+    step_both(nodes, clock, times.active)
+    step_both(nodes, clock, times.negotiation)
+    for seconds in range(1, 8):
+        step_both(nodes, clock, times.negotiation + timedelta(seconds=seconds))
+        if m_campus._stateIsCompleted:
+            break
+    assert m_campus._stateIsCompleted
+
+    # The city's generator becomes more expensive: its curve shifts up, it rebalances and must tell the campus.
+    city.local_assets[0].default_vertices.vertices[0].price = 0.06
+    city.local_assets[0].default_vertices.vertices[1].price = 0.10
+    m_city.on_local_change(city.local_assets[0])  # the asset model reports that its conditions changed
+    clock['t'] = times.negotiation + timedelta(seconds=10)
+    city.step()
+    assert not m_campus._stateIsCompleted, 'the new signal reopened the campus negotiation'
+    for seconds in range(11, 20):
+        step_both(nodes, clock, times.negotiation + timedelta(seconds=seconds))
+        if m_campus._stateIsCompleted and m_city._stateIsCompleted:
+            break
+    assert m_campus._stateIsCompleted and m_city._stateIsCompleted
+    for market in (m_campus, m_city):
+        for ti in market.time_intervals:
+            assert market.marginal_prices.get_by_interval(ti).value == pytest.approx(0.064, abs=1e-6)
+            assert bool(market.full_consensus.get_by_interval(ti).value) is True
+
+
+def test_no_reply_leaves_consensus_unreached_at_the_deadline(clock):
+    campus = build_node('campus', 'city',
+                        asset_curve=[[INF, 0.0, -100.0, True]], asset_limits=(-100.0, 0.0),
+                        neighbor_curve=[[0.04, 0.0, 0.0, True], [0.08, 0.0, 1000.0, True]],
+                        neighbor_limits=(0.0, 1000.0), up_or_down='upstream')
+    campus.register_recipient('city', lambda message: None)  # the peer never answers
+    market = market_of(campus)
+    times = market.transition_times
+    clock['t'] = times.active
+    campus.step()
+    clock['t'] = times.negotiation
+    campus.step()
+    for seconds in range(1, 5):
+        clock['t'] = times.negotiation + timedelta(seconds=seconds)
+        campus.step()
+    assert market.converged, 'the local problem balances against the neighbor\'s default curve'
+    assert not market._stateIsCompleted, 'but without a reply there is no consensus'
+    assert all(bool(v) is False for v in market.full_consensus.values)
+    clock['t'] = times.market_lead
+    campus.step()
+    assert market.market_state is MarketState.MarketLead
+    assert all(bool(v) is False for v in market.full_consensus.values)
+
+
+def test_three_node_star_reaches_one_price(clock):
+    """A city serving two campuses: every node clears at the city's marginal cost for the total load."""
+    city_curve = [[0.04, 0.0, 0.0, True], [0.08, 0.0, 1000.0, True]]
+    campus_a = build_node('campus_a', 'city', asset_curve=[[INF, 0.0, -100.0, True]], asset_limits=(-100.0, 0.0),
+                          neighbor_curve=city_curve, neighbor_limits=(0.0, 1000.0), up_or_down='upstream')
+    campus_b = build_node('campus_b', 'city', asset_curve=[[INF, 0.0, -200.0, True]], asset_limits=(-200.0, 0.0),
+                          neighbor_curve=city_curve, neighbor_limits=(0.0, 1000.0), up_or_down='upstream')
+    city = build_node_multi('city', asset_curve=city_curve, asset_limits=(0.0, 1000.0), neighbors=[
+        dict(peer='campus_a', curve=[[INF, 0.0, -50.0, True]], limits=(-1000.0, 0.0), up_or_down='downstream'),
+        dict(peer='campus_b', curve=[[INF, 0.0, -50.0, True]], limits=(-1000.0, 0.0), up_or_down='downstream')])
+    for a, b in ((campus_a, city), (campus_b, city)):
+        a.connect_peer(b)
+        b.connect_peer(a)
+    all_nodes = [campus_a, campus_b, city]
+    markets = [market_of(tn) for tn in all_nodes]
+    times = markets[0].transition_times
+
+    ticks = negotiate(all_nodes, markets, clock, times)
+    assert ticks is not None, 'all three nodes declared full consensus'
+
+    expected_price = 0.04 + 0.04 * 300.0 / 1000.0  # the city supplies 300 kW
+    for market in markets:
+        for ti in market.time_intervals:
+            assert market.marginal_prices.get_by_interval(ti).value == pytest.approx(expected_price, abs=1e-6)
+            assert bool(market.full_consensus.get_by_interval(ti).value) is True
+    m_city = markets[2]
+    for ti in m_city.time_intervals:
+        assert city.local_assets[0].scheduled_powers.get_by_interval(ti).value == pytest.approx(300.0, abs=0.5)
+        by_name = {n.name: n.scheduled_powers.get_by_interval(ti).value for n in city.neighbors}
+        assert by_name['campus_a'] == pytest.approx(-100.0, abs=0.5)
+        assert by_name['campus_b'] == pytest.approx(-200.0, abs=0.5)
+    # Each campus sees the city's residual after the other campus: campus A's neighbor curve is the city curve shifted
+    # by campus B's 200 kW, and it still schedules its own 100 kW import.
+    for campus, market, load in ((campus_a, markets[0], 100.0), (campus_b, markets[1], 200.0)):
+        for ti in market.time_intervals:
+            assert campus.neighbors[0].scheduled_powers.get_by_interval(ti).value == pytest.approx(load, abs=0.5)
+
+
+def test_consensus_with_line_losses(clock):
+    """With a loss factor on the campus side the two nodes price the exchange differently but still agree on it."""
+    campus = build_node('campus', 'city', asset_curve=[[INF, 0.0, -100.0, True]], asset_limits=(-100.0, 0.0),
+                        neighbor_curve=[[0.04, 0.0, 0.0, True], [0.08, 0.0, 1000.0, True]],
+                        neighbor_limits=(0.0, 1000.0), up_or_down='upstream', loss_factor=0.03)
+    city = build_node('city', 'campus', asset_curve=[[0.04, 0.0, 0.0, True], [0.08, 0.0, 1000.0, True]],
+                      asset_limits=(0.0, 1000.0), neighbor_curve=[[INF, 0.0, -50.0, True]],
+                      neighbor_limits=(-1000.0, 0.0), up_or_down='downstream')
+    campus.connect_peer(city)
+    city.connect_peer(campus)
+    all_nodes = [campus, city]
+    markets = [market_of(tn) for tn in all_nodes]
+    times = markets[0].transition_times
+
+    ticks = negotiate(all_nodes, markets, clock, times)
+    assert ticks is not None, 'both nodes declared full consensus despite the loss model'
+    m_campus, m_city = markets
+    for market in markets:
+        assert all(bool(v) is True for v in market.full_consensus.values)
+    # Intervals are per market object, so pair them by start time.
+    for ti_campus, ti_city in zip(m_campus.time_intervals, m_city.time_intervals):
+        assert ti_campus.start_time == ti_city.start_time
+        # The campus must import its load plus losses; the city supplies what the campus asks for.
+        imported = campus.neighbors[0].scheduled_powers.get_by_interval(ti_campus).value
+        supplied = -city.neighbors[0].scheduled_powers.get_by_interval(ti_city).value
+        assert imported == pytest.approx(supplied, rel=0.02)
+        assert imported >= 100.0
+        # The campus pays the city's price plus the marginal loss adder.
+        assert (m_campus.marginal_prices.get_by_interval(ti_campus).value
+                > m_city.marginal_prices.get_by_interval(ti_city).value)

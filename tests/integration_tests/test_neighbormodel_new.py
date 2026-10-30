@@ -299,10 +299,10 @@ def test_check_for_convergence():
     print('    Test 7: Multiple vertices with significant difference')
     
     # Modify prepared signal to differ from sent
-    # NOTE: The modern implementation only compares balance points for convergence,
-    # not flexibility vertices. This differs from the legacy test expectations.
-    # The balance points are the same (100.0), so this will show as converged
-    # even though flexibility vertices differ (85.0 vs 90.0).
+    # The balance points agree (100.0) but a flexibility vertex moved from 90 to 85 kW, more than the 1% threshold: the
+    # neighbor must be told, so conditions have changed and the interval is not converged. (An earlier revision of this
+    # test asserted the opposite, to match an inverted comparison in TransactiveSignal.conditions_have_changed that has
+    # since been fixed.)
     diff_prepared = TransactiveSignal(test_market, test_model)
     diff_balance_vertex = Vertex(price=0.05, quantity=100.0, cost=0.0)
     diff_vertices = [
@@ -317,10 +317,9 @@ def test_check_for_convergence():
     test_model.check_for_convergence(test_market)
     
     convergence_flag = test_model.convergence_flags.get_by_interval(time_interval)
-    # Modern implementation: only balance points matter for convergence
-    assert convergence_flag.value is True, '- should be converged when balance points match (modern behavior)'
-    assert test_model.converged is True, '- overall convergence should be true'
-    print('    ✓ Converged (balance points match, flexibility differs - modern behavior)')
+    assert convergence_flag.value is False, '- a flexibility vertex moved beyond the threshold: a revised signal is due'
+    assert test_model.converged is False, '- overall convergence should be false'
+    assert test_model.signal_due is True
 
     # Success
     print('  ✅ test_check_for_convergence() ran to completion.\n')

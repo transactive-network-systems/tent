@@ -41,178 +41,204 @@ operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
 
+import logging
+
 from tent.containers.measurement import Measurement
-from tent.enumerations import MarketTypes, MeasurementType, MeasurementUnit, Method
+from tent.enumerations import MarketState, MarketTypes, MeasurementType, MeasurementUnit
 from tent.market import Market
+
+_log = logging.getLogger(__name__)
 
 
 class ConsensusMarket(Market):
+    """
+    A market that clears by consensus with its transactive neighbors rather than by a central auction.
+
+    Each node solves its own balancing problem (the "balancing sub-problem"): given the flexibility of its local assets
+    and the flexibility its neighbors have offered in their last transactive signals, find the marginal price in every
+    active time interval at which local net power is zero. It then offers every transactive neighbor the residual
+    flexibility of the rest of the system (a transactive signal whose balance point is the power it has scheduled with
+    that neighbor) and waits. A neighbor that receives such a signal folds it into its own balancing problem and replies
+    in kind. Signals go back and forth (the "coordination sub-problem") until, for every neighbor and interval, the
+    balance point this node sent agrees with the one the neighbor sent back and local conditions have not moved since:
+    that is full consensus, recorded per interval as MeasurementType.FullConsensus.
+
+    Mechanics under the Market state machine:
+
+    - transition_from_active_to_negotiation: initialise prices, balance locally, send an opening signal to every
+      transactive neighbor.
+    - while_in_negotiation (every tick): if any neighbor's signal has arrived since the last pass, or the local problem is
+      not yet balanced, balance locally again. When balanced, prepare each transactive neighbor's signal, run its
+      convergence check, and send only to the neighbors that are not converged. When every neighbor is converged the
+      state is complete; the interval flags are recorded on every pass.
+    - on_signal_received (called by Neighbor.receive_transactive_signal): a reply that arrives after this market has
+      declared consensus reopens negotiation, so the state machine evaluates the new information on its next tick.
+    - transition_from_negotiation_to_market_lead: record the final consensus state, which may be "not reached" when the
+      negotiation period ran out (the state machine's timeout forces the transition).
+
+    Series settings used: method (Interpolation or Subgradient), duality_gap_threshold, default_price. Market keywords:
+    max_balance_iterations (default 20) bounds the local balancing loop; Interpolation normally needs one pass.
+    """
     MARKET_TYPE = MarketTypes.consensus
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, max_balance_iterations: int = 20, **kwargs):
         # The solution method is a MarketSeries setting (series.method); Market.__init__ does not take it.
         super(ConsensusMarket, self).__init__(*args, **kwargs)
+        self.max_balance_iterations: int = int(max_balance_iterations)
         # Per interval: this market converged AND every transactive neighbor agrees. See record_consensus().
         self.full_consensus: Measurement = Measurement(self, MeasurementType.FullConsensus, MeasurementUnit.Boolean)
+        self.duality_gap: float | None = None  # relative gap of the last local balancing pass
+        self.balance_iterations: int = 0        # iterations the last local balancing pass took
+        self.negotiation_passes: int = 0        # while_in_negotiation passes that rebalanced
+        self._signals_seen: dict = {}           # neighbor id -> signal_time of the last received signal processed
+
+    # ------------------------------------------------------------------------------------------------ helpers
+    @property
+    def transactive_neighbors(self) -> list:
+        return [n for n in getattr(self.tn, 'neighbors', []) if getattr(n, 'transactive', False)]
+
+    def _entities(self) -> list:
+        return list(self.tn.local_assets) + list(self.tn.neighbors)
+
+    def _new_signals(self) -> list:
+        """Transactive neighbors whose last received signal for this market has not been balanced against yet."""
+        fresh = []
+        for neighbor in self.transactive_neighbors:
+            received = neighbor.last_received_signals.get(self)
+            if received is None:
+                continue
+            if self._signals_seen.get(neighbor.id) != received.signal_time:
+                fresh.append(neighbor)
+        return fresh
+
+    def _mark_signals_seen(self) -> None:
+        for neighbor in self.transactive_neighbors:
+            received = neighbor.last_received_signals.get(self)
+            if received is not None:
+                self._signals_seen[neighbor.id] = received.signal_time
+
+    # ------------------------------------------------------------------------------------------------ balancing
+    def balance_locally(self) -> bool:
+        """
+        Solve the local balancing sub-problem with the information currently held: every entity schedules against the
+        current prices, the system curve is summed and a new price found per interval, powers are rescheduled at the new
+        prices, and costs are updated. For Interpolation the price is exact for piece-wise linear curves, so the duality
+        gap closes in one pass; the loop only matters for Subgradient or for assets whose curves depend on price.
+        Sets self.converged and returns it.
+        """
+        self.converged = False
+        self.duality_gap = None
+        for k in range(1, self.max_balance_iterations + 1):
+            self.balance_iterations = k
+            # Every asset and neighbor refreshes its active vertices (neighbors from their last received signal) and
+            # schedules against the current marginal prices.
+            self.schedule()
+            # Sum the system curve and solve for the marginal price. balance() sets converged False and returns on
+            # failure (e.g. there is no supply at all), in which case there is nothing more to do this tick.
+            self.balance(k)
+            prices = [self.marginal_prices.get_by_interval(ti) for ti in self.time_intervals]
+            if any(p is None or p.value is None for p in prices):
+                _log.warning(f'{self.name}: no marginal price could be found in at least one interval.')
+                return False
+            # Reschedule powers at the cleared prices, then measure the duality gap.
+            for entity in self._entities():
+                entity.schedule_power(self)
+            self.update_costs()
+            self.update_supply_demand()
+            if self.total_production_cost == 0:
+                # Nothing costs anything: balance is judged on net power alone.
+                self.duality_gap = max((abs(self.net_powers.get_by_interval(ti).value) for ti in self.time_intervals),
+                                       default=0.0)
+                gap_ok = self.duality_gap <= self.series.duality_gap_threshold
+            else:
+                self.duality_gap = (self.total_production_cost - self.total_dual_cost) / self.total_production_cost
+                gap_ok = abs(self.duality_gap) <= self.series.duality_gap_threshold
+            _log.debug(f'{self.name} balance iteration {k}: production {self.total_production_cost:.4f}, '
+                       f'dual {self.total_dual_cost:.4f}, gap {self.duality_gap:.5f}')
+            if gap_ok:
+                self.converged = True
+                break
+        else:
+            _log.warning(f'{self.name}: local balance did not close the duality gap in {self.max_balance_iterations} '
+                         f'iterations (gap {self.duality_gap}); proceeding with the last prices.')
+            self.converged = True
+        self._mark_signals_seen()
+        return self.converged
+
+    def exchange_signals(self) -> bool:
+        """
+        Coordination sub-problem, one pass: offer every transactive neighbor the residual flexibility (with the balance
+        point this node has scheduled with it), check convergence with that neighbor, and send only when it is not
+        converged. Returns True when every transactive neighbor is converged.
+        """
+        all_converged = True
+        for neighbor in self.transactive_neighbors:
+            neighbor.prep_transactive_signal(self)
+            neighbor.check_for_convergence(self)
+            if neighbor.signal_due:
+                neighbor.send_transactive_signal(self, include_schedule=True)
+            if not neighbor.converged:
+                all_converged = False
+        return all_converged
 
     def record_consensus(self) -> None:
         """
         Record, per active time interval, whether full consensus holds: this market has converged AND every transactive
         neighbor's convergence flag for the interval is set (a neighbor with no flag yet counts as not converged).
-        Called at the end of each negotiation pass and when the market leaves Negotiation, so the archive carries the
-        consensus history the 2023 negotiation-record analyses relied on. Consensus is a property of this market type
-        only: Auction.converged means local scheduling finished and says nothing about agreement between nodes.
+        Consensus is a property of this market type only: Auction.converged means local scheduling finished and says
+        nothing about agreement between nodes.
         """
-        neighbors = [n for n in getattr(self.tn, 'neighbors', []) if getattr(n, 'transactive', False)]
+        neighbors = self.transactive_neighbors
         for time_interval in self.time_intervals:
             flags = [n.convergence_flags.get_by_interval(time_interval) for n in neighbors]
             agreed = all(f is not None and bool(f.value) for f in flags)
             self.full_consensus.update(time_interval, bool(self.converged and agreed))
 
-    def while_in_negotiation(self):
-        # Almost all consensus balancing activities will occur while the market is in its negotiation state.
-        # This method replaces Market.while_in_negotiation().
-
-        # If already converged from a prior call, signal completion and return immediately.
-        # This prevents re-running the full iteration loop on every events() tick after convergence.
-        if self.converged:
-            self._stateIsCompleted = True
-            return
-
-        # Clean up or initialize marginal prices. This should not be repeated in process iterations.
+    # ------------------------------------------------------------------------------------------------ state machine
+    def transition_from_active_to_negotiation(self):
+        _log.debug(f'MARKET: {self.name} STATE IS NOW TRANSITIONING: Active to Negotiation')
         self.check_marginal_prices()
-
-        # Set a flag to indicate solution has not converged.
-        self.converged = False
-
-        # Iterate to convergence. "Convergence" here refers to the status of the local convergence of (1) local supply
-        # and demand and (2) dual costs. This local convergence says nothing about the additional convergence between
-        # transactive neighbors and their calculations.
-
-        # Initialize the iteration counter k
-        k = 1
-
-        while not self.converged and k < 100:
-
-            self.balance(self.tn)
-
-            # Invite all neighbors and local assets to schedule themselves based on current marginal prices
-            # self.schedule(mtn)  # STAYS IN METHOD BALANCE.
-
-            # Update the primal and dual costs for each time interval and altogether for the entire time horizon.
-            # self.update_costs(mtn)  # STAYS IN METHOD BALANCE.
-
-            # Update the total supply and demand powers for each time interval. These sums are needed for the
-            # sub-gradient search and for the calculation of blended price.
-            # self.update_supply_demand(mtn)  # STAYS IN METHOD BALANCE.
-
-            # Check duality gap for convergence.
-            # Calculate the duality gap, defined here as the relative difference between total production and dual
-            # costs.
-
-            if self.total_production_cost == 0:
-                duality_gap = float("inf")
-            else:
-                duality_gap = self.total_production_cost - self.total_dual_cost  # [$]
-                duality_gap = duality_gap / self.total_production_cost  # [dimensionless. 0.01 is 1#]
-
-            # Display the iteration counter and duality gap. This may be commented out once we have confidence in the
-            # convergence of the iterations.
-            """
-            _log.debug("Market balance iteration %i: (tpc: %f, tdc: %f, dg: %f)" %
-                       (k, self.totalProductionCost, self.totalDualCost, dg))
-            """
-
-            # Check convergence condition
-            if abs(duality_gap) <= self.series.duality_gap_threshold:  # Converged
-                # 1.3.1 System has converged to an acceptable balance.
-                self.converged = True
-
-            # System is not converged. Iterate. The next code in this method revised the marginal prices in active
-            # intervals to drive the system toward balance and convergence.
-
-            # TimeIntervals
-            if self.series.method == Method.Interpolation:  # == 2
-                self.assign_system_vertices()
-                # av = [(x.interval.name, x.value.marginalPrice, x.value.power) for x in self.activeVertices]
-                # _log.debug("{} market active vertices are: {}".format(self.name, av))
-
-            # Index through active time intervals.
-            for time_interval in self.time_intervals:
-                # Find the marginal price interval value for the corresponding indexed time interval.
-                cleared_marginal_price = self.marginal_prices.get_by_interval(time_interval).value  # [$/kWh]
-
-                if self.series.method == Method.Subgradient:  # == 1
-                    # Find the net power corresponding to the indexed time interval.
-                    net_power = self.net_powers.get_by_interval(time_interval)
-                    total_generation = self.total_generation.get_by_interval(time_interval)
-                    total_demand = self.total_demand.get_by_interval(time_interval)
-
-                    net_power = net_power / (total_generation - total_demand)
-
-                    # Update the cleared marginal price using sub-gradient search.
-                    cleared_marginal_price = cleared_marginal_price - (net_power * 1e-1) / (10 + k)  # [$/kWh]
-
-                elif self.series.method == Method.Interpolation:  # === 2
-                    # Get the indexed active system vertices
-                    active_vertices = [x.value for x in self.active_vertices
-                                       if x.interval.start_time == time_interval.start_time]
-
-                    # Order the system vertices in the indexed time interval
-                    active_vertices = order_vertices(active_vertices)
-
-                    try:
-                        # Find the vertex that bookcases the balance point from the lower side.
-                        # Fix a case where all intersection points are on X-axis by using < instead of <=
-                        lower_vertex = [x for x in active_vertices if x.quantity < 0]
-                        if len(lower_vertex) == 0:
-                            err_msg = "At {}, there is no point having power < 0".format(time_interval.name)
-                        else:
-                            lower_vertex = lower_vertex[-1]
-
-                        # Find the vertex that bookcases the balance point from the upper side.
-                        upper_vertex = [x for x in active_vertices if x.quantity >= 0]
-                        if len(upper_vertex) == 0:
-                            err_msg = "At {}, there is no point having power >= 0".format(time_interval.name)
-                        else:
-                            upper_vertex = upper_vertex[0]
-
-                        # Interpolate the marginal price in the interval using a principle of similar triangles.
-                        power_range = upper_vertex.power - lower_vertex.power
-                        marginal_price_range = upper_vertex.marginalPrice - lower_vertex.marginalPrice
-                        if power_range == 0:
-                            err_msg = "At {}, power range is 0".format(time_interval.name)
-                        cleared_marginal_price = - marginal_price_range * lower_vertex.power / power_range \
-                                                 + lower_vertex.marginalPrice
-                    except RuntimeWarning as warning:
-                        Warning('Failed to find balance point: ', warning)
-                        """
-                        _log.error(err_msg)
-                        _log.error("{} failed to find balance point. "
-                                   "Market active vertices: {}".format(mtn.name,
-                                                                       [(tis[i].name, x.marginalPrice, x.power)
-                                                                        for x in av]))
-                        """
-
-                        self.converged = False
-                        return
-
-                # Regardless of the method used, cleared_marginal_price should now hold the updated marginal price.
-                # Assign it to the marginal price value for the indexed active time interval.
-                self.marginal_prices.update(time_interval, cleared_marginal_price)  # [$/kWh]
-
-            # Increment the iteration counter.
-            k = k + 1
-            if k == 100:
-                self.converged = True
-
+        self._signals_seen = {}
+        for neighbor in self.transactive_neighbors:
+            neighbor.converged = False
+        if self.balance_locally():
+            self.negotiation_passes += 1
+            # Open the negotiation: every transactive neighbor hears this node's position.
+            for neighbor in self.transactive_neighbors:
+                neighbor.prep_transactive_signal(self)
+                neighbor.send_transactive_signal(self, include_schedule=True)
         self.record_consensus()
-        # Signal that negotiation work is complete so the state machine can transition.
-        self._stateIsCompleted = True
+
+    def while_in_negotiation(self):
+        if self._new_signals() or not self.converged:
+            if not self.balance_locally():
+                self.record_consensus()
+                return  # No price yet (e.g. no supply offered). Wait for signals or the negotiation deadline.
+            self.negotiation_passes += 1
+        if self.exchange_signals():
+            _log.debug(f'MARKET: {self.name} has reached full consensus.')
+            self._stateIsCompleted = True
+        self.record_consensus()
+
+    def reopen(self, reason: str) -> None:
+        """Negotiation is not over while new information can arrive: clear the completed flag so the next tick acts."""
+        if self.market_state is MarketState.Negotiation and self._stateIsCompleted:
+            _log.debug(f'MARKET: {self.name} reopens negotiation: {reason}.')
+            self._stateIsCompleted = False
+
+    def on_signal_received(self, neighbor) -> None:
+        """A neighbor's reply during Negotiation is new information: the next tick rebalances against it."""
+        self.reopen(f'signal from {neighbor.name}')
+
+    def on_local_change(self, entity=None) -> None:
+        """Local conditions moved (forecast, meter, constraint): rebalance and tell the neighbors if that changes
+        anything. Legacy agents did this on a fixed reschedule interval; here the entity that changed says so."""
+        self.converged = False
+        self.reopen(f'local change in {getattr(entity, "name", entity)}')
 
     def transition_from_negotiation_to_market_lead(self):
-        # This is an opportunity to wrap up any loose negotiation ends before the market fully closes.
-        # No big activities should be undertaken here, however, so we don't risk working into the delivery period.
-        # Negotiation may have ended by timeout rather than convergence; record the consensus state either way.
+        # Negotiation may have ended by timeout rather than consensus; record the consensus state either way.
         self.record_consensus()
+        if not all(bool(v) for v in self.full_consensus.values):
+            _log.warning(f'MARKET: {self.name} left Negotiation without full consensus in every interval.')
         super(ConsensusMarket, self).transition_from_negotiation_to_market_lead()

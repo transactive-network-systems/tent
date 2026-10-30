@@ -194,9 +194,10 @@ class SDCurve(Archivable):
                 action=="delete_down": Irrational vertices are deleted if their powers are greater than that
                                        corresponding to the next higher price.
         """
+        # Work on a copy of the vertices. (Sentinel vertices at +/-inf used to be added here; they add no check, since
+        # they repeat the end quantities, and a lone inelastic vertex at an infinite price collided with the +inf
+        # sentinel and vanished from the result.)
         v_temp = self.vertices.copy()
-        v_temp.add(Vertex(float("-inf"), 0, self.vertices[0].quantity))
-        v_temp.add(Vertex(float("inf"), 0, self.vertices[-1].quantity))
         ivf = 0                                         # count of irrational vertices found
         irrational_vertices = []                        # list of irrational vertices to be deleted
 
@@ -221,7 +222,7 @@ class SDCurve(Archivable):
         # TODO: Should this update the SDCurve or return a new one? (This seems to do both).
         #  Perhaps make explicitly in-place, rename to "rationalize" and only return the irrational vertex count?
         # Return rationalized curve (without the extra infinite vertices) and the nuber of irrational vertices found.
-        return SDCurve(self.measurement, self.interval, v_temp[1:-1]), ivf
+        return SDCurve(self.measurement, self.interval, list(v_temp), archive=False), ivf
 
     def prod_cost_from_vertices(self, power):
         # Infer production cost for a power from the

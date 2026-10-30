@@ -42,8 +42,9 @@ under Contract DE-AC05-76RL01830
 """
 import logging
 
+from copy import copy
 from datetime import datetime
-from math import sqrt
+from math import isfinite, sqrt
 from weakref import WeakKeyDictionary
 from typing import TYPE_CHECKING, Self
 
@@ -82,19 +83,49 @@ class TransactiveSignal(SDMeasurement):
         # TODO: Double check that is works as a comparison here. If there is a weak reference, we need to use ==.
         return [v for v in self.get_by_interval(time_interval).vertices if v is not self.balance_point(time_interval)]
 
-    def _add_balance_vertices(self, scheduled_powers):
+    def mark_balance_points(self, scheduled_powers):
+        """
+        Mark the balance point on every interval's curve: the quantity this node has scheduled with the neighbor, seen
+        from the neighbor's side. The curve is the residual system curve in the neighbor's perspective (positive means
+        this node supplies the neighbor), while scheduled_powers hold the neighbor's power as seen from here (positive
+        means the neighbor supplies this node), so the sign flips.
+        """
         for ti, sp in scheduled_powers.all:
             sd_curve: SDCurve = self.get_by_interval(ti)
-            if not sd_curve.has_vertex_at_quantity(sp.value):
-                balance_price = sd_curve.price_from_vertices(sp.value)
-                balance_cost = sd_curve.prod_cost_from_vertices(sp.value)
-                vertex = Vertex(balance_price, balance_cost, sp)
-                sd_curve.update(vertex)
-                self.__balance_vertices[ti] = vertex
+            if sd_curve is None:
+                continue
+            quantity = -float(sp.value)
+            vertices = list(sd_curve.vertices)
+            tolerance = 1e-6 * max(1.0, abs(quantity))
+            # A lone vertex is inelastic: it is the balance point whatever was scheduled. Otherwise reuse a vertex that
+            # already sits at the scheduled quantity (within interpolation noise) rather than adding a duplicate.
+            existing = vertices[0] if len(vertices) == 1 else next(
+                (v for v in vertices if abs(v.quantity - quantity) <= tolerance), None)
+            if existing is not None:
+                self.__balance_vertices[ti] = existing
+                continue
+            balance_price = sd_curve.price_from_vertices(quantity)
+            balance_cost = sd_curve.prod_cost_from_vertices(quantity)
+            vertex = Vertex(balance_price, balance_cost, quantity, curve=sd_curve)
+            sd_curve.update(vertex, archive=False)
+            self.__balance_vertices[ti] = vertex
+
+    def snapshot(self) -> Self:
+        """An independent copy of this signal (new id, copied curves and vertices, same balance points and header)."""
+        clone = TransactiveSignal(market=self.market, neighbor=self.neighbor, direction=self.direction,
+                                  signal_time=self.signal_time, archive_now=False)
+        for ti, sd_curve in self.all:
+            copied = [copy(v) for v in sd_curve.vertices]
+            clone.update(ti, copied, archive=False, replace=True)
+            balance = self.balance_point(ti)
+            if balance is not None:
+                index = list(sd_curve.vertices).index(balance)
+                clone.__balance_vertices[ti] = list(clone.get_by_interval(ti).vertices)[index]
+        return clone
 
     def generate_signal(self, scheduled_powers=None):
         if scheduled_powers is not None:
-            self._add_balance_vertices(scheduled_powers)
+            self.mark_balance_points(scheduled_powers)
         self.signal_time = Timer.now()
         self.direction = SignalDirection.sent
         # self.archive()
@@ -110,8 +141,9 @@ class TransactiveSignal(SDMeasurement):
                 } for i, v in enumerate(sd.vertices)
             }
             bp = self.balance_point(ti)
+            vertices = list(sd.vertices)
             intervals[ti.start_time.isoformat()] = {
-                'balance_point': bp.record if bp is not None else None,
+                'balance_point': vertices.index(bp) if bp is not None and bp in vertices else None,
                 'flexibility': flexibility
             }
         return {
@@ -168,7 +200,7 @@ class TransactiveSignal(SDMeasurement):
                     _log.warning(f"Missing required field in flexibility record {i}: {e}. Skipping this record.")
                     continue
                 vertices.append(vertex)
-                if i == balance_point_index:
+                if balance_point_index is not None and int(i) == int(balance_point_index):
                     # If this is the balance point, we need to store the index for later retrieval.
                     signal.__balance_vertices[time_interval] = vertex
 
@@ -179,24 +211,30 @@ class TransactiveSignal(SDMeasurement):
 
     @staticmethod
     def _diff_exceeds_threshold(vertex_1, vertex_2, threshold, no_flexibility, mixed_direction):
+        """
+        Relative distance between two vertices, compared with the threshold. With mixed_direction the second vertex is
+        a received one, stated from the remote side, so its quantity is sign-flipped before comparing. Price only enters
+        when both vertices express flexibility and have finite, non-zero prices (an inelastic vertex sits at an infinite
+        price, where a price difference is meaningless).
+        """
         sign = -1 if mixed_direction else 1
-        quantity_difference = abs((sign * vertex_2.quantity) - vertex_1.quantity)  # [avg. kW]
-        average_quantity = 0.5 * abs(vertex_1.quantity + (sign * vertex_2.quantity))  # [avg. kW]
-        # Calculate the relative Euclidian distance (a relative error criterion) between the two scheduled points.
-        if average_quantity != 0:
-            if no_flexibility:
-                distance = quantity_difference / average_quantity  # dimensionless
-            else:
-                marginal_price_difference = abs(vertex_2.price - vertex_1.price)  # [$/kWh]
-                average_marginal_price = 0.5 * abs(vertex_2.price + vertex_1.price)  # [$/kWh]
-                distance = sqrt(
-                    (quantity_difference / average_quantity) ** 2
-                    + (marginal_price_difference / average_marginal_price) ** 2
-                )  # dimensionless
+        q1, q2 = vertex_1.quantity, sign * vertex_2.quantity
+        quantity_difference = abs(q2 - q1)  # [avg. kW]
+        average_quantity = 0.5 * abs(q1 + q2)  # [avg. kW]
+        if average_quantity == 0:
+            # Both at zero, or exact opposites: judge by the absolute gap against a 1 kW scale.
+            quantity_term = quantity_difference
         else:
-            distance = 0
+            quantity_term = quantity_difference / average_quantity  # dimensionless
+        price_term = 0.0
+        if not no_flexibility:
+            p1, p2 = vertex_1.price, vertex_2.price
+            average_marginal_price = 0.5 * abs(p1 + p2)  # [$/kWh]
+            if isfinite(p1) and isfinite(p2) and average_marginal_price != 0:
+                price_term = abs(p2 - p1) / average_marginal_price
+        distance = sqrt(quantity_term ** 2 + price_term ** 2)  # dimensionless relative Euclidean distance
         # If the distance (relative error) exceeds the threshold, the scheduled points are significantly different.
-        return True if distance > threshold else False
+        return distance > threshold
 
     # NOTE: This was previously called helpers.are_different1().
     @classmethod
@@ -238,29 +276,37 @@ class TransactiveSignal(SDMeasurement):
 
         :returns: boolean - True if the sent and recently calculated transactive messages are significantly different.
         """
-        if len(sent_signal) != len(prepared_signal):
+        sent_curve = sent_signal.get_by_interval(time_interval)
+        prepared_curve = prepared_signal.get_by_interval(time_interval)
+        if sent_curve is None or prepared_curve is None:
+            return sent_curve is not prepared_curve  # one side has the interval and the other does not
+        if len(sent_curve) != len(prepared_curve):
             return True
 
-        # Get the scheduled values from mySignal and sentSignal records.
-        sent_balance_vertex: Vertex = sent_signal.balance_point(time_interval)
-        calculated_balance_vertex: Vertex = prepared_signal.balance_point(time_interval)
+        # Get the scheduled values from the prepared and sent records.
+        sent_balance_vertex: Vertex | None = sent_signal.balance_point(time_interval)
+        calculated_balance_vertex: Vertex | None = prepared_signal.balance_point(time_interval)
 
-        no_flexibility = True if len(sent_signal) == 1 or len(prepared_signal) == 1 else False
+        no_flexibility = len(sent_curve) == 1 or len(prepared_curve) == 1
 
-        # If either the signal is constant, (1 Vertex), use only quantity as its marginal price is not meaningful.
+        # If either signal is constant (one vertex), only its quantity is meaningful, not its marginal price.
         if no_flexibility:
-            return cls._diff_exceeds_threshold(sent_balance_vertex, calculated_balance_vertex, threshold,
-                                               no_flexibility, False)
-        else:  # There are multiple records, meaning that the Neighbor is price-responsive..
-            # Local convergence of the coordination sub-problem does not require the exact point to be determined
-            #   but rather that the flexibility is accurately conveyed to the Neighbor.
-            # See if any non-balance-point vertex of sent signal cannot be matched with a corresponding vertex of
-            #   calculated signal.
-            for sent_vertex in sent_signal.flexibility_vertices(time_interval):
-                for calculated_vertex in prepared_signal.flexibility_vertices(time_interval):
-                    if cls._diff_exceeds_threshold(sent_vertex, calculated_vertex, threshold, no_flexibility, False):
-                        return True
-            return False
+            sent_vertex = sent_balance_vertex or list(sent_curve.vertices)[0]
+            calculated_vertex = calculated_balance_vertex or list(prepared_curve.vertices)[0]
+            return cls._diff_exceeds_threshold(sent_vertex, calculated_vertex, threshold, True, False)
+
+        # There are multiple records, meaning that the neighbor is offered price responsiveness. Local convergence of
+        # the coordination sub-problem does not require the exact balance point to be determined, but the flexibility
+        # must be conveyed accurately: conditions have changed if any sent flexibility vertex no longer has a
+        # counterpart among the prepared ones, or if the scheduled balance point itself has moved.
+        prepared_vertices = prepared_signal.flexibility_vertices(time_interval)
+        for sent_vertex in sent_signal.flexibility_vertices(time_interval):
+            if not any(not cls._diff_exceeds_threshold(sent_vertex, calculated_vertex, threshold, False, False)
+                       for calculated_vertex in prepared_vertices):
+                return True
+        if sent_balance_vertex is not None and calculated_balance_vertex is not None:
+            return cls._diff_exceeds_threshold(sent_balance_vertex, calculated_balance_vertex, threshold, False, False)
+        return False
 
     def archive(self, records: list[dict] = None):
         """Archive the signal header and, with it, every interval's curve (sd_curve + vertex rows) as one version."""

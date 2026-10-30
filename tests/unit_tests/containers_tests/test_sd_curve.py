@@ -69,7 +69,7 @@ def patch_sdc_minimal(monkeypatch):
 	original_min_q = SDCurve.min_quantity
 	original_max_q = SDCurve.max_quantity
 
-	def simple_init(self, measurement, interval, vertices=None):
+	def simple_init(self, measurement, interval, vertices=None, archive=True):
 		Archivable.__init__(self)
 		# Direct assignment (no proxy) prevents weakref issues during GC.
 		self._SDCurve__interval = interval
@@ -131,8 +131,9 @@ def test_rationality_fix_up(measurement, interval):
 	v2 = Vertex(15, quantity=3)
 	c = make_curve(measurement, interval, [v1, v2])
 	fixed, count = c.check_rationality(action="fix_up")
-	# Two irrational transitions counted (between v1->v2 and v2->sentinel inf)
-	assert count == 2
+	# One irrational transition (v1->v2). The check used to add +/-inf sentinel vertices and count the step to the
+	# sentinel as well; the sentinels are gone (they swallowed lone inelastic vertices at an infinite price).
+	assert count == 1
 	# after fix_up quantities non-decreasing
 	q = [v.quantity for v in fixed.vertices]
 	assert q == sorted(q)

@@ -110,6 +110,7 @@ class Neighbor(Entity):
         # Dynamically assigned attributes:
         ##################################
         self.converged = False                                          # [boolean]: True if converged
+        self.signal_due = True                                          # [boolean]: a (revised) signal should be sent; see check_for_convergence
         self.convergence_flags: Measurement = Measurement(self, MeasurementType.ConvergenceFlag, MeasurementUnit.Boolean, archive_now=False)
         self.prepared_signals: WeakKeyDictionary[Market, TransactiveSignal] = WeakKeyDictionary()  # Current signal, ready to send.
         self.last_received_signals: WeakKeyDictionary[Market, TransactiveSignal] = WeakKeyDictionary()  # Last records received.
@@ -121,83 +122,60 @@ class Neighbor(Entity):
                                                callback=self.receive_transactive_signal)
 
     def check_for_convergence(self, market):
-        # Qualifies state of convergence with a transactive Neighbor object by active time interval and globally.
-        #
-        # In respect to the coordination sub-problem, a Neighbor is not converged for a given time interval and a signal
-        # should be sent to the transactive Neighbor if
-        # - The balancing and scheduling sub-problems are converged, AND
-        # - No signal has been sent, OR
-        # - A signal has been received from the Neighbor, and no signal has been sent since the signal was received, but
-        #   scheduled power and marginal price in the sent and received signals (i.e., Records 0) differ, OR
-        # - A timer has elapsed since the last time a signal was sent, and the sent signal differs from one that would
-        #   be sent again, based on current conditions.
-        #
-        # Inputs:
-        # market - Market object
-        #
-        # Uses property convergenceThreshold as a convergence criterion.
-        #
-        # Compares TransactiveRecord messages in mySignal, sentSignal, and receivedSignal.
-        #
-        # Updates properties convergenceFlags and converged based on comparison of calculated, received, and sent
-        # TransactiveRecord messages.
+        """
+        Qualify the state of the coordination sub-problem with this transactive neighbor, per active time interval and
+        overall, by comparing the prepared, last sent and last received transactive signals for the market.
 
-        # NOTE: this method should not be called unless the balancing sub-problem and all the scheduling sub-problems
-        # have been calculated and have converged.
+        Two things are decided for each interval and recorded:
 
+        - whether a signal is DUE (self.signal_due): nothing has been sent yet; or a signal received after the last one
+          sent disagrees with it at the balance point; or local conditions have changed so that the prepared signal
+          differs from the one sent. This is the legacy "convergence flag" logic and it is what decides whether to send.
+        - whether the interval is CONVERGED (self.convergence_flags, self.converged): no signal is due AND the neighbor
+          has been heard from for this interval. A neighbor that never replied is not in consensus, however settled this
+          node's own position is.
+
+        Uses property convergence_threshold as the convergence criterion. Call only after the balancing and scheduling
+        sub-problems have been solved, so that the prepared signal is current.
+        """
+        sent_signal = self.last_sent_signals.get(market)
+        received_signal = self.last_received_signals.get(market)
+        prepared_signal = self.prepared_signals.get(market)
+        due_flags = []
         for time_interval in market.time_intervals:
-            # Initialize a flag true (converged) in this time interval until proven otherwise.
-            flag = True
+            # Find the TransactiveSignals in this indexed active time interval. Any of the three may not exist yet.
+            sent_time = sent_signal.signal_time if sent_signal else None
+            sent_signal_curve = sent_signal.get_by_interval(time_interval) if sent_signal else None
+            received_time = received_signal.signal_time if received_signal else None
+            received_signal_curve = received_signal.get_by_interval(time_interval) if received_signal else None
+            prepared_curve = prepared_signal.get_by_interval(time_interval) if prepared_signal else None
+            heard = received_signal_curve is not None and len(received_signal_curve) > 0
 
-            # Find the TransactiveSignals in this indexed active time interval.
-            sent_time = self.last_sent_signals[market].signal_time
-            sent_signal_curve = self.last_sent_signals[market].get_by_interval(time_interval)
-            received_time = self.last_received_signals[market].signal_time
-            received_signal_curve = self.last_received_signals[market].get_by_interval(time_interval)
-            prepared_signal_curve = self.prepared_signals[market].get_by_interval(time_interval)
-
-            # Now, work through the convergence criteria.
-            if not sent_signal_curve:
-                # No signal has been sent in this time interval. This is the first convergence requirement.
-                # Set the convergence flag false.
-                _log.debug(f"Signal for time interval {time_interval.name}. Enable send flag.")
-                flag = False
-
-            # received and received AFTER last sent and there is a big diff b/w sent_signal and received_signal
-            elif (received_signal_curve is not None and len(received_signal_curve) > 0 and received_time > sent_time
-                  and TransactiveSignal.balance_points_differ(self.last_sent_signals[market], 
-                                                              self.last_received_signals[market], time_interval,
+            due = False
+            if not sent_signal_curve or sent_time is None:
+                # No signal has been sent in this time interval. This is the first criterion.
+                _log.debug(f"No signal sent yet for time interval {time_interval.name}. Enable send flag.")
+                due = True
+            elif (heard and received_time is not None and received_time >= sent_time  # same tick counts as after: a simulated clock may not advance
+                  and TransactiveSignal.balance_points_differ(sent_signal, received_signal, time_interval,
                                                               self.convergence_threshold)):
-                # One or more TransactiveRecord objects has been received in the indexed time interval, and it has been
-                # received AFTER the last time a message was sent. These are preconditions for the second convergence
-                # requirement. Function balance_points_differ() checks whether the sent and received signals differ
-                # significantly. If all these conditions are true, the Neighbor is not converged.
+                # A signal has been received AFTER the last one was sent, and the two disagree significantly at the
+                # balance point: the neighbor sees a different exchange than this node does.
                 _log.debug(f"Received signal for time interval {time_interval.name} differs from sent signal.")
-                flag = False
-
-            # TODO: Find out why the timing does not work with t_threshold.
-            # elif dt - sent_time >= t_threshold and conditions_have_changed(prepared_signal, sent_signal,
-            #                                                                self.convergenceThreshold, self.name):
-            elif TransactiveSignal.conditions_have_changed(self.prepared_signals[market], 
-                                                           self.last_sent_signals[market], time_interval,
-                                                           self.convergence_threshold):
-                # Delay 5 min after last send AND More than 5 minutes have passed since the last time a signal was sent.
-                # This is a precondition to the third convergence criterion.
-                # Function conditions_have_changed() returns true if mySignal (prepared_signal)
-                # and the sentSignal (sent_signal) differ significantly, meaning that local conditions have changed
-                # enough that a new, revised signal should be sent.
+                due = True
+            elif (prepared_curve is not None
+                  and TransactiveSignal.conditions_have_changed(prepared_signal, sent_signal, time_interval,
+                                                                self.convergence_threshold)):
+                # Local conditions have changed enough since the last send that a revised signal should go out.
                 _log.debug(f"Local conditions have changed for time interval {time_interval.name}.")
-                flag = False
+                due = True
+            due_flags.append(due)
+            self.convergence_flags.update(time_interval, bool(heard and not due))
 
-            self.convergence_flags.update(time_interval, flag)
-
-        # If any of the convergence flags in active time intervals is false, the overall convergence flag should be set
-        # false, too. Otherwise, true, meaning the coordination sub-problem is converged with this Neighbor.
-        # TODO: This works but is ugly. Measurement should be an Iterator to allow "any(self.convergent_flags)".
-        self.converged = all(self.convergence_flags.values)
-
+        self.signal_due = any(due_flags)
+        self.converged = all(bool(self.convergence_flags.get_by_interval(ti).value) for ti in market.time_intervals)
         _log.debug(f"Convergence flags for {self.name} are {self.convergence_flags.log_report}")
-        _log.debug(f"Convergence flag for {self.name} is {self.converged}.")
+        _log.debug(f"Convergence flag for {self.name} is {self.converged}; signal due: {self.signal_due}.")
 
     # SEALED - DO NOT MODIFY
     # Have object schedule its power in active time intervals
@@ -484,6 +462,9 @@ class Neighbor(Entity):
             # The vertices are now suitable for creating transactive records representing the remote agent perspective.
             #  Store the corrected vertices in prepared_signals, where they are ready to send to the remote neighbor.
             self.prepared_signals[market].update(time_interval, sd_curve, archive=False, replace=True)
+        # Mark the power scheduled with this neighbor on every interval's curve, so the prepared signal carries the same
+        # balance points the sent one will and the two can be compared by check_for_convergence.
+        self.prepared_signals[market].mark_balance_points(self.scheduled_powers)
 
     def send_transactive_signal(self, market, include_schedule=False):
         # Send transactive records to a transactive neighbor.
@@ -521,14 +502,13 @@ class Neighbor(Entity):
         self.tn.issue_signal(self.name,
                              prepared_signal.generate_signal(self.scheduled_powers if include_schedule else None))
 
-        # Save the sent signal as a copy of the calculated set that was drawn upon by this method (i.e., prepared_signal).
-        self.last_sent_signals[market] = prepared_signal
-
-        # Save the newly sent transactive records.
-        self.last_sent_signals[market].archive()
-
+        # Keep a snapshot of what was sent. The prepared signal is revised in place on every negotiation pass, so the
+        # sent signal must be an independent copy or the convergence check would compare a signal with itself.
+        sent_signal = prepared_signal.snapshot()
+        self.last_sent_signals[market] = sent_signal
+        sent_signal.archive()
         # Return transactive records to allow further processing by subclasses.
-        return prepared_signal
+        return sent_signal
 
     def receive_transactive_signal(self, _, __, signal_dict: dict, **___):
         """Receive and save transactive records from a transactive Neighbor."""
@@ -541,6 +521,8 @@ class Neighbor(Entity):
         parsed_signal = TransactiveSignal.parse_signal(self.tn, signal_dict)
         if parsed_signal:
             self.last_received_signals[parsed_signal.market] = parsed_signal
+            if (hook := getattr(parsed_signal.market, 'on_signal_received', None)) is not None:
+                hook(self)  # let a negotiating market react to the new information
 
     def update_costs(self, market):
         """
