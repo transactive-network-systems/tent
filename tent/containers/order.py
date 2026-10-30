@@ -207,7 +207,9 @@ class Order(SDCurve):
 
         unmatched_order: Order or None = copy(self)
         unmatched_order.vertices = points
-        unmatched_order.status = OrderStatus.NEW
+        # The remainder is a revision of the order it came from: a standing order's remainder is a revised standing
+        # order and stays matchable in the book; an aggressive order's remainder is re-booked by the engine.
+        unmatched_order.mark_as_revised()
         unmatched_order.assign_buyer_or_seller()
 
         if self.supply_or_demand == SupplyOrDemand.SUPPLY:

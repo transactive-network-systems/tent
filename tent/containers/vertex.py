@@ -40,7 +40,7 @@ PACIFIC NORTHWEST NATIONAL LABORATORY
 operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
-from weakref import proxy
+from weakref import CallableProxyType, ProxyType, proxy
 
 from tent.base import Archivable
 from tent.utils.helpers import safe_weak_proxy_callback, validate_bool
@@ -65,7 +65,13 @@ class Vertex(Archivable):
                      #  Order.Vertex had this explanation: This should be updated by the market agent to reflect the time that the Vertex is
                      #    received by the market agent. Defaults to datetime.datetime.now().
         super(Vertex, self).__init__()
-        self.curve = proxy(curve, safe_weak_proxy_callback(self, 'curve')) if curve else None
+        # A copied vertex (see __copy__) hands over the proxy it already holds; a proxy cannot be weakly referenced again.
+        if curve is None:
+            self.curve = None
+        elif isinstance(curve, (ProxyType, CallableProxyType)):
+            self.curve = curve
+        else:
+            self.curve = proxy(curve, safe_weak_proxy_callback(self, 'curve'))
         # TODO: Clean up explanations.
         # Production cost. A dynamic representation of the delivered cost. An ideal is that the cost of electricity
         # using this price should be equivalent to revenue payments over extended time periods. Local assets and
