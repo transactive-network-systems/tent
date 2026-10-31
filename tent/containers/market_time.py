@@ -3,6 +3,8 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 
+from tent.utils.helpers import require_aware
+
 from tent.utils.timer import Timer
 
 _log = logging.getLogger(__name__)
@@ -16,6 +18,10 @@ class MarketTimings:
     delivery: datetime
     reconciliation: datetime
     expiration: datetime
+
+    def __post_init__(self):
+        for name in ('active', 'negotiation', 'market_lead', 'delivery_lead', 'delivery', 'reconciliation', 'expiration'):
+            require_aware(getattr(self, name), f'MarketTimings.{name}')
 
 
 @dataclass(frozen=True)
@@ -55,8 +61,8 @@ class MarketDurations:
         )
 
     def get_timings(self, clearing_time: datetime | str) -> MarketTimings:
-        delivery_lead_start = (clearing_time if isinstance(clearing_time, datetime)
-                               else datetime.fromisoformat(clearing_time))
+        delivery_lead_start = require_aware(clearing_time if isinstance(clearing_time, datetime)
+                                            else datetime.fromisoformat(clearing_time), 'clearing_time')
         delivery_start = delivery_lead_start + self.delivery_lead
         reconciliation_start = delivery_start + self.delivery
         expiration_start = reconciliation_start + self.reconciliation

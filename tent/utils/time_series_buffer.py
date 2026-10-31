@@ -1,127 +1,141 @@
-# Copyright 2019 The University of Toledo
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#   http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-#
-# TODO: Update copyright.
+"""
+A bounded, time-ordered buffer of readings.
 
-from collections import deque, namedtuple
-from typing import Union, Iterable
-
+Readings are kept sorted by their timestamp whatever order they arrive in, so late or out-of-order data (a retried
+publish, a second source) lands in the right place. The newest and oldest readings are at the ends, a time-range query
+bisects into the sorted list, expired readings are dropped from the old end, and a maximum length drops the oldest when
+exceeded. Built on sortedcontainers.SortedKeyList; the earlier deque-based buffer assumed arrival order equalled time
+order and was wrong whenever it did not.
+"""
+from collections import namedtuple
 from datetime import datetime, timedelta, timezone, tzinfo
+from typing import Iterable, Union
 from zoneinfo import ZoneInfo
 
+from sortedcontainers import SortedKeyList
+
+from tent.utils.helpers import require_aware
 from tent.utils.timer import Timer
 
-
 PointRecord = namedtuple('PointRecord', ['value', 'd_time'])
+_EMPTY = PointRecord(None, None)
 
-# TODO: Upgrade to act like a priority queue using sortedlist or heapq instead of deque.
-# TODO: Test dt_class functionality with util.Timer.
-# TODO: Implement comparison methods (__lt__, __eq__, etc)
-class TimeSeriesBuffer(deque):
-    def __init__(self, iterable: Iterable = (), maxlen: int = None, tz: Union[tzinfo, str] = 'UTC',
-                 dt_class: Union[datetime, type(Timer)] = Timer, expiry: timedelta = None):
-        super(TimeSeriesBuffer, self).__init__(iterable, maxlen)
-        # TODO: Is self.tz necessary now that the Timer is aware?
-        self.tz = tz if isinstance(tz, tzinfo) else ZoneInfo(tz)
-        self.last = PointRecord(None, None)
+
+class TimeSeriesBuffer:
+    def __init__(self, iterable: Iterable = (), maxlen: int | None = None, tz: Union[tzinfo, str] = 'UTC',
+                 dt_class=Timer, expiry: timedelta | None = None):
+        """
+        maxlen: keep at most this many readings, dropping the oldest. expiry: drop readings older than this, measured
+        against dt_class.now() (the simulation clock by default). tz: zone in which a reading stamped by the buffer
+        itself (no d_time given) is expressed; timestamps supplied by the caller must be timezone-aware.
+        """
+        self.tz: tzinfo = tz if isinstance(tz, tzinfo) else ZoneInfo(tz)
         self.dt_class = dt_class
-        self.expiry = expiry
+        self.expiry: timedelta | None = expiry
+        self.maxlen: int | None = maxlen
+        self._records: SortedKeyList = SortedKeyList(key=lambda record: record.d_time)
+        self.extend(iterable)
 
-    def append(self, value, d_time=None):
-        if not isinstance(value, PointRecord):
-            d_time = d_time if d_time else self.dt_class.now(timezone.utc).astimezone(self.tz)
-            value = PointRecord(value, d_time)
+    # ------------------------------------------------------------------------------------------------ writing
+    def _now(self) -> datetime:
+        return self.dt_class.now(timezone.utc).astimezone(self.tz)
+
+    def _record(self, value, d_time=None) -> PointRecord:
+        if isinstance(value, PointRecord):
+            return PointRecord(value.value, require_aware(value.d_time, 'd_time'))
+        d_time = self._now() if d_time is None else require_aware(d_time, 'd_time')
+        return PointRecord(value, d_time)
+
+    def add(self, value, d_time: datetime | None = None) -> None:
+        """Insert one reading at its time. Expired readings are not inserted; the buffer is pruned and bounded."""
+        record = self._record(value, d_time)
         self._prune_expired()
-        if not self._expired(value):
-            self.last = value
-            super(TimeSeriesBuffer, self).append(value)
+        if not self._expired(record):
+            self._records.add(record)
+            self._enforce_maxlen()
 
-    def appendleft(self, value, d_time=None):
-        if not isinstance(value, PointRecord):
-            d_time = d_time if d_time else self.dt_class.now(timezone.utc).astimezone(self.tz)
-            value = PointRecord(value, d_time)
-        self._prune_expired()
-        if not self._expired(value):
-            super(TimeSeriesBuffer, self).appendleft(value)
+    append = add  # the deque name, kept because it reads naturally for a stream of readings
 
-    def _as_point_records(self, values) -> list:
+    def extend(self, values: Iterable) -> None:
+        """Insert many readings: PointRecords or (value, time) pairs, in any order."""
         values = list(values)
-        if not all(isinstance(x, PointRecord) for x in values):
-            try:
-                if not all(len(x) == 2 and isinstance(x[1], datetime) for x in values):
-                    raise ValueError
-                values = [PointRecord(*x) for x in values]
-            except (TypeError, ValueError):
-                raise ValueError('Values must be iterable and all elements must be compatible with PointRecord.')
-        return [x for x in values if not self._expired(x)]
-
-    def extend(self, values):
-        values = self._as_point_records(values)
-        values.sort(key=lambda x: x[1])
-        if len(values) > 0:
-            self._prune_expired()
-            self.last = values[-1]
-            super(TimeSeriesBuffer, self).extend(values)
-
-    def extendleft(self, values):
-        values = self._as_point_records(values)
-        values.sort(key=lambda x: x[1], reverse=True)
-        if len(values) > 0:
-            self._prune_expired()
-            if self.last.d_time is None:
-                self.last = values[0]
-            super(TimeSeriesBuffer, self).extendleft(values)
-
-    def get(self, since=None, until=None, columns=False):
-        self._prune_expired()
-        retval = self
-        retval = self._since(retval, since) if since else retval
-        retval = self._until(retval, until) if until else retval
-        retval = list(zip(*retval)) if columns else list(retval)
-        return retval
-
-    def get_values(self, since=None, until=None):
-        retval = self.get(since, until, columns=True)
-        return retval[0] if retval else []
-
-    def get_times(self, since=None, until=None):
-        retval = self.get(since, until, columns=True)
-        return retval[1] if retval else []
-
-    @staticmethod
-    def _until(inval, until):
-        if not isinstance(until, datetime):
-            raise ValueError("If specified, until must be a datetime")
-        return filter(lambda d: d[1] <= until, inval)
-
-    @staticmethod
-    def _since(inval, since):
-        if not isinstance(since, datetime):
-            raise ValueError("If specified, since must be a datetime.")
-        return filter(lambda d: d[1] >= since, inval)
-
-    def _expired(self, element):
-        if not self.expiry:
-            return False
-        return True if element[1] + self.expiry <= self.dt_class.now(timezone.utc).astimezone(self.tz) else False
-
-    def _prune_expired(self):
-        if len(self) == 0 or not self.expiry:
+        if not values:
             return
-        now = self.dt_class.now(timezone.utc).astimezone(self.tz)
-        while self[0][1] + self.expiry <= now:
-            self.popleft()
-        while self[-1][1] + self.expiry <= now:
-            self.pop()
+        records = []
+        for item in values:
+            if isinstance(item, PointRecord):
+                records.append(self._record(item))
+            elif isinstance(item, (tuple, list)) and len(item) == 2 and isinstance(item[1], datetime):
+                records.append(self._record(item[0], item[1]))
+            else:
+                raise ValueError('Values must be PointRecords or (value, datetime) pairs.')
+        self._prune_expired()
+        self._records.update(record for record in records if not self._expired(record))
+        self._enforce_maxlen()
 
-    maxlen = property(lambda self: object(), lambda self, v: None, lambda self: None)
+    def clear(self) -> None:
+        self._records.clear()
+
+    # ------------------------------------------------------------------------------------------------ reading
+    @property
+    def latest(self) -> PointRecord:
+        """The reading with the newest timestamp (PointRecord(None, None) when empty)."""
+        self._prune_expired()
+        return self._records[-1] if self._records else _EMPTY
+
+    @property
+    def oldest(self) -> PointRecord:
+        self._prune_expired()
+        return self._records[0] if self._records else _EMPTY
+
+    last = latest  # the deque buffer's name for the newest reading
+
+    def get(self, since: datetime | None = None, until: datetime | None = None, columns: bool = False) -> list:
+        """Readings with since <= time <= until (either bound optional), oldest first. columns=True returns
+        ([values], [times]) instead of a list of records (empty list when there are none)."""
+        self._prune_expired()
+        if since is not None:
+            since = require_aware(since, 'since')
+        if until is not None:
+            until = require_aware(until, 'until')
+        lo = self._records.bisect_key_left(since) if since is not None else 0
+        hi = self._records.bisect_key_right(until) if until is not None else len(self._records)
+        selected = list(self._records[lo:hi]) if lo < hi else []
+        if not columns:
+            return selected
+        return [list(column) for column in zip(*selected)] if selected else []
+
+    def get_values(self, since: datetime | None = None, until: datetime | None = None) -> list:
+        selected = self.get(since, until, columns=True)
+        return selected[0] if selected else []
+
+    def get_times(self, since: datetime | None = None, until: datetime | None = None) -> list:
+        selected = self.get(since, until, columns=True)
+        return selected[1] if selected else []
+
+    def __len__(self) -> int:
+        return len(self._records)
+
+    def __iter__(self):
+        return iter(self._records)
+
+    def __getitem__(self, index):
+        return self._records[index]
+
+    def __bool__(self) -> bool:
+        return bool(self._records)
+
+    # ------------------------------------------------------------------------------------------------ housekeeping
+    def _expired(self, record: PointRecord) -> bool:
+        return bool(self.expiry) and record.d_time + self.expiry <= self._now()
+
+    def _prune_expired(self) -> None:
+        if not self.expiry or not self._records:
+            return
+        cutoff = self._now() - self.expiry
+        # Everything with time <= cutoff has expired; they are the oldest, at the front of the sorted list.
+        del self._records[:self._records.bisect_key_right(cutoff)]
+
+    def _enforce_maxlen(self) -> None:
+        if self.maxlen is not None and len(self._records) > self.maxlen:
+            del self._records[:len(self._records) - self.maxlen]

@@ -46,7 +46,7 @@ import importlib
 import logging
 import re
 
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, tzinfo
 from uuid import UUID
 from enum import Enum
 
@@ -59,6 +59,22 @@ _DATETIME_FORMATS = ('%m/%d/%Y %H:%M', '%m/%d/%Y %H:%M:%S', '%Y-%m-%d %H:%M', '%
 _TIME_FORMATS = ('%H:%M', '%H:%M:%S', '%I:%M %p', '%I %p')
 _WEEKDAYS = {name: i for i, name in enumerate(('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'))}
 _WEEKDAYS.update({name[:3]: i for name, i in list(_WEEKDAYS.items())})
+
+
+def require_aware(value: datetime, name: str = 'datetime', assume: tzinfo | None = None) -> datetime:
+    """
+    Return `value` if it is a timezone-aware datetime. A naive value is given the `assume` zone when one is supplied
+    (the documented convention at that boundary, e.g. the node's zone for configured strings) and is otherwise an
+    error: TENT's clock, intervals and archive are all aware, and a naive value that slips in is read back in whatever
+    zone the reader happens to assume.
+    """
+    if not isinstance(value, datetime):
+        raise TypeError(f'{name} must be a datetime, not {type(value).__name__}')
+    if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
+        if assume is None:
+            raise ValueError(f'{name} must be timezone-aware; got naive {value.isoformat()}')
+        return value.replace(tzinfo=assume)
+    return value
 
 
 def parse_datetime(value) -> datetime:

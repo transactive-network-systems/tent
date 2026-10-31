@@ -11,7 +11,7 @@ from typing import Mapping, Sequence
 
 from tent.data_manager import DataManager
 from tent.data_manager.reader import ArchiveReader
-from tent.utils.helpers import parse_timedelta
+from tent.utils.helpers import parse_timedelta, require_aware
 
 _log = logging.getLogger(__name__)
 
@@ -172,8 +172,10 @@ class LocalDataManager(ArchiveReader, DataManager):
         if isinstance(column.type, DateTime):
             if isinstance(value, str):
                 value = datetime.fromisoformat(value.replace('Z', '+00:00'))
-            if isinstance(value, datetime) and value.tzinfo is not None:
-                return value.astimezone(timezone.utc)  # one convention in the archive: UTC
+            if isinstance(value, datetime):
+                # One convention in the archive: UTC. A naive value would be read back as UTC by SQLite and as the
+                # session zone by PostgreSQL, so it is refused rather than guessed at.
+                return require_aware(value, f'{column.name}').astimezone(timezone.utc)
             return value
         if isinstance(column.type, Uuid) and isinstance(value, str):
             return UUID(value)

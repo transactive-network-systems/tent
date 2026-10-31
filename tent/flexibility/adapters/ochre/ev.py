@@ -71,9 +71,10 @@ class OchreEvAdapter:
 
             start_time = kwargs.get("start_time", dt.datetime(2026, 1, 1, 0, 0))
             if isinstance(start_time, str):
-                start_time = dt.datetime.fromisoformat(start_time).replace(tzinfo=None)
-            elif isinstance(start_time, dt.datetime) and start_time.tzinfo is not None:
-                start_time = start_time.replace(tzinfo=None)
+                start_time = dt.datetime.fromisoformat(start_time)
+            if isinstance(start_time, dt.datetime) and start_time.tzinfo is not None:
+                # OCHRE runs on a naive clock that these adapters report as UTC; convert, do not just drop the offset.
+                start_time = start_time.astimezone(dt.timezone.utc).replace(tzinfo=None)
             time_res = kwargs.get("time_res", dt.timedelta(minutes=15))
             if isinstance(time_res, (int, float)):
                 time_res = dt.timedelta(seconds=time_res)

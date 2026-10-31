@@ -1,6 +1,6 @@
 import math
 from copy import copy as _shallow_copy
-from datetime import timedelta, datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import sys
 import pytest
@@ -112,7 +112,7 @@ def market():
 
 @pytest.fixture
 def interval(market):
-	return TimeInterval(market=market, duration=timedelta(hours=1), start_time=datetime.utcnow())
+	return TimeInterval(market=market, duration=timedelta(hours=1), start_time=datetime.now(timezone.utc))
 
 
 def v(price, qty, continuity=True):

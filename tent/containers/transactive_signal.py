@@ -50,6 +50,7 @@ from typing import TYPE_CHECKING, Self
 
 from tent.containers import SDCurve, SDMeasurement, TimeInterval, Vertex
 from tent.enumerations import MeasurementType, MeasurementUnit, SignalDirection
+from tent.utils.helpers import require_aware
 from tent.utils.timer import Timer
 
 if TYPE_CHECKING:
@@ -185,14 +186,15 @@ class TransactiveSignal(SDMeasurement):
                 return  # TODO: Should we raise on bad market or neighbor and let the caller handle it?
             if not (neighbor := tn.get_neighbors_by_attribute('name', message['neighbor'], first_only=True)):
                 _log.warning(f'Unable to find valid neighbor "{neighbor}" from received transactive signal.')
-            signal_time = datetime.fromisoformat(message['signal_time']) if message.get('signal_time') else None
+            signal_time = (require_aware(datetime.fromisoformat(message['signal_time']), 'signal_time')
+                           if message.get('signal_time') else None)
             in_reply_to = message['in_reply_to']
             signal = cls(market=market, neighbor=neighbor, direction=SignalDirection.received,
                          signal_time=signal_time, sequence=int(message['sequence']),
                          in_reply_to=None if in_reply_to is None else int(in_reply_to),
                          revised=bool(message['revised']), measurement_unit=message['unit'])
-        except KeyError as e:
-            _log.warning(f'Missing required field in transactive signal: {e}.')
+        except (KeyError, TypeError, ValueError) as e:
+            _log.warning(f'Rejected transactive signal from {message.get("neighbor") if isinstance(message, dict) else message!r}: {e}')
             return
 
         for ti_start, interval_signal in message.get('intervals', {}).items():

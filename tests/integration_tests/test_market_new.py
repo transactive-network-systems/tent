@@ -1,7 +1,7 @@
 from uuid6 import uuid7
 import weakref
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from tent.containers.vertex import Vertex
 from tent.containers.sd_curve import SDCurve
@@ -19,7 +19,7 @@ def test_assign_system_vertices():
     print('Running test_assign_system_vertices()')
     print('WARNING: this test calls and relies on method sum_vertices().')
     print('**Case 1: Typical case collecting several neighbor and asset vertices.')
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     positive_infinity = float('inf')
     
     # Create TransactiveNode with minimal setup
@@ -103,7 +103,7 @@ def test_balance():
     print('Running test_balance()')
     print('**Case 1: Find marginal price associated with test_assign_system_vertices(), Case 1.')
     print('  NOTE: The tested method may call assign_system_vertices().')
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     positive_infinity = float('inf')
     
     # Create TransactiveNode with minimal setup
@@ -234,7 +234,7 @@ def test_check_intervals():
             self.initial_market_state = MarketState.Inactive
     
     series = SimpleMarketSeries()
-    market_clearing_time = datetime(year=2020, month=1, day=1, hour=0, minute=0, second=0)
+    market_clearing_time = datetime(year=2020, month=1, day=1, hour=0, minute=0, second=0, tzinfo=timezone.utc)
     transition_times = series.duration.get_timings(market_clearing_time)
     test_market = Market(test_node, series, series.initial_market_state, transition_times)
 
@@ -289,7 +289,7 @@ def test_check_marginal_prices():
             self.initial_market_state = MarketState.Inactive
 
     series = SimpleMarketSeries()
-    transition_times = series.duration.get_timings(datetime.now())
+    transition_times = series.duration.get_timings(datetime.now(timezone.utc))
     test_mkt = Market(test_node, series, series.initial_market_state, transition_times)
     
     test_ti = test_mkt.time_intervals[0]
@@ -337,7 +337,7 @@ def test_check_marginal_prices():
             self.initial_market_state = MarketState.Inactive
 
     series = SimpleMarketSeries()
-    transition_times = series.duration.get_timings(datetime.now())
+    transition_times = series.duration.get_timings(datetime.now(timezone.utc))
     test_mkt = Market(test_node, series, series.initial_market_state, transition_times)
     test_mkt.price_model = None  # Ensure no price model
     
@@ -387,7 +387,7 @@ def test_check_marginal_prices():
             self.initial_market_state = MarketState.Inactive
 
     series = SimpleMarketSeries()
-    transition_times = series.duration.get_timings(datetime.now())
+    transition_times = series.duration.get_timings(datetime.now(timezone.utc))
     test_mkt = Market(test_node, series, series.initial_market_state, transition_times)
     test_mkt.price_model = None  # Ensure no price model
     
@@ -561,7 +561,7 @@ def test_sum_vertices():
             self.intervals_to_clear = 1
             self.initial_market_state = MarketState.Inactive
 
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     series = SimpleMarketSeries()
     transition_times = series.duration.get_timings(now)
     

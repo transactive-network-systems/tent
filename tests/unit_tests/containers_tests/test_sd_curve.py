@@ -1,4 +1,4 @@
-from datetime import timedelta, datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import sys
 import pytest
@@ -50,7 +50,7 @@ def market_like():
 
 @pytest.fixture
 def interval(market_like):
-	return TimeInterval(market_like, timedelta(hours=1), datetime.utcnow())
+	return TimeInterval(market_like, timedelta(hours=1), datetime.now(timezone.utc))
 
 
 @pytest.fixture

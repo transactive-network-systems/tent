@@ -42,7 +42,7 @@ under Contract DE-AC05-76RL01830
 """
 
 from uuid6 import uuid7
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from tent.containers.vertex import Vertex
 from tent.containers.sd_curve import SDCurve
@@ -208,7 +208,7 @@ def test_production():
             self.intervals_to_clear = 1
             self.initial_market_state = MarketState.Inactive
 
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     series = SimpleMarketSeries()
     transition_times = series.duration.get_timings(now)
     
@@ -311,7 +311,7 @@ def test_prod_cost_from_formula():
             self.intervals_to_clear = 3
             self.initial_market_state = MarketState.Inactive
 
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     series = SimpleMarketSeries()
     transition_times = series.duration.get_timings(now)
     
@@ -393,7 +393,7 @@ def test_prod_cost_from_vertices():
             self.intervals_to_clear = 1
             self.initial_market_state = MarketState.Inactive
 
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     series = SimpleMarketSeries()
     transition_times = series.duration.get_timings(now)
     
@@ -502,7 +502,7 @@ def test_are_different2():
             self.intervals_to_clear = 1
             self.initial_market_state = MarketState.Inactive
 
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     series = SimpleMarketSeries()
     transition_times = series.duration.get_timings(now)
     

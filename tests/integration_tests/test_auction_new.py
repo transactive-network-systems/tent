@@ -40,7 +40,7 @@ PACIFIC NORTHWEST NATIONAL LABORATORY
 operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock
 
 import pytest
@@ -56,7 +56,7 @@ from tests.mock_tn import MockTN
 def _make_timings(base_time=None):
     """Create MarketTimings for test auction."""
     if base_time is None:
-        base_time = datetime.now()
+        base_time = datetime.now(timezone.utc)
     return MarketTimings(
         active=base_time,
         negotiation=base_time + timedelta(hours=1),

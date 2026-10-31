@@ -28,6 +28,8 @@ from __future__ import annotations
 import enum
 from datetime import datetime, timedelta, timezone
 
+from tent.utils.helpers import require_aware as _require_aware
+
 __all__ = [
     "SignConvention",
     "Quality",
@@ -149,21 +151,8 @@ class Quality(enum.Enum):
 
 
 def require_aware(value: datetime, field_name: str = "timestamp") -> datetime:
-    """Return *value* if timezone-aware, else raise.
-
-    Naive datetimes are rejected rather than assumed to be UTC or local. In a
-    co-simulation spanning multiple timezones, guessing is how intervals end up
-    misaligned by hours in ways that only show up in aggregate results.
-    """
-    if not isinstance(value, datetime):
-        raise TypeError(f"{field_name} must be a datetime, got {type(value).__name__}")
-    if value.tzinfo is None or value.tzinfo.utcoffset(value) is None:
-        raise ValueError(
-            f"{field_name} must be timezone-aware; got naive {value!r}. "
-            f"Use datetime(..., tzinfo=timezone.utc) or a zoneinfo tz."
-        )
-    return value
-
+    """Return *value* if timezone-aware, else raise. One implementation for the whole library: tent.utils.helpers."""
+    return _require_aware(value, field_name)
 
 def require_positive_duration(seconds: int | float, field_name: str = "duration_s") -> int:
     """Return *seconds* as a positive int, else raise.

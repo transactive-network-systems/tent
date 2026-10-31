@@ -1,5 +1,5 @@
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from weakref import ProxyType
 
 import tent.containers.time_interval as mod
@@ -33,7 +33,7 @@ def test_timeinterval_initialization_with_seconds_duration_and_weakref(monkeypat
     monkeypatch.setattr(mod, "safe_weak_proxy_callback", cb_factory)
 
     mkt = DummyMarket(id_="m-123", name="DayAhead")
-    start = datetime(2024, 1, 1, 12, 0, 0)
+    start = datetime(2024, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
 
     ti = TimeInterval(market=mkt, duration=900, start_time=start)  # 900 seconds = 15 minutes
 
@@ -58,7 +58,7 @@ def test_timeinterval_initialization_with_seconds_duration_and_weakref(monkeypat
 
 def test_timeinterval_initialization_with_timedelta_duration():
     mkt = DummyMarket()
-    start = datetime(2024, 1, 1, 0, 0, 0)
+    start = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
     dur = timedelta(minutes=30)
 
     ti = TimeInterval(market=mkt, duration=dur, start_time=start)
@@ -71,7 +71,7 @@ def test_timeinterval_get_record(monkeypatch):
     monkeypatch.setattr(mod.Archivable, "get_record", lambda self: {"id": "uuid-ti-1"})
 
     mkt = DummyMarket(id_="mkt-42", name="RT")
-    start = datetime(2024, 5, 20, 6, 45, 0)
+    start = datetime(2024, 5, 20, 6, 45, 0, tzinfo=timezone.utc)
     dur = timedelta(minutes=5)
 
     ti = TimeInterval(mkt, dur, start)
@@ -144,7 +144,7 @@ def test_intervalseries_construction_order_and_iteration(monkeypatch):
     monkeypatch.setattr(mod.Archivable, "archive", lambda self: calls.append(self))
 
     mkt = DummyMarket(name="Series")
-    start = datetime(2024, 1, 1, 0, 0, 0)
+    start = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
     dur = timedelta(minutes=15)
 
     series = IntervalSeries(market=mkt, first_start_time=start, duration=dur, number_of_intervals=4)
@@ -203,7 +203,7 @@ def test_intervalseries_uses_weakref_and_callback_for_market(monkeypatch):
     monkeypatch.setattr(mod, "safe_weak_proxy_callback", cb_factory)
 
     mkt = DummyMarket(name="WeakRef")
-    start = datetime(2024, 1, 1, 0, 0, 0)
+    start = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
     dur = timedelta(minutes=10)
 
     series = IntervalSeries(market=mkt, first_start_time=start, duration=dur, number_of_intervals=2)
@@ -225,7 +225,7 @@ def test_intervalseries_destroy_clears_intervals(monkeypatch):
     _install_idempotent_proxy(monkeypatch)
 
     mkt = DummyMarket()
-    start = datetime(2024, 1, 1, 0, 0, 0)
+    start = datetime(2024, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
     dur = timedelta(minutes=5)
 
     series = IntervalSeries(market=mkt, first_start_time=start, duration=dur, number_of_intervals=3)

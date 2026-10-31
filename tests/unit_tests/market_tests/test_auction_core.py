@@ -1,5 +1,5 @@
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock
 
 from tent.market.auction import Auction
@@ -8,7 +8,7 @@ from tent.containers import MarketTimings
 
 
 def make_timings():
-    base = datetime(2025,1,1,10,0,0)
+    base = datetime(2025,1,1,10,0,0, tzinfo=timezone.utc)
     return MarketTimings(
         active=base,
         negotiation=base+timedelta(hours=1),

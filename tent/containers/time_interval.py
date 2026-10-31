@@ -46,7 +46,7 @@ from sortedcontainers import SortedDict
 from weakref import proxy
 
 from tent.base import Archivable
-from tent.utils.helpers import safe_weak_proxy_callback
+from tent.utils.helpers import require_aware, safe_weak_proxy_callback
 
 
 class TimeInterval(Archivable):
@@ -58,7 +58,7 @@ class TimeInterval(Archivable):
         super(TimeInterval, self).__init__()
         self.duration: timedelta = duration if isinstance(duration, timedelta) else timedelta(seconds=duration)
         self.market = proxy(market, safe_weak_proxy_callback(self, 'market'))
-        self.start_time: datetime = start_time
+        self.start_time: datetime = require_aware(start_time, 'start_time')
         # TODO: Should we have an owner attribute in addition to market?
 
         # The TimeInterval name is used by the transactive record, and must be unique to its market.
@@ -152,8 +152,7 @@ class IntervalSeries:
         """Get the TimeInterval by its start time."""
         if isinstance(start_time, str):
             start_time = datetime.fromisoformat(start_time)
-        if not isinstance(start_time, datetime):
-            raise TypeError("start_time must be a datetime or an ISO format string.")
+        start_time = require_aware(start_time, 'start_time')  # a naive key would silently match nothing
         return self._intervals.get(start_time, None)
 
     def destroy(self):

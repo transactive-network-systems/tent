@@ -42,7 +42,7 @@ under Contract DE-AC05-76RL01830
 """
 
 from uuid6 import uuid7
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -169,7 +169,7 @@ def test_update_vertices():
     print('Case 1: Expect two active vertices when neither demand charges nor losses are in play.')
     
     # Create test environment
-    dt = datetime.now()
+    dt = datetime.now(timezone.utc)
     dt = dt.replace(hour=1, month=1)  # an example LLH hour
     
     test_node = _create_transactive_node()
@@ -219,7 +219,7 @@ def test_update_vertices():
     # Case 2: Same as Case 1, but let demand charges be in play
     print('Case 2: Same as Case 1, but let demand charges be in play.')
     
-    dt2 = datetime(2021, 3, 3, 13)  # an example HLH hour
+    dt2 = datetime(2021, 3, 3, 13, tzinfo=timezone.utc)  # an example HLH hour
     
     test_node2 = _create_transactive_node()
     test_market2 = _create_market(test_node2, dt2)

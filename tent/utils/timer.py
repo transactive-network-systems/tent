@@ -42,6 +42,8 @@ under Contract DE-AC05-76RL01830
 """
 import logging
 
+from tent.utils.helpers import require_aware
+
 from datetime import datetime, timezone, tzinfo
 from zoneinfo import ZoneInfo
 
@@ -91,4 +93,5 @@ class Timer(object):
         if simulation and (not sim_one_hr_in_sec or not sim_start_time):
             raise ValueError("sim_one_hr_in_sec and sim_start_time must be provided when simulation is True")
         cls.sim_one_hr_in_sec = sim_one_hr_in_sec
-        cls.sim_start_time = sim_start_time
+        # A naive start is taken to be in the clock's zone, the documented convention for configured values.
+        cls.sim_start_time = require_aware(sim_start_time, 'sim_start_time', assume=cls.tz) if sim_start_time else None

@@ -1,5 +1,5 @@
 from uuid6 import uuid7
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from tent.containers.vertex import Vertex
 from tent.containers.sd_curve import SDCurve
@@ -60,7 +60,7 @@ def test_calculate_reserve_margin():
             self.intervals_to_clear = 1
             self.initial_market_state = MarketState.Inactive
 
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     series = SimpleMarketSeries()
     transition_times = series.duration.get_timings(now)
     
@@ -309,7 +309,7 @@ def test_schedule_engagement():
             self.intervals_to_clear = 2
             self.initial_market_state = MarketState.Inactive
 
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     series = SimpleMarketSeries()
     transition_times = series.duration.get_timings(now)
     
@@ -433,7 +433,7 @@ def test_schedule_power():
             self.intervals_to_clear = 2
             self.initial_market_state = MarketState.Inactive
 
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     series = SimpleMarketSeries()
     transition_times = series.duration.get_timings(now)
     
@@ -564,7 +564,7 @@ def test_update_dual_costs():
             self.intervals_to_clear = 1
             self.initial_market_state = MarketState.Inactive
 
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     series = SimpleMarketSeries()
     transition_times = series.duration.get_timings(now)
     
@@ -658,7 +658,7 @@ def test_update_production_costs():
             self.intervals_to_clear = 1
             self.initial_market_state = MarketState.Inactive
 
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     series = SimpleMarketSeries()
     transition_times = series.duration.get_timings(now)
     
@@ -745,7 +745,7 @@ def test_update_vertices():
             self.intervals_to_clear = 1
             self.initial_market_state = MarketState.Inactive
 
-    now = datetime.now()
+    now = datetime.now(timezone.utc)
     series = SimpleMarketSeries()
     transition_times = series.duration.get_timings(now)
     

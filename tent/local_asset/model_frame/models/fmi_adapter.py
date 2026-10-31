@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import logging
+
+from tent.utils.helpers import require_aware
 from datetime import datetime, timezone
 from typing import Any, List, Mapping
 
@@ -56,8 +58,7 @@ class FlexibilityModelFrameAdapter(object):
         start = params.get("interval_time", self.last_update_time or datetime.now(timezone.utc))
         if isinstance(start, str):
             start = datetime.fromisoformat(start)
-        if start.tzinfo is None:
-            start = start.replace(tzinfo=timezone.utc)
+        start = require_aware(start, 'interval_time')
         return Interval(start=start, duration_s=self.interval_duration_s)
 
     def predict_flexibility(self, params: dict = None) -> List[float]:

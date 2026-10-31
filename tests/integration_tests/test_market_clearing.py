@@ -11,7 +11,7 @@ Validates the core transactive energy double-auction clearing process:
 import json
 import os
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch, Mock
 
 from tests.mock_tn import MockTN
@@ -450,7 +450,7 @@ def test_spawn_markets():
     
     with patch('tent.data_manager.local_data_manager.LocalDataManager.init_archive', Mock(return_value=None)):
         # Set time to 11:00 AM on 2020-08-18 (matching old test)
-        start_time = datetime(year=2020, month=8, day=18, hour=11)
+        start_time = datetime(year=2020, month=8, day=18, hour=11, tzinfo=timezone.utc)
         with patch.object(Timer, 'now', return_value=start_time):
             tn.configure_node(config)
             

@@ -1338,7 +1338,7 @@ def test_update_production_costs():
     test_market = DummyMarket()
     
     # Create time interval
-    dt = datetime.now()
+    dt = datetime.now(timezone.utc)
     time_interval = TimeInterval(test_market, timedelta(hours=1), dt)
     test_market.time_intervals = [time_interval]
     
@@ -1464,7 +1464,7 @@ def test_update_vertices():
     test_market = DummyMarket("test_market", dummy_tn.data_manager)
     
     # Create time interval
-    dt = datetime.now()
+    dt = datetime.now(timezone.utc)
     time_interval = TimeInterval(test_market, timedelta(hours=1), dt)
     test_market.time_intervals = [time_interval]
     

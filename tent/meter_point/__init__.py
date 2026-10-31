@@ -53,6 +53,7 @@ from typing import Union
 
 from tent.base import Component
 from tent.enumerations import MeasurementType, MeasurementUnit
+from tent.utils.helpers import require_aware
 from tent.utils.time_series_buffer import TimeSeriesBuffer
 from tent.utils.timer import Timer
 
@@ -105,8 +106,9 @@ class MeterPoint(Component):
 
     @property
     def mean_measurement(self):
-        """Average or some other aggregate metric."""
-        return mean(self.current_interval_measurements)
+        """Mean of the readings in the current measurement interval; None when there are none."""
+        values = self.buffer.get_values(since=(self.buffer.dt_class.now() - self.measurement_interval))
+        return mean(values) if values else None
 
     @property
     def last_updated(self):
@@ -119,7 +121,7 @@ class MeterPoint(Component):
         return self.buffer.last.value
 
     def set_meter_value(self, value, last_update=None):
-        last_update = last_update if last_update else Timer.now()
+        last_update = require_aware(last_update, 'last_update') if last_update else Timer.now()
         new_measurement = self.scale_factor * value
         self.buffer.append(new_measurement, last_update)
         self.archive_reading(new_measurement, last_update)
