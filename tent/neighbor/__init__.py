@@ -190,6 +190,18 @@ class Neighbor(Entity):
         _log.debug(f"Coordination with {self.name} in {market.name}: converged {state.converged}; "
                    f"signal due: {state.signal_due}.")
 
+    def signal_would_be_revised(self, market) -> bool:
+        """True when the prepared signal's content differs from the last one sent (or nothing has been sent), so sending
+        it would be a revision the neighbor must answer; False when it would only acknowledge."""
+        prepared_signal = self.prepared_signals.get(market)
+        previous = self.last_sent_signals.get(market)
+        if prepared_signal is None:
+            return False
+        if previous is None:
+            return True
+        return any(TransactiveSignal.conditions_have_changed(prepared_signal, previous, ti, self.convergence_threshold)
+                   for ti in market.time_intervals)
+
     def is_converged(self, market) -> bool:
         """True when every active interval of the market is converged with this neighbor (see check_for_convergence)."""
         state = self._coordination.get(market)
@@ -530,11 +542,8 @@ class Neighbor(Entity):
         # Publish the signal (if TN subclass implements messaging).
         # Number the signal and say what it answers. It is revised unless its content is unchanged from the previous
         # signal sent for this market, in which case it is only an acknowledgement (see check_for_convergence).
-        previous = self.last_sent_signals.get(market)
         received = self.last_received_signals.get(market)
-        revised = previous is None or any(
-            TransactiveSignal.conditions_have_changed(prepared_signal, previous, ti, self.convergence_threshold)
-            for ti in market.time_intervals)
+        revised = self.signal_would_be_revised(market)
         sequence = self._sent_sequence.get(market, 0) + 1
         self._sent_sequence[market] = sequence
         if revised:

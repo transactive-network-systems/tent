@@ -76,13 +76,15 @@ class ConsensusMarket(Market):
       otherwise the state machine's timeout moves the market on with a warning.
     - while_in_market_lead: collects, does not negotiate. A signal that was sent before the deadline but arrives after it
       updates the neighbor's curve and the market rebalances locally once, so the schedule honours the neighbor's last
-      word, but nothing is sent. Consensus is recorded again, so a late disagreement is visible in the archive.
+      word. An unchanged signal may still go out as an acknowledgement, so the neighbor learns it is in consensus; a
+      revised one is withheld. Consensus is recorded again, so a late disagreement is visible in the archive.
     - on_local_change (called by an entity whose conditions moved): marks the market unbalanced so the next tick
       rebalances and tells the neighbors if that changes anything.
     - transition_from_negotiation_to_market_lead: record the final consensus state.
 
-    Series settings used: method (Interpolation or Subgradient), duality_gap_threshold, default_price. Market keywords:
-    max_balance_iterations (default 20) bounds the local balancing loop; Interpolation normally needs one pass.
+    Series settings used: duality_gap_threshold, default_price. Market keyword max_balance_iterations (default 20) bounds
+    the local balancing loop; with piece-wise linear curves the interpolation is exact and one pass normally suffices, the
+    loop matters only for assets whose curves depend on price.
     """
     MARKET_TYPE = MarketTypes.consensus
 
@@ -128,8 +130,8 @@ class ConsensusMarket(Market):
         """
         Solve the local balancing sub-problem with the information currently held: every entity schedules against the
         current prices, the system curve is summed and a new price found per interval, powers are rescheduled at the new
-        prices, and costs are updated. For Interpolation the price is exact for piece-wise linear curves, so the duality
-        gap closes in one pass; the loop only matters for Subgradient or for assets whose curves depend on price.
+        prices, and costs are updated. The interpolated price is exact for piece-wise linear curves, so the duality gap
+        closes in one pass; the loop only matters for assets whose curves depend on price.
         Sets self.converged and returns it.
         """
         self.converged = False
@@ -141,7 +143,7 @@ class ConsensusMarket(Market):
             self.schedule()
             # Sum the system curve and solve for the marginal price. balance() sets converged False and returns on
             # failure (e.g. there is no supply at all), in which case there is nothing more to do this tick.
-            self.balance(k)
+            self.balance()
             prices = [self.marginal_prices.get_by_interval(ti) for ti in self.time_intervals]
             if any(p is None or p.value is None for p in prices):
                 _log.warning(f'{self.name}: no marginal price could be found in at least one interval.')
@@ -249,13 +251,24 @@ class ConsensusMarket(Market):
         self.converged = False
 
     def while_in_market_lead(self):
-        """Collect, do not negotiate: honour a neighbor's last word that arrived after the deadline, send nothing."""
+        """
+        Collect, do not negotiate. A neighbor's last word that arrives after the deadline is honoured: its curve is taken
+        up and the market rebalances once. The only thing sent is an acknowledgement, a signal whose content is unchanged
+        from the last one sent (revised=False), which lets the neighbor record consensus and which, by the protocol, it
+        does not answer. A signal whose content would change is withheld: that would be negotiation.
+        """
         if self._new_signals():
             _log.debug(f'MARKET: {self.name} absorbs a late signal in MarketLead.')
             if self.balance_locally():
                 for neighbor in self.transactive_neighbors:
                     neighbor.prep_transactive_signal(self)
-                    neighbor.check_for_convergence(self)  # flags only; nothing is sent after the deadline
+                    neighbor.check_for_convergence(self)
+                    if neighbor.is_signal_due(self):
+                        if neighbor.signal_would_be_revised(self):
+                            _log.info(f'MARKET: {self.name} withholds a revised signal to {neighbor.name}: '
+                                      f'negotiation has closed.')
+                        else:
+                            neighbor.send_transactive_signal(self, include_schedule=True)  # acknowledgement only
             self.record_consensus()
         if Timer.now() >= self.transition_times.delivery_lead:
             self._stateIsCompleted = True

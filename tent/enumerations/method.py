@@ -45,5 +45,6 @@ from enum import Enum
 
 
 class Method(Enum):
-    Subgradient = 1
+    """Balancing method of a market series. Interpolation on the piece-wise linear system curve is the only method; the
+    sub-gradient price search was retired because every TENT entity states its flexibility as a curve."""
     Interpolation = 2

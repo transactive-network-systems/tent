@@ -18,7 +18,7 @@ neighbor refreshes its active vertices and schedules against the current prices)
 re-schedule of powers at the new prices, ``update_costs`` and ``update_supply_demand``, and judges convergence by the
 duality gap ``(production cost - dual cost) / production cost`` against ``series.duality_gap_threshold``. When nothing in
 the system has a cost, the net power itself is the gap. The loop is bounded by the market keyword
-``max_balance_iterations`` (default 20); Interpolation needs one pass, Subgradient several.
+``max_balance_iterations`` (default 20); with piece-wise linear curves one pass suffices.
 
 **Coordination (between nodes).** For each transactive neighbor the node prepares a transactive signal: the residual
 system curve with that neighbor excluded, bounded to what the node can exchange with it, stated from the neighbor's
@@ -69,8 +69,9 @@ Under the state machine
   follows the same rule, so orders submitted late in the window are still matched.)
 - ``while_in_market_lead``: collects, does not negotiate. A signal that was sent before the deadline but arrives after
   it updates the neighbor's curve and the market rebalances locally once, so the schedule honours the neighbor's last
-  word, but nothing is sent. Consensus is recorded again. Signals arriving in DeliveryLead or later are logged and left
-  unused.
+  word. An unchanged signal may still be sent as an acknowledgement, so the neighbor learns it is in consensus without
+  any further exchange; a revised signal is withheld. Consensus is recorded again. Signals arriving in DeliveryLead or
+  later are logged and left unused.
 - ``on_local_change(entity)``: a local asset or neighbor model whose conditions changed (forecast, meter, constraint)
   calls this; the market rebalances on its next tick and tells the neighbors if that changes anything.
 - ``transition_from_negotiation_to_market_lead``: record the final consensus state.

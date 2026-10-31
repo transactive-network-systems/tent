@@ -46,7 +46,7 @@ class MarketSeries(Component):
                  market_class: Type[Market] = Market,       # The subclass of Market spawned by this series.
                  market_clearing_interval: float = 3600.0,  # [seconds] Time between successive market clearings.
                  market_order=1,                            # [pos. integer] Ordering of sequential markets  (Unused)
-                 method: Union[Method, str, int] = Method.Interpolation,#Solution method {1:subgradient,2:interpolation}
+                 method: Union[Method, str, int] = Method.Interpolation,  # Balancing method (Interpolation is the only one)
                  price_model: dict = None,                  # Configuration spec for a PriceModel class.
                  refined_series=None,
                  **market_kwargs                            # Any further keywords are passed to market_class on spawn.

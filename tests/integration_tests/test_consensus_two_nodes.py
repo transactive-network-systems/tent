@@ -429,14 +429,20 @@ def test_late_signal_is_absorbed_in_market_lead_without_a_reply(nodes, clock):
     assert m_city.market_state is MarketState.MarketLead
     assert campus.neighbors[0].last_received_signals[m_campus].revised
     assert not m_campus.in_consensus, 'an unprocessed signal means no consensus yet'
-    # The campus absorbs it on its next tick: new price, no new signal. The exchange quantity is unchanged (the campus
-    # load is inelastic), so the two still agree on it and consensus is recorded again; the acknowledgement the revised
-    # signal would normally earn is owed but withheld after the deadline.
+    # The campus absorbs it on its next tick: new price, and because the exchange quantity is unchanged (the campus load
+    # is inelastic) its answer is an acknowledgement only: the same content, revised=False, which the city need not answer.
     campus.step()
     for ti in m_campus.time_intervals:
         assert m_campus.marginal_prices.get_by_interval(ti).value == pytest.approx(0.064, abs=1e-6)
-    assert campus.neighbors[0].last_sent_signals[m_campus].sequence == sent_before, 'nothing is sent after the deadline'
-    assert campus.neighbors[0].is_signal_due(m_campus) and m_campus.in_consensus
+    acknowledgement = campus.neighbors[0].last_sent_signals[m_campus]
+    assert acknowledgement.sequence == sent_before + 1 and acknowledgement.revised is False
+    assert m_campus.in_consensus and not campus.neighbors[0].is_signal_due(m_campus)
+    # The city, in MarketLead, receives the acknowledgement, records consensus, and sends nothing back.
+    city_sent_before = city.neighbors[0].last_sent_signals[m_city].sequence
+    clock['t'] = times.market_lead + timedelta(seconds=2)
+    city.step()
+    assert m_city.in_consensus
+    assert city.neighbors[0].last_sent_signals[m_city].sequence == city_sent_before
     # A signal arriving in DeliveryLead is stored but changes nothing.
     for t in (times.delivery_lead,):
         step_both(nodes, clock, t)

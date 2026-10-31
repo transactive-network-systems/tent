@@ -50,7 +50,7 @@ from weakref import proxy
 
 from tent.base import Component
 from tent.containers import IntervalSeries, MarketTimings, Measurement, SDCurve, SDMeasurement, Vertex
-from tent.enumerations import MarketState, MarketTypes, MeasurementType, MeasurementUnit, Method
+from tent.enumerations import MarketState, MarketTypes, MeasurementType, MeasurementUnit
 from tent.market.price_models import HourlyAveragePriceModel
 from tent.utils.helpers import safe_weak_proxy_callback
 from tent.utils.timer import Timer
@@ -697,22 +697,16 @@ class Market(Component):
             # Call the utility sum_vertices to recreate the aggregate vertices in the indexed time interval.
             self.active_vertices.update(time_interval, self.sum_vertices(time_interval), replace=True)
 
-    def balance(self, k=1):
+    def balance(self):
         """
-        Balance current market
-
-        :param k: iteration counter
-        :return:
+        Balance the market once: sum every entity's active vertices into the system curve for each active time interval
+        and read the marginal price where that curve crosses zero net power (linear interpolation between the bracketing
+        vertices, which is exact for the piece-wise linear curves TENT entities produce). Sets converged False and returns
+        early when an interval cannot be bracketed (e.g. no supply at all). Iteration, where an asset's curve depends on
+        the price, belongs to the caller (see ConsensusMarket.balance_locally).
         """
-        # TODO: A test is badly needed for method balance().
-        # 202015DJH: The base balance method is being greatly simplified. Whereas it originally iterated to find a
-        #            marginal price in each active time interval, it now simply performs a single iteration using either
-        #            the iterative sub-gradient or interpolation approach. Iteration and preconditions may need to be
-        #            completed within the market's state machine.
-        # TODO: Consider having the balance method solve for both marginal price AND quantity.
-        if self.series.method == Method.Interpolation:
-            self.assign_system_vertices()
-            _log.debug(f"{self.name} market active vertices are: {self.active_vertices.log_report}")
+        self.assign_system_vertices()
+        _log.debug(f"{self.name} market active vertices are: {self.active_vertices.log_report}")
 
         # Index through active time intervals.
         for time_interval in self.time_intervals:
@@ -722,48 +716,36 @@ class Market(Component):
             # Extract its marginal price value [$/kWh] as a trial clearing price (that may be replaced).
             cleared_marginal_price = self.series.default_price if marginal_price is None else marginal_price.value
 
-            if self.series.method == Method.Subgradient:
-                # Find the net power corresponding to the indexed time interval.
-                net_power = self.net_powers.get_by_interval(time_interval)
-                total_generation = self.total_generation.get_by_interval(time_interval)
-                total_demand = self.total_demand.get_by_interval(time_interval)
+            # Get the indexed active system vertices.
+            active_sd_curve: SDCurve = self.active_vertices.get_by_interval(time_interval)
 
-                net_power = net_power.value / (total_generation.value - total_demand.value)
+            try:
+                # Find the vertex that bookcases the balance point from the lower side.
+                if not (lower_active_vertex := max(filter(lambda v: v.quantity < 0, active_sd_curve.vertices),
+                                                   key=lambda v: v.quantity, default=None)):
+                    raise ValueError(f'No load demand vertices (quantity < 0) were found.')
 
-                # Update the marginal price using sub-gradient search.
-                cleared_marginal_price = cleared_marginal_price - (net_power * 1e-1) / (10 + k)  # [$/kWh]
+                # Find the vertex that bookcases the balance point from the upper side.
+                if not (upper_active_vertex := min(filter(lambda v: v.quantity >= 0, active_sd_curve.vertices),
+                                                   key=lambda v: v.quantity, default=None)):
+                    raise ValueError(f'No supply vertices (quantity >= 0) were found.')
 
-            elif self.series.method == Method.Interpolation:
-                # Get the indexed active system vertices.
-                active_sd_curve: SDCurve = self.active_vertices.get_by_interval(time_interval)
+                if (power_range := upper_active_vertex.quantity - lower_active_vertex.quantity) == 0:
+                    _log.warning(f'There is no quantity range is 0. Marginal price is not unique.')
 
-                try:
-                    # Find the vertex that bookcases the balance point from the lower side.
-                    if not (lower_active_vertex := max(filter(lambda v: v.quantity < 0, active_sd_curve.vertices),
-                                                       key=lambda v: v.quantity, default=None)):
-                        raise ValueError(f'No load demand vertices (quantity < 0) were found.')
+                # Interpolate the marginal price in the interval using a principle of similar triangles.
+                marginal_price_range = upper_active_vertex.price - lower_active_vertex.price
+                cleared_marginal_price = (- marginal_price_range * lower_active_vertex.quantity / power_range
+                                         + lower_active_vertex.price)
+                # TODO: Consider adding a feature to find each asset's and neighbor's cleared power at this point.
+                #       This would require interpolation of the cleared average power, and the implication must be
+                #       interpreted for each asset and neighbor.
+            except ValueError as e:
+                _log.warning(f'Failed to balance {self.name} in time interval {time_interval.name}: {e}')
+                self.converged = False
+                return
 
-                    # Find the vertex that bookcases the balance point from the upper side.
-                    if not (upper_active_vertex := min(filter(lambda v: v.quantity >= 0, active_sd_curve.vertices),
-                                                       key=lambda v: v.quantity, default=None)):
-                        raise ValueError(f'No supply vertices (quantity >= 0) were found.')
-
-                    if (power_range := upper_active_vertex.quantity - lower_active_vertex.quantity) == 0:
-                        _log.warning(f'There is no quantity range is 0. Marginal price is not unique.')
-
-                    # Interpolate the marginal price in the interval using a principle of similar triangles.
-                    marginal_price_range = upper_active_vertex.price - lower_active_vertex.price
-                    cleared_marginal_price = (- marginal_price_range * lower_active_vertex.quantity / power_range
-                                             + lower_active_vertex.price)
-                    # TODO: Consider adding a feature to find each asset's and neighbor's cleared power at this point.
-                    #       This would require interpolation of the cleared average power, and the implication must be
-                    #       interpreted for each asset and neighbor.
-                except ValueError as e:
-                    _log.warning(f'Failed to balance {self.name} in time interval {time_interval.name}: {e}')
-                    self.converged = False
-                    return
-
-            # Regardless of the method used, assign the cleared marginal price to the marginal price value for the
+            # Assign the cleared marginal price to the marginal price value for the
             # indexed active time interval.
             self.marginal_prices.update(time_interval, cleared_marginal_price)
 
