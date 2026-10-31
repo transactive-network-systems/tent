@@ -30,16 +30,25 @@ neighbor's active vertices and replies in kind.
 Convergence with a neighbor
 ---------------------------
 
-``Neighbor.check_for_convergence(market)`` decides two things per interval from the prepared, last sent and last received
-signals:
+Every signal a node sends to a neighbor for a market carries three acknowledgement fields: ``sequence`` (numbering the
+signals sent to that neighbor for that market), ``in_reply_to`` (the sequence of the last signal received from the
+neighbor when this one was prepared) and ``revised`` (false when the content is unchanged from the sender's previous
+signal, so the signal is only an acknowledgement and needs no reply). ``Neighbor.check_for_convergence(market)``
+decides two things per interval from the prepared, last sent and last received signals and records them in a
+per-market ``CoordinationState`` (``is_converged(market)``, ``is_signal_due(market)``):
 
-- A signal is **due** when nothing has been sent yet; or a signal received at or after the last send disagrees with it
-  at the balance point beyond ``convergence_threshold`` (``TransactiveSignal.balance_points_differ``, which flips the
-  sign of the received quantity); or local conditions have changed so that the prepared signal differs from the sent
-  one (``TransactiveSignal.conditions_have_changed``: a sent flexibility vertex has no counterpart within the threshold
-  among the prepared ones, or the balance point moved). ``signal_due`` is what decides whether to send.
-- The interval is **converged** when no signal is due *and* the neighbor has been heard from for that interval. A
-  neighbor that never replied is not in consensus, however settled this node's own position is.
+- A signal is **due** when nothing has been sent yet; or local conditions have changed so that the prepared signal
+  differs from the sent one (``TransactiveSignal.conditions_have_changed``: a sent flexibility vertex has no
+  counterpart within ``convergence_threshold`` among the prepared ones, or the balance point moved); or the neighbor,
+  having acknowledged this node's latest revised signal, still disagrees at the balance point
+  (``TransactiveSignal.balance_points_differ``, which flips the sign of the received quantity); or the neighbor's
+  latest signal is revised and has not been answered. Answering a revised signal that changes nothing here resends the
+  same content with ``revised`` false, which the neighbor need not answer; that is what ends an exchange.
+- The interval is **converged** when the neighbor has been heard from, has acknowledged this node's latest revised
+  signal (its ``in_reply_to`` is at least that sequence), agrees at the balance point, and local conditions have not
+  changed. A neighbor that never replied is not in consensus, however settled this node's own position is.
+
+Because ordering comes from the sequence numbers, no comparison of clocks between nodes is involved.
 
 **Full consensus** for an interval is the market having balanced and every transactive neighbor being converged there.
 It is recorded on every pass as ``MeasurementType.FullConsensus`` and is what the analysis tool's consensus strip plots.
@@ -49,8 +58,9 @@ Under the state machine
 
 ``Market.events`` drives every market type through the same states; ``ConsensusMarket`` fills in the Negotiation state.
 
-- ``transition_from_active_to_negotiation``: initialise prices, balance locally, send an opening signal to every
-  transactive neighbor (with its balance point), record consensus (none yet).
+- ``transition_from_active_to_negotiation``: initialise prices (in a rolling series, from the prior market's cleared
+  prices for the intervals they share), balance locally, send an opening signal to every transactive neighbor (with its
+  balance point), record consensus (none yet).
 - ``while_in_negotiation`` (every tick): if any neighbor's signal arrived since the last pass, or the local problem is
   not balanced, balance locally. Then for each transactive neighbor prepare the signal, check convergence, and send
   only when a signal is due. When every neighbor is converged the state is complete.
