@@ -165,16 +165,13 @@ def test_measurement_getters_and_prior_behavior():
     # get_by_interval returns the MeasurementValue
     assert m.get_by_interval(t1).value == 20
 
-    # get_by_start_time currently returns the TimeInterval key (not the value). Document current behavior:
-    ti_found = m.get_by_start_time(t1.start_time)
-    assert ti_found is t1
-    # Using that key, you can access the value:
-    assert m.get_by_interval(ti_found).value == 20
+    # get_by_start_time returns the MeasurementValue, matching its annotation and get_by_interval.
+    assert m.get_by_start_time(t1.start_time).value == 20
+    # The TimeInterval key is available separately when needed.
+    assert m.get_interval_by_start_time(t1.start_time) is t1
 
-    # get_prior_by_interval returns what get_by_start_time returns (TimeInterval), so:
-    prior_key = m.get_prior_by_interval(t2)
-    assert prior_key is t1
-    assert m.get_by_interval(prior_key).value == 20
+    # get_prior_by_interval delegates to get_by_start_time, so it too returns the value.
+    assert m.get_prior_by_interval(t2).value == 20
 
 
 def test_measurement_total_with_and_without_market_filter():

@@ -15,8 +15,14 @@ class DirectRatioActuationManager(ActuationManager):
             # TODO: Is price assignment just trying to find the first price in delivery?
             #  If so, there is now a Measurement.first method. If not, this needs to be reworked.
             price = [v.value for ti, v in mkt.marginal_prices.all if ti.start_time == mkt.transition_times.delivery][0]
-            vertex_prices = [av.price for ti, sdc in self.parent.active_vertices.all for av in sdc.vertices
-                             if ti.start_time == mkt.transition_times.delivery]
+            vertex_prices = [
+                av.price
+                for ti, sdc in self.parent.active_vertices.all
+                for av in sdc.vertices
+                if ti.start_time == mkt.transition_times.delivery
+            ]
+            if not vertex_prices:
+                return
             min_price = min(vertex_prices)
             max_price = max(vertex_prices)
             price = min(max(price, min_price), max_price)  # clamp price within bid range.

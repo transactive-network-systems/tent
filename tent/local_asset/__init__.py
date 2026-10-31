@@ -260,18 +260,24 @@ class LocalAsset(Entity):
         # OUTPUTS:
         # Assigns values to self.transition_costs
 
-        # Index through all but the first time interval.
+        # Index through the active time intervals. The first interval of a market
+        # normally has no prior engagement state, and is treated as unchanged.
         for time_interval in market.time_intervals:
             # Find the current and prior engagement states based on the current indexed time interval
             current_engagement_state = self.engagement_schedule.get_by_interval(time_interval)
             prior_engagement_state = self.engagement_schedule.get_prior_by_interval(time_interval)
 
+            # Without a current engagement state there is no transition to price.
+            if current_engagement_state is None:
+                continue
+
             # Calculate the state transition
             # - -1:Disengaging
             # -  0:Unchanged
             # -  1:Engaging
-            # TODO: Is the calculation of transition cost is right for the first time interval?
-            #  Should it be unchanged or engaging?
+            # A missing prior state is treated as unchanged rather than as an
+            # engagement, so an asset is not charged an engagement cost merely
+            # because a market's first interval has no predecessor.
             dif = current_engagement_state - prior_engagement_state if prior_engagement_state is not None else 0
 
             # Assign the corresponding transition cost
@@ -350,7 +356,7 @@ class LocalAsset(Entity):
             # Get the marginal prices from the latest similar market.
 
             # Find any market prices from the corrected market to add to the price horizon
-            for time_interval, marginal_price in market.prior_market_in_series.marginal_prices:
+            for time_interval, marginal_price in market.prior_market_in_series.marginal_prices.all:
                 if time_interval.end_time > end_of_calculated_horizon:
                     # TODO: This should probably be creating/updating an interval for this market with the same time.
                     price_horizon.update(time_interval, marginal_price)
@@ -380,9 +386,13 @@ class LocalAsset(Entity):
                 #            an object of class HourlyAveragePriceModel, but it is being made equivalent to the model
                 #            itself instead.
                 price = market.price_model.get(end_of_calculated_horizon)
-                # TODO: Why are we hard coding hours here?
-                start_time = end_of_calculated_horizon.replace(minute=0, second=0)
-                end_time = start_time + timedelta(hours=1)  # TODO: Why are we doing specifically hours now?
+                # Start where prices leave off, then align to the top of the next
+                # hour. Rounding the start time down instead would back-date the
+                # interval into time that is already priced, and because
+                # Measurement keys on TimeInterval identity that produces
+                # duplicate overlapping entries rather than updating one.
+                start_time = end_of_calculated_horizon
+                end_time = (start_time + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
                 duration = end_time - start_time
                 price_horizon.update(TimeInterval(market, duration, start_time), price[0])
                 end_of_calculated_horizon = end_time
@@ -392,8 +402,9 @@ class LocalAsset(Entity):
         price = market.series.default_price
         while end_of_scheduling_horizon > end_of_calculated_horizon:
             start_time = end_of_calculated_horizon
-            end_time = start_time + timedelta(hours=1)  # TODO: Why are we doing hours here?
-            end_time.replace(minute=0, second=0, microsecond=0)
+            # Align to the top of the next hour. datetime is immutable, so the
+            # result of replace() must be assigned.
+            end_time = (start_time + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
             duration = end_time - start_time
             price_horizon.update(TimeInterval(market, duration, start_time), price)
             end_of_calculated_horizon = end_time

@@ -1,0 +1,26 @@
+{
+  "resource_id": "ochre_battery_01",
+  "rated_kw": 5.0,
+  "capacity_kwh": 10.0,
+  "min_soc": 0.10,
+  "max_soc": 0.95,
+  "ochre": {
+    "description": "OCHRE Battery Inverter Energy Storage",
+    "start_time": "2026-08-05T00:00:00",
+    "time_res": 900,
+    "efficiency_inverter": 0.97,
+    "efficiency_charge": 0.98,
+    "efficiency_discharge": 0.98,
+    "discharge_pct": 0.05,
+    "v_cell": 3.6,
+    "ah_cell": 70.0,
+    "r_cell": 0.002,
+    "initial_voltage": 50.4,
+    "enable_degradation": true,
+    "efficiency_type": "advanced",
+    "enable_thermal_model": true,
+    "thermal_r": 0.5,
+    "thermal_c": 90000,
+    "charge_solar_only": false
+  }
+}

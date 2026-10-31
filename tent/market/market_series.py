@@ -112,6 +112,22 @@ class MarketSeries(Component):
         """Allow iteration over the series' markets."""
         return iter(self.markets)
 
+    def prune_expired(self):
+        """Remove Expired markets to keep per-iteration cost bounded.
+
+        Never removes the newest market (markets[-1]); spawn() relies on it for the
+        prior_market_in_series chain. Live markets that held a weak proxy to a pruned
+        market have that attribute auto-nulled by safe_weak_proxy_callback on GC, and
+        check_marginal_prices treats None as 'fall through to the next pricing method'.
+        """
+        if len(self.markets) <= 1:
+            return
+        newest = self.markets[-1]
+        expired = [m for m in list(self.markets)
+                   if m is not newest and m.market_state == MarketState.Expired]
+        for market in expired:
+            self.markets.discard(market)
+
     @property
     def intervals_to_clear(self):
         return self.duration.intervals_to_clear

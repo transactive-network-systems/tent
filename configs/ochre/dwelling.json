@@ -1,0 +1,13 @@
+{
+  "resource_id": "ochre_dwelling_01",
+  "rated_kw": 15.0,
+  "ochre": {
+    "description": "OCHRE Full Residential Dwelling Net Meter",
+    "name": "OchreDwelling01",
+    "start_time": "2018-01-01T00:00:00",
+    "time_res": 900,
+    "hpxml_file": "models/ochre/dwelling_up11.xml",
+    "hpxml_schedule_file": "models/ochre/dwelling_schedule.csv",
+    "weather_file": "models/ochre/denver_weather.epw"
+  }
+}

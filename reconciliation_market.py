@@ -2,6 +2,7 @@ from market import Market
 from market_state import MarketState
 from market_types import MarketTypes
 
+#TODO integrate this
 
 class ReconciliationMarket(Market):
     # 211208DJH: This class is created to explore the reconciliation and price-tracking functions. It is probably better

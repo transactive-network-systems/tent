@@ -221,7 +221,11 @@ class Measurement(Archivable):
         return self.get_by_start_time(prior_start_time)
 
     def get_by_start_time(self, start_time: datetime) -> DATA_TYPE | None:
-        return next(filter(lambda ti: ti.start_time == start_time, self._data.keys()), None)
+        return next((mv for ti, mv in self._data.items() if ti.start_time == start_time), None)
+
+    def get_interval_by_start_time(self, start_time: datetime) -> TimeInterval | None:
+        """Return the TimeInterval key beginning at start_time, if any."""
+        return next((ti for ti in self._data.keys() if ti.start_time == start_time), None)
 
     def total(self, market=None):
         return sum(mv.value for ti, mv in self._data.items() if ti.market == market) if market else sum(self.values)

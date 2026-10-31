@@ -288,6 +288,7 @@ class TransactiveNode(Archivable):
             for market in series:
                 market.events()
                 self._sleep()
+            series.prune_expired()
 
     @property
     def data_manager(self):

@@ -208,3 +208,5 @@ config.ini
 ehthumbs.db
 Thumbs.db
 desktop.ini
+.venv/
+uv.lock

@@ -133,6 +133,9 @@ class IntervalSeries:
         # Allows IntervalSeries to act as an iterator.
         return iter(self._intervals.values())
 
+    def __len__(self):
+        return len(self._intervals)
+
     @property
     def first(self):
         return self[0]

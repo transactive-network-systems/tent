@@ -59,20 +59,27 @@ class ModelFrame(object):
         if not config:
             return
         self.demand_curve_points = config.get('demand_curve_points', 2)
-        # TODO: This needs generalized to allow configuration of user defined models.
         base_module = "tent.local_asset.model_frame.models."
         for model in config['models']:
             try:
                 subscribe_key = model["subscribe_key"]
                 model_type = model["model_type"]
             except KeyError as e:
-                _log.exception(f"Model configuration is missing key: {e}")
-                raise e
-            _file, model_type = model_type.split(".")
-            module = importlib.import_module(base_module + _file)
-            self.model_class = getattr(module, model_type)
-            model['model_config']['demand_curve_points'] = self.demand_curve_points
-            self.models[subscribe_key] = self.model_class(model['model_config'], parent=self)
+                raise KeyError(f"Model configuration is missing key: {e}") from e
+            model_config = model.get('model_config', {})
+            model_config['demand_curve_points'] = self.demand_curve_points
+            model_config['subscribe_key'] = subscribe_key
+
+            if model_type == "fmi":
+                # A flexibility-model (external simulator) adapter; imported here so the core never needs it.
+                from .fmi_adapter import FlexibilityModelFrameAdapter
+                self.models[subscribe_key] = FlexibilityModelFrameAdapter(model_config, parent=self)
+            else:
+                # "<module>.<Class>" within the model-frame models package. (Classes from elsewhere go through the
+                # same registry as every other configured class; see get_class_from_spec.)
+                _file, m_type = model_type.split(".", 1)
+                module = importlib.import_module(base_module + _file)
+                self.models[subscribe_key] = getattr(module, m_type)(model_config, parent=self)
 
     def model_flexibility(self, params: dict = None) -> List[float]:
         params = params if params else {}

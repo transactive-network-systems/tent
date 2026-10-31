@@ -40,10 +40,11 @@ PACIFIC NORTHWEST NATIONAL LABORATORY
 operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
+
 import logging
 import math
-
 from datetime import datetime
+from typing import Any
 
 from tent.local_asset import LocalAsset
 
@@ -51,85 +52,125 @@ _log = logging.getLogger(__name__)
 
 
 class SolarPvResource(LocalAsset):
-    # SolarPvResourceModel Subclass for renewable solar PV generation The Solar PV resource is treated here as a
-    # must-take resource. This is unlike dispatchable resources in this regard. Production may be predicted. The main
-    # features of this model are (1) the introduction of property cloudFactor, a Measurement, that allows us to
-    # reduce the expected solar generation according to cloud cover, and (2) method solar_generation() that creates the
-    # envelope, best-case, power production for the resource as a function of time-of-day.
+    """Solar PV Resource Model for renewable solar generation.
 
-    def __init__(self,
-                 cloud_factor=1.0,
-                 *args, **kwargs):
+    Supports dual-mode execution:
+    1. Physics-based mode via pvlib / FlexibilityModelInterface when a `site` (pvlib location dict) or `preset` is given.
+       (`location` remains the ordinary Entity text field.)
+    2. Lightweight cosine approximation (default when no pvlib site is configured).
+    """
+
+    def __init__(
+        self,
+        cloud_factor: float = 1.0,
+        use_pvlib: bool = False,
+        site: dict[str, Any] | None = None,
+        system: dict[str, Any] | None = None,
+        weather: dict[str, Any] | None = None,
+        preset: str | None = None,
+        *args,
+        **kwargs,
+    ):
         super(SolarPvResource, self).__init__(*args, **kwargs)
         self.cloudFactor = float(cloud_factor)
+        self.use_pvlib = use_pvlib or (site is not None) or (preset is not None)
+        self.pv_adapter = None
+
+        if self.use_pvlib:
+            # A configured pvlib site that cannot be built is a configuration error: fail here, at configure time,
+            # rather than silently running the cosine approximation in its place.
+            from tent.flexibility import from_config as load_fmi_adapter
+            if preset:
+                self.pv_adapter = load_fmi_adapter(preset, rated_kw=self.maximum_power or 10.0)
+            else:
+                cfg = {
+                    "model_type": "pvlib.pv",
+                    "resource_id": self.name or "solar_pv",
+                    "rated_kw": self.maximum_power or 10.0,
+                    "location": site,
+                    "system": system or {},
+                    "weather": weather or {"kind": "clearsky", "cloud_factor": self.cloudFactor},
+                }
+                self.pv_adapter = load_fmi_adapter(cfg)
 
     def schedule_power(self, market):
-        # Estimate stochastic generation from a solar PV array as a function of time-of-day and a cloud-cover factor.
-        # INPUTS:
-        # obj - SolarPvResourceModel class object
-        # tod - time of day
-        # OUTPUTS:
-        # power - calculated maximum power production at this time of day
-        # LOCAL:
-        # h - hour (presumes 24-hour clock, local time)
-        # *************************************************************************
+        """Schedule power for active time intervals using pvlib physics or cosine model."""
+        if self.pv_adapter is not None:
+            from tent.flexibility import Interval
 
-        # Index through the active time intervals ti
+            time_intervals = list(market.time_intervals)
+            intervals = [
+                Interval(
+                    start=ti.start_time,
+                    duration_s=int(ti.duration.total_seconds()),
+                )
+                for ti in time_intervals
+            ]
+            envelope = self.pv_adapter.get_envelope(intervals)
+            for pt, ti in zip(envelope, time_intervals):
+                # Convert load-positive (negative generation) to TENT positive generation
+                power = -pt.q_baseline_kw
+                self.scheduled_powers.update(ti, power)
+                self.engagement_schedule.update(ti, True)
+
+            self.schedule_calculated = True
+            return
+
+        # Fallback: Sine/cosine approximation
         for time_interval in market.time_intervals:
+            time_of_day: datetime = (
+                time_interval.start_time + time_interval.duration / 2
+            )
+            hour_of_day: float = time_of_day.hour + time_of_day.minute / 60.0
 
-            # Production will be estimated from the time-of-day at the center of the time interval.
-            time_of_day: datetime = time_interval.start_time + time_interval.duration / 2
-            hour_of_day: float = time_of_day.hour + time_of_day.minute / 60  # Time_of_day stated as fractional hours
-
-            # Estimate solar generation as a sinusoidal function of daylight hours.
             if hour_of_day < 5.5 or hour_of_day > 17.5:
-                power = 0.0  # The time is outside the time of solar production. Set power to zero. [avg.kW]
+                power = 0.0
             else:
-                # A sinusoidal function is used to forecast solar generation during the normally sunny part of a day.
-                clear_sky_power = 0.5 * (1 + math.cos((hour_of_day - 12) * 2.0 * math.pi / 12))
-                power = self.maximum_power * clear_sky_power * self.cloudFactor  # [avg.kW]
+                clear_sky_power = 0.5 * (
+                    1.0 + math.cos((hour_of_day - 12) * 2.0 * math.pi / 12.0)
+                )
+                power = self.maximum_power * clear_sky_power * self.cloudFactor
 
-            # Create or update scheduled power for the indexed time interval to calculated power.
             self.scheduled_powers.update(time_interval, power)
-
-            # Assign engagement schedule in the indexed time interval NOTE: The assignment of engagement schedule, if
-            # used, will often be assigned during the scheduling of power, not separately as demonstrated here.
-            # Check whether an engagement schedule exists in the indexed time interval
-
-            # Set asset as committed or engaged for this interval.
             self.engagement_schedule.update(time_interval, True)
 
         self.schedule_calculated = True
-
-        _log.debug(f"Scheduled_powers for market: {market.name} --- {self.scheduled_powers.log_report}")
+        _log.debug(
+            f"Scheduled_powers for market: {market.name} --- {self.scheduled_powers.log_report}"
+        )
 
     @property
     def table_name(self):
-        return 'solar_pv_resource'
+        return "solar_pv_resource"
 
     def get_record(self) -> dict:
         record = super(SolarPvResource, self).get_record()
-        record.update({
-            'asset_id': self.id,
-            'cloud_factor': self.cloudFactor
-        })
+        record.update(
+            {"asset_id": self.id, "cloud_factor": self.cloudFactor}
+        )
         return record
 
     @classmethod
     def get_archive_definitions(cls) -> list[dict]:
         definitions = super(SolarPvResource, cls).get_archive_definitions()
-        definitions.extend([
-            {
-                "name": "solar_pv_resource",
-                "inherits": "local_asset",
-                "columns": [
-                    {"name": "asset_id", "foreign_key": "local_asset.id", "kwargs": {"primary_key": True}},
-                    {"name": "cloud_factor", "type": "Float"}
-                ]
-            }
-        ])
+        definitions.extend(
+            [
+                {
+                    "name": "solar_pv_resource",
+                    "inherits": "local_asset",
+                    "columns": [
+                        {
+                            "name": "asset_id",
+                            "foreign_key": "local_asset.id",
+                            "kwargs": {"primary_key": True},
+                        },
+                        {"name": "cloud_factor", "type": "Float"},
+                    ],
+                }
+            ]
+        )
         return definitions
 
 
-if __name__ == '__main__':
-    spvm = SolarPvResource()
+# Aliases
+SolarPvResourceModel = SolarPvResource

@@ -1,0 +1,19 @@
+{
+  "resource_id": "ochre_wh_01",
+  "rated_kw": 4.5,
+  "t_min_f": 110.0,
+  "t_max_f": 140.0,
+  "t_desired_f": 125.0,
+  "tank_volume_l": 250.0,
+  "ochre": {
+    "description": "OCHRE Stratified Water Heater",
+    "start_time": "2026-08-05T00:00:00",
+    "time_res": 900,
+    "draw_hours": [7, 8, 18, 19],
+    "draw_gpm": 2.5,
+    "mains_temp_f": 55.0,
+    "zone_temp_f": 68.0,
+    "tank_height_m": 1.22,
+    "ua_w_k": 2.17
+  }
+}

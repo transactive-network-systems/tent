@@ -173,12 +173,12 @@ class TransactiveSignal(SDMeasurement):
         # TODO: Currently assumes signal is being received from a remote.
         #  If there is another reason to parse a signal, an "on_receipt" flag should be added to signature.
         try:
+            if not isinstance(message, dict):
+                raise ValueError("Signal must be a dictionary.")
             # TODO: Should we allow a range of supported protocol_versions?
             if message['protocol_version'] != cls.PROTOCOL_VERSION:
                 raise ValueError(f"Unsupported protocol version: {message['protocol_version']}."
                                  f" Expected: {cls.PROTOCOL_VERSION}.")
-            if not isinstance(message, dict):
-                raise ValueError("Signal must be a dictionary.")
             # TODO: This won't work yet, since the function to get market by name does not currently exist.
             if not (market := tn.get_market_by_name(message['market'])):
                 _log.warning(f'Unable to find valid market "{market}" from received transactive signal.')

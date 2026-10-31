@@ -14,6 +14,12 @@ dependencies = [
 dev = ["pytest>=7.4"]
 # Legacy plotting scripts under scripts/. These move to the tent-analysis tool and will be removed.
 scripts = ["matplotlib>=3.7", "pandas>=2.0"]
+# Physical simulator back-ends for tent.flexibility. The core package and the whole non-FMI test suite run without
+# them; the FMI tests skip when they are absent.
+pvlib = ["pvlib>=0.10", "pandas>=2.0"]
+ochre = ["ochre-nrel", "pint==0.24.4", "pandas>=2.0"]
+flexibility = ["pvlib>=0.10", "pandas>=2.0", "ochre-nrel", "pint==0.24.4"]
+docs = ["sphinx>=7", "sphinx-rtd-theme>=2"]
 
 [build-system]
 requires = ["poetry-core>=2.0.0"]

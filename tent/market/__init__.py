@@ -452,15 +452,13 @@ class Market(Component):
             # Delete market intervals that are defined by this market object.
             self.time_intervals.destroy()
 
-            # Remove the expired market from the containing Market Series.
-            expired_markets = [x for x in self.series.markets if x == self]
-            for expired in expired_markets:
-                _log.info(f'Removing expired market: {expired}')
-                self.series.markets.discard(expired)
             # Mark completed so this block is not re-entered on subsequent events() calls.
-            # NOTE: Removal from series.markets is NOT done here because events() may be called
-            # during iteration over series.markets. The series should prune expired markets
-            # separately (e.g., in MarketSeries or _state_machine_iteration).
+            # NOTE: Removal from series.markets is deliberately NOT done here. events() may be
+            # called while iterating over series.markets, and an unguarded discard can empty the
+            # series entirely -- including the newest market, which spawn() needs for the
+            # prior_market_in_series chain. Pruning is handled by MarketSeries.prune_expired(),
+            # called from TransactiveNode.step() after the per-market loop completes; it never
+            # removes markets[-1].
             self._stateIsCompleted = True
 
     def transition_from_initial_to_inactive(self):
@@ -834,9 +832,13 @@ class Market(Component):
                         continue
 
                 # METHOD #4. Use the price model to predict marginal price.
-
+                def_price = getattr(self, 'default_price', getattr(getattr(self, 'series', None), 'default_price', 0.05))
                 if self.price_model is not None:
-                    marginal_price = self.price_model.get(time_interval.start_time)[0]
+                    try:
+                        res = self.price_model.get(time_interval.start_time)
+                        marginal_price = res[0] if isinstance(res, (list, tuple)) else (float(res) if isinstance(res, (int, float)) else def_price)
+                    except Exception:
+                        marginal_price = def_price
                     if marginal_price is not None:
                         self.marginal_prices.update(time_interval, marginal_price)
                         continue

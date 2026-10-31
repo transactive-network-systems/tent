@@ -1,0 +1,16 @@
+{
+  "resource_id": "wh_01",
+  "rated_kw": 4.5,
+  "location": {
+    "latitude": 46.28,
+    "longitude": -119.28,
+    "tz": "US/Pacific"
+  },
+  "gridlabd": {
+    "object_name": "wh_01",
+    "model_path": "models/gridlabd/feeder.glm",
+    "t_min_f": 110.0,
+    "t_max_f": 140.0,
+    "t_desired_f": 125.0
+  }
+}

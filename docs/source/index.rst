@@ -1,19 +1,16 @@
-.. TENT documentation master file, created by
-   sphinx-quickstart on Thu Oct 24 09:20:24 2024.
-   You can adapt this file completely to your liking, but it should at least
-   contain the root `toctree` directive.
+.. TENT documentation master file
 
+====================================================
 Transactive Energy Network Template (TENT)
-==========================================
+====================================================
 
-Add your content using ``reStructuredText`` syntax. See the
-`reStructuredText <https://www.sphinx-doc.org/en/master/usage/restructuredtext/index.html>`_
-documentation for details.
+The **Transactive Energy Network Template (TENT)** is an object-oriented Python framework for modeling, simulating, and deploying decentralized transactive energy systems.
 
+TENT empowers autonomous agents—representing commercial buildings, municipal grids, campus microgrids, and individual physical devices—to dynamically negotiate power schedules, balance supply and demand through continuous double auctions, and actuate physical systems in real time.
 
 .. toctree::
-   :maxdepth: 1
-   :caption: Introduction:
+   :maxdepth: 2
+   :caption: Introduction
 
    introduction/what_is_transactive_energy
    introduction/high_level_tent_overview
@@ -21,8 +18,26 @@ documentation for details.
    introduction/transactive_node_agent
 
 .. toctree::
-   :maxdepth: 1
-   :caption: Design:
+   :maxdepth: 2
+   :caption: Flexibility Modeling
+
+   flexibility/index
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Local Assets & Composition
+
+   local_assets/index
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Markets & Auctions
+
+   markets/index
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Design & Deployment
 
    design/identify_components
    design/build_component_configurations
@@ -30,8 +45,15 @@ documentation for details.
    design/consensus_market
 
 .. toctree::
-   :maxdepth: 1
-   :caption: Analysis & Visualization:
+   :maxdepth: 2
+   :caption: Analysis & Metrics
 
-   analysis_and_visualization/effectiveness_metrics
    analysis_and_visualization/operational_metrics
+   analysis_and_visualization/effectiveness_metrics
+
+Indices and Tables
+==================
+
+* :ref:`genindex`
+* :ref:`modindex`
+* :ref:`search`
