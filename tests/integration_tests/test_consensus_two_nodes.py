@@ -172,7 +172,7 @@ def test_two_nodes_reach_full_consensus(nodes, clock):
         for ti in market.time_intervals:
             assert sent.balance_point(ti) is not None and received.balance_point(ti) is not None
             assert sent.balance_point(ti).quantity == pytest.approx(-received.balance_point(ti).quantity, abs=0.5)
-        assert neighbor.converged
+        assert neighbor.is_converged(market)
 
     # Nothing further is sent once consensus holds.
     sent_before = {tn.name: tn.neighbors[0].last_sent_signals[m].id for tn, m in ((campus, m_campus), (city, m_city))}
@@ -313,3 +313,88 @@ def test_consensus_with_line_losses(clock):
         # The campus pays the city's price plus the marginal loss adder.
         assert (m_campus.marginal_prices.get_by_interval(ti_campus).value
                 > m_city.marginal_prices.get_by_interval(ti_city).value)
+
+
+def test_two_consensus_series_keep_separate_coordination_state(clock):
+    """Two consensus series negotiate at once on both nodes; each neighbor tracks them independently."""
+    second = dict(SERIES, name='Consensus B')
+    campus = build_node('campus', 'city', asset_curve=[[INF, 0.0, -100.0, True]], asset_limits=(-100.0, 0.0),
+                        neighbor_curve=[[0.04, 0.0, 0.0, True], [0.08, 0.0, 1000.0, True]],
+                        neighbor_limits=(0.0, 1000.0), up_or_down='upstream')
+    city = build_node('city', 'campus', asset_curve=[[0.04, 0.0, 0.0, True], [0.08, 0.0, 1000.0, True]],
+                      asset_limits=(0.0, 1000.0), neighbor_curve=[[INF, 0.0, -50.0, True]],
+                      neighbor_limits=(-1000.0, 0.0), up_or_down='downstream')
+    for tn in (campus, city):
+        tn.market_series.append(MarketSeries(transactive_node=tn, market_class=ConsensusMarket, **second))
+    campus.connect_peer(city)
+    city.connect_peer(campus)
+    all_nodes = [campus, city]
+    markets = [series.newest_market for tn in all_nodes for series in tn.market_series]
+    times = markets[0].transition_times
+    assert all(m.transition_times == times for m in markets)
+
+    ticks = negotiate(all_nodes, markets, clock, times)
+    assert ticks is not None, 'all four markets (two series on two nodes) declared full consensus'
+    for tn in all_nodes:
+        neighbor = tn.neighbors[0]
+        own = [m for m in markets if m.tn.name == tn.name]
+        assert len(neighbor._coordination) == 2 and all(neighbor.is_converged(m) for m in own)
+        # Forgetting one market's state leaves the other's untouched.
+        neighbor.reset_coordination(own[0])
+        assert not neighbor.is_converged(own[0]) and neighbor.is_signal_due(own[0])
+        assert neighbor.is_converged(own[1]) and not neighbor.is_signal_due(own[1])
+
+
+def test_rolling_markets_open_at_the_prior_cleared_price(clock):
+    """Overlapping markets of one series: the second market negotiates on its own and starts from the first market's
+    cleared prices for the intervals they share."""
+    rolling = dict(SERIES, intervals_to_clear=3)
+    campus = build_node_multi('campus', asset_curve=[[INF, 0.0, -100.0, True]], asset_limits=(-100.0, 0.0),
+                              neighbors=[dict(peer='city', curve=[[0.04, 0.0, 0.0, True], [0.08, 0.0, 1000.0, True]],
+                                              limits=(0.0, 1000.0), up_or_down='upstream')])
+    city = build_node_multi('city', asset_curve=[[0.04, 0.0, 0.0, True], [0.08, 0.0, 1000.0, True]],
+                            asset_limits=(0.0, 1000.0),
+                            neighbors=[dict(peer='campus', curve=[[INF, 0.0, -50.0, True]], limits=(-1000.0, 0.0),
+                                            up_or_down='downstream')])
+    for tn in (campus, city):
+        tn.market_series = [MarketSeries(transactive_node=tn, market_class=ConsensusMarket, **rolling)]
+    campus.connect_peer(city)
+    city.connect_peer(campus)
+    all_nodes = [campus, city]
+    first = [market_of(tn) for tn in all_nodes]
+    t1 = first[0].transition_times
+    assert len(list(first[0].time_intervals)) == 3
+
+    assert negotiate(all_nodes, first, clock, t1) is not None
+    for m in first:
+        assert all(p == pytest.approx(0.044, abs=1e-6) for p in m.marginal_prices.values)
+    # The series spawned the second market when the first became Active; it overlaps the first on two intervals.
+    second = [tn.market_series[0].newest_market for tn in all_nodes]
+    assert all(s is not f for s, f in zip(second, first))
+    shared = {ti.start_time for ti in first[0].time_intervals} & {ti.start_time for ti in second[0].time_intervals}
+    assert len(shared) == 2
+    t2 = second[0].transition_times
+    assert t2.negotiation > t1.market_lead
+
+    # Move the first market through MarketLead, DeliveryLead and into Delivery, then open the second negotiation.
+    for t in (t1.market_lead, t1.delivery_lead, t1.delivery):
+        step_both(all_nodes, clock, t)
+    assert all(m.market_state is MarketState.Delivery for m in first)
+    step_both(all_nodes, clock, t2.active)
+    step_both(all_nodes, clock, t2.negotiation)
+    assert all(m.market_state is MarketState.Negotiation for m in second)
+    # When the second market opened, the intervals it shares with the first carried the first's cleared prices, not the
+    # series default, and the new interval carried the default.
+    for m in second:
+        opened = m.opening_prices
+        for ti in m.time_intervals:
+            expected = 0.044 if ti.start_time in shared else SERIES['default_price']
+            assert opened[ti.start_time] == pytest.approx(expected, abs=1e-6), ti.name
+    for seconds in range(1, 8):
+        step_both(all_nodes, clock, t2.negotiation + timedelta(seconds=seconds))
+        if all(m._stateIsCompleted for m in second):
+            break
+    assert all(m._stateIsCompleted for m in second)
+    for m in second:
+        assert all(bool(v) for v in m.full_consensus.values)
+        assert all(p == pytest.approx(0.044, abs=1e-6) for p in m.marginal_prices.values)

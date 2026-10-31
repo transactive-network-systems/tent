@@ -42,6 +42,7 @@ under Contract DE-AC05-76RL01830
 """
 import json
 import logging
+from dataclasses import dataclass
 from copy import copy
 from datetime import datetime
 from typing import Union
@@ -55,6 +56,13 @@ from tent.utils.helpers import validate_bool
 from tent.utils.timer import Timer
 
 _log = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class CoordinationState:
+    """Outcome of Neighbor.check_for_convergence for one market."""
+    converged: bool
+    signal_due: bool
 
 
 class Neighbor(Entity):
@@ -109,8 +117,10 @@ class Neighbor(Entity):
         ##################################
         # Dynamically assigned attributes:
         ##################################
-        self.converged = False                                          # [boolean]: True if converged
-        self.signal_due = True                                          # [boolean]: a (revised) signal should be sent; see check_for_convergence
+        # Coordination state with this neighbor, per market: see check_for_convergence(), is_converged(), is_signal_due().
+        self._coordination: WeakKeyDictionary[Market, CoordinationState] = WeakKeyDictionary()
+        self._sent_sequence: WeakKeyDictionary[Market, int] = WeakKeyDictionary()   # last sequence sent, per market
+        self._revised_sequence: WeakKeyDictionary[Market, int] = WeakKeyDictionary()  # last REVISED sequence sent
         self.convergence_flags: Measurement = Measurement(self, MeasurementType.ConvergenceFlag, MeasurementUnit.Boolean, archive_now=False)
         self.prepared_signals: WeakKeyDictionary[Market, TransactiveSignal] = WeakKeyDictionary()  # Current signal, ready to send.
         self.last_received_signals: WeakKeyDictionary[Market, TransactiveSignal] = WeakKeyDictionary()  # Last records received.
@@ -123,59 +133,78 @@ class Neighbor(Entity):
 
     def check_for_convergence(self, market):
         """
-        Qualify the state of the coordination sub-problem with this transactive neighbor, per active time interval and
-        overall, by comparing the prepared, last sent and last received transactive signals for the market.
+        Qualify the coordination sub-problem with this transactive neighbor for one market, from the prepared, last sent
+        and last received signals. Two things are decided and recorded in the per-market CoordinationState:
 
-        Two things are decided for each interval and recorded:
+        - A signal is DUE (is_signal_due) when nothing has been sent yet; or local conditions changed so the prepared
+          signal differs from the sent one; or the neighbor, having seen this node's latest revised signal, still
+          disagrees at the balance point; or the neighbor's latest signal is revised and has not been answered. The
+          answer to a revised signal that changes nothing here is an acknowledgement: the same content resent with
+          revised=False, which the neighbor in turn need not answer. That is what ends the exchange.
+        - An interval is CONVERGED (convergence_flags, is_converged) when the neighbor has been heard from, has
+          acknowledged this node's latest revised signal (its in_reply_to is at least that sequence), agrees at the
+          balance point, and local conditions have not changed. A neighbor that never replied is not in consensus.
 
-        - whether a signal is DUE (self.signal_due): nothing has been sent yet; or a signal received after the last one
-          sent disagrees with it at the balance point; or local conditions have changed so that the prepared signal
-          differs from the one sent. This is the legacy "convergence flag" logic and it is what decides whether to send.
-        - whether the interval is CONVERGED (self.convergence_flags, self.converged): no signal is due AND the neighbor
-          has been heard from for this interval. A neighbor that never replied is not in consensus, however settled this
-          node's own position is.
-
-        Uses property convergence_threshold as the convergence criterion. Call only after the balancing and scheduling
-        sub-problems have been solved, so that the prepared signal is current.
+        The comparison threshold is convergence_threshold. Call only after the balancing and scheduling sub-problems
+        have been solved, so the prepared signal is current.
         """
         sent_signal = self.last_sent_signals.get(market)
         received_signal = self.last_received_signals.get(market)
         prepared_signal = self.prepared_signals.get(market)
+        latest_revised = self._revised_sequence.get(market)
+        acknowledged = (received_signal is not None and latest_revised is not None
+                        and received_signal.in_reply_to is not None and received_signal.in_reply_to >= latest_revised)
+        unanswered = (received_signal is not None and received_signal.revised and received_signal.sequence is not None
+                      and (sent_signal is None or sent_signal.in_reply_to is None
+                           or sent_signal.in_reply_to < received_signal.sequence))
         due_flags = []
         for time_interval in market.time_intervals:
-            # Find the TransactiveSignals in this indexed active time interval. Any of the three may not exist yet.
-            sent_time = sent_signal.signal_time if sent_signal else None
-            sent_signal_curve = sent_signal.get_by_interval(time_interval) if sent_signal else None
-            received_time = received_signal.signal_time if received_signal else None
-            received_signal_curve = received_signal.get_by_interval(time_interval) if received_signal else None
+            sent_curve = sent_signal.get_by_interval(time_interval) if sent_signal else None
+            received_curve = received_signal.get_by_interval(time_interval) if received_signal else None
             prepared_curve = prepared_signal.get_by_interval(time_interval) if prepared_signal else None
-            heard = received_signal_curve is not None and len(received_signal_curve) > 0
-
-            due = False
-            if not sent_signal_curve or sent_time is None:
-                # No signal has been sent in this time interval. This is the first criterion.
-                _log.debug(f"No signal sent yet for time interval {time_interval.name}. Enable send flag.")
-                due = True
-            elif (heard and received_time is not None and received_time >= sent_time  # same tick counts as after: a simulated clock may not advance
-                  and TransactiveSignal.balance_points_differ(sent_signal, received_signal, time_interval,
-                                                              self.convergence_threshold)):
-                # A signal has been received AFTER the last one was sent, and the two disagree significantly at the
-                # balance point: the neighbor sees a different exchange than this node does.
-                _log.debug(f"Received signal for time interval {time_interval.name} differs from sent signal.")
-                due = True
-            elif (prepared_curve is not None
-                  and TransactiveSignal.conditions_have_changed(prepared_signal, sent_signal, time_interval,
-                                                                self.convergence_threshold)):
-                # Local conditions have changed enough since the last send that a revised signal should go out.
+            heard = received_curve is not None and len(received_curve) > 0
+            never_sent = not sent_curve
+            local_change = (not never_sent and prepared_curve is not None
+                            and TransactiveSignal.conditions_have_changed(prepared_signal, sent_signal, time_interval,
+                                                                          self.convergence_threshold))
+            disagree = (heard and acknowledged
+                        and TransactiveSignal.balance_points_differ(sent_signal, received_signal, time_interval,
+                                                                    self.convergence_threshold))
+            due = never_sent or local_change or disagree or unanswered
+            if never_sent:
+                _log.debug(f"No signal sent yet for time interval {time_interval.name}.")
+            elif local_change:
                 _log.debug(f"Local conditions have changed for time interval {time_interval.name}.")
-                due = True
+            elif disagree:
+                _log.debug(f"{self.name} disagrees at the balance point for time interval {time_interval.name}.")
+            elif unanswered:
+                _log.debug(f"{self.name}'s revised signal {received_signal.sequence} has not been answered.")
             due_flags.append(due)
-            self.convergence_flags.update(time_interval, bool(heard and not due))
+            self.convergence_flags.update(time_interval, bool(heard and acknowledged and not disagree and not local_change))
 
-        self.signal_due = any(due_flags)
-        self.converged = all(bool(self.convergence_flags.get_by_interval(ti).value) for ti in market.time_intervals)
+        state = CoordinationState(
+            converged=all(bool(self.convergence_flags.get_by_interval(ti).value) for ti in market.time_intervals),
+            signal_due=any(due_flags))
+        self._coordination[market] = state
         _log.debug(f"Convergence flags for {self.name} are {self.convergence_flags.log_report}")
-        _log.debug(f"Convergence flag for {self.name} is {self.converged}; signal due: {self.signal_due}.")
+        _log.debug(f"Coordination with {self.name} in {market.name}: converged {state.converged}; "
+                   f"signal due: {state.signal_due}.")
+
+    def is_converged(self, market) -> bool:
+        """True when every active interval of the market is converged with this neighbor (see check_for_convergence)."""
+        state = self._coordination.get(market)
+        return state.converged if state else False
+
+    def is_signal_due(self, market) -> bool:
+        """True when a (revised) transactive signal should be sent to this neighbor for the market."""
+        state = self._coordination.get(market)
+        return state.signal_due if state else True
+
+    def reset_coordination(self, market) -> None:
+        """Forget the coordination state for a market, e.g. when its negotiation (re)starts."""
+        self._coordination.pop(market, None)
+        self._sent_sequence.pop(market, None)
+        self._revised_sequence.pop(market, None)
 
     # SEALED - DO NOT MODIFY
     # Have object schedule its power in active time intervals
@@ -499,6 +528,20 @@ class Neighbor(Entity):
             return
 
         # Publish the signal (if TN subclass implements messaging).
+        # Number the signal and say what it answers. It is revised unless its content is unchanged from the previous
+        # signal sent for this market, in which case it is only an acknowledgement (see check_for_convergence).
+        previous = self.last_sent_signals.get(market)
+        received = self.last_received_signals.get(market)
+        revised = previous is None or any(
+            TransactiveSignal.conditions_have_changed(prepared_signal, previous, ti, self.convergence_threshold)
+            for ti in market.time_intervals)
+        sequence = self._sent_sequence.get(market, 0) + 1
+        self._sent_sequence[market] = sequence
+        if revised:
+            self._revised_sequence[market] = sequence
+        prepared_signal.sequence = sequence
+        prepared_signal.in_reply_to = received.sequence if received is not None else None
+        prepared_signal.revised = revised
         self.tn.issue_signal(self.name,
                              prepared_signal.generate_signal(self.scheduled_powers if include_schedule else None))
 
@@ -506,6 +549,8 @@ class Neighbor(Entity):
         # sent signal must be an independent copy or the convergence check would compare a signal with itself.
         sent_signal = prepared_signal.snapshot()
         self.last_sent_signals[market] = sent_signal
+        if (state := self._coordination.get(market)) is not None:
+            self._coordination[market] = CoordinationState(converged=state.converged, signal_due=False)  # just sent
         sent_signal.archive()
         # Return transactive records to allow further processing by subclasses.
         return sent_signal

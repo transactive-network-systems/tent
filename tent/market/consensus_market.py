@@ -91,6 +91,7 @@ class ConsensusMarket(Market):
         self.balance_iterations: int = 0        # iterations the last local balancing pass took
         self.negotiation_passes: int = 0        # while_in_negotiation passes that rebalanced
         self._signals_seen: dict = {}           # neighbor id -> signal_time of the last received signal processed
+        self.opening_prices: dict = {}          # interval start -> price in force when negotiation opened
 
     # ------------------------------------------------------------------------------------------------ helpers
     @property
@@ -175,9 +176,9 @@ class ConsensusMarket(Market):
         for neighbor in self.transactive_neighbors:
             neighbor.prep_transactive_signal(self)
             neighbor.check_for_convergence(self)
-            if neighbor.signal_due:
+            if neighbor.is_signal_due(self):
                 neighbor.send_transactive_signal(self, include_schedule=True)
-            if not neighbor.converged:
+            if not neighbor.is_converged(self):
                 all_converged = False
         return all_converged
 
@@ -198,9 +199,11 @@ class ConsensusMarket(Market):
     def transition_from_active_to_negotiation(self):
         _log.debug(f'MARKET: {self.name} STATE IS NOW TRANSITIONING: Active to Negotiation')
         self.check_marginal_prices()
+        # In a rolling series the prior market has cleared by now: start from its prices where the intervals overlap.
+        self.opening_prices = self.refresh_prices_from_prior_market()
         self._signals_seen = {}
         for neighbor in self.transactive_neighbors:
-            neighbor.converged = False
+            neighbor.reset_coordination(self)
         if self.balance_locally():
             self.negotiation_passes += 1
             # Open the negotiation: every transactive neighbor hears this node's position.

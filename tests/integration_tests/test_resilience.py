@@ -129,8 +129,8 @@ def test_neighbor_communication_failure():
         if hasattr(neighbor, 'check_for_convergence'):
             neighbor.check_for_convergence(market)
             print(f"  ✓ check_for_convergence() executed without crash")
-            print(f"  Converged: {neighbor.converged}")
-            print(f"  Interpretation: {'Timeout - proceeding anyway' if not neighbor.converged else 'Converged (unexpected)'}")
+            print(f"  Converged: {neighbor.is_converged(market)}")
+            print(f"  Interpretation: {'Timeout - proceeding anyway' if not neighbor.is_converged(market) else 'Converged (unexpected)'}")
         else:
             print(f"  ⚠️  No check_for_convergence method")
     except Exception as e:
@@ -144,7 +144,7 @@ def test_neighbor_communication_failure():
     print(f"Advancing market to MarketLead (after negotiation timeout)...")
     
     # Force convergence to allow state transition (simulating timeout)
-    original_converged = neighbor.converged
+    original_converged = neighbor.is_converged(market)
     market.converged = True  # Market-level convergence override
     
     try:
@@ -284,7 +284,7 @@ def test_negotiation_timeout_enforcement():
     
     if transactive_neighbors:
         for neighbor in transactive_neighbors:
-            neighbor.converged = False
+            neighbor.reset_coordination(market)
             print(f"  {neighbor.name}: converged=False (simulating oscillation)")
     
     market.converged = False
@@ -399,7 +399,7 @@ def test_malformed_neighbor_signal():
         neighbor.check_for_convergence(market)
         
         print(f"  ✓ Empty signal handled without crash")
-        print(f"  Converged: {neighbor.converged}")
+        print(f"  Converged: {neighbor.is_converged(market)}")
     except Exception as e:
         print(f"  ✗ EXCEPTION: {type(e).__name__}: {e}")
     
@@ -412,7 +412,7 @@ def test_malformed_neighbor_signal():
         neighbor.check_for_convergence(market)
         
         print(f"  ✓ None signal handled without crash")
-        print(f"  Converged: {neighbor.converged}")
+        print(f"  Converged: {neighbor.is_converged(market)}")
     except Exception as e:
         print(f"  ✗ EXCEPTION: {type(e).__name__}: {e}")
     
@@ -425,7 +425,7 @@ def test_malformed_neighbor_signal():
         neighbor.check_for_convergence(market)
         
         print(f"  ✓ Missing signal handled without crash")
-        print(f"  Converged: {neighbor.converged}")
+        print(f"  Converged: {neighbor.is_converged(market)}")
     except Exception as e:
         print(f"  ✗ EXCEPTION: {type(e).__name__}: {e}")
     

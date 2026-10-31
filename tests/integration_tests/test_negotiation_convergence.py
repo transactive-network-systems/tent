@@ -105,7 +105,7 @@ def test_neighbor_convergence_criteria():
         print(f"  Has convergence_threshold: {hasattr(neighbor, 'convergence_threshold')}")
         print(f"  Threshold value: {neighbor.convergence_threshold}")
         print(f"  Has converged flag: {hasattr(neighbor, 'converged')}")
-        print(f"  Initial converged state: {neighbor.converged}")
+        print(f"  Initial converged state: {neighbor.is_converged(market)}")
         print(f"  Has convergence_flags: {hasattr(neighbor, 'convergence_flags')}")
         print(f"  Has check_for_convergence method: {hasattr(neighbor, 'check_for_convergence')}")
     
@@ -418,7 +418,7 @@ def test_signal_stability_convergence():
     neighbor.check_for_convergence(market)
     
     print(f"After first send:")
-    print(f"  Converged: {neighbor.converged}")
+    print(f"  Converged: {neighbor.is_converged(market)}")
     
     # Simulate receiving a response that's very similar to what we sent
     # (In real system, this would come from actual neighbor response)
@@ -467,8 +467,8 @@ def test_signal_stability_convergence():
     # Check convergence after conditions are stable
     neighbor.check_for_convergence(market)
     print(f"\nConvergence after stability check:")
-    print(f"  Converged: {neighbor.converged}")
-    print(f"  Interpretation: {'Signals stable, negotiation complete' if neighbor.converged else 'More iterations needed'}")
+    print(f"  Converged: {neighbor.is_converged(market)}")
+    print(f"  Interpretation: {'Signals stable, negotiation complete' if neighbor.is_converged(market) else 'More iterations needed'}")
     
     print("\n✅ Signal stability convergence validated!")
     print("\n🎉 Test complete!")

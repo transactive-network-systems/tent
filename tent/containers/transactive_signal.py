@@ -62,13 +62,21 @@ _log = logging.getLogger(__name__)
 class TransactiveSignal(SDMeasurement):
     PROTOCOL_VERSION = 1.0
 
-    def __init__(self, market, neighbor, direction: SignalDirection | None = None, signal_time=None, **kwargs):
+    def __init__(self, market, neighbor, direction: SignalDirection | None = None, signal_time=None,
+                 sequence: int | None = None, in_reply_to: int | None = None, revised: bool = True, **kwargs):
         self.market: Market = market
         self.neighbor: Neighbor = neighbor
         if direction is not None and not isinstance(direction, SignalDirection):
             raise TypeError(f'direction must be a SignalDirection, not {direction!r}')
         self.direction: SignalDirection | None = direction
         self.signal_time: datetime | None = signal_time
+        # Acknowledgement fields (see Neighbor.check_for_convergence). sequence numbers the signals one node sends to one
+        # neighbor for one market; in_reply_to is the sequence of the last signal received from that neighbor when this
+        # one was prepared; revised is False when the content is unchanged from the sender's previous signal, i.e. the
+        # signal is only an acknowledgement and needs no reply.
+        self.sequence: int | None = sequence
+        self.in_reply_to: int | None = in_reply_to
+        self.revised: bool = bool(revised)
         self.__balance_vertices: WeakKeyDictionary[TimeInterval, Vertex] = WeakKeyDictionary()
         super(TransactiveSignal, self).__init__(source=neighbor, measurement_type=MeasurementType.SignalVertex,
                                                 measurement_unit=MeasurementUnit.kW, archive_now=False)
@@ -113,7 +121,8 @@ class TransactiveSignal(SDMeasurement):
     def snapshot(self) -> Self:
         """An independent copy of this signal (new id, copied curves and vertices, same balance points and header)."""
         clone = TransactiveSignal(market=self.market, neighbor=self.neighbor, direction=self.direction,
-                                  signal_time=self.signal_time, archive_now=False)
+                                  signal_time=self.signal_time, sequence=self.sequence, in_reply_to=self.in_reply_to,
+                                  revised=self.revised, archive_now=False)
         for ti, sd_curve in self.all:
             copied = [copy(v) for v in sd_curve.vertices]
             clone.update(ti, copied, archive=False, replace=True)
@@ -151,6 +160,9 @@ class TransactiveSignal(SDMeasurement):
             'neighbor': self.neighbor.tn.name,
             'protocol_version': self.PROTOCOL_VERSION,
             'signal_time': self.signal_time.isoformat(),
+            'sequence': self.sequence,
+            'in_reply_to': self.in_reply_to,
+            'revised': self.revised,
             'unit': self.unit.name,
             'intervals': intervals
         }
@@ -174,8 +186,11 @@ class TransactiveSignal(SDMeasurement):
             if not (neighbor := tn.get_neighbors_by_attribute('name', message['neighbor'], first_only=True)):
                 _log.warning(f'Unable to find valid neighbor "{neighbor}" from received transactive signal.')
             signal_time = datetime.fromisoformat(message['signal_time']) if message.get('signal_time') else None
+            in_reply_to = message['in_reply_to']
             signal = cls(market=market, neighbor=neighbor, direction=SignalDirection.received,
-                         signal_time=signal_time, measurement_unit=message['unit'])
+                         signal_time=signal_time, sequence=int(message['sequence']),
+                         in_reply_to=None if in_reply_to is None else int(in_reply_to),
+                         revised=bool(message['revised']), measurement_unit=message['unit'])
         except KeyError as e:
             _log.warning(f'Missing required field in transactive signal: {e}.')
             return
@@ -249,13 +264,22 @@ class TransactiveSignal(SDMeasurement):
         :param: threshold: float - relative error beyond which the points differ significantly.
         :returns: boolean - true if the relative distance between the scheduled points exceeds the threshold.
         """
-        sent: Vertex = sent_signal.balance_point(time_interval)
-        received: Vertex = received_signal.balance_point(time_interval)
+        sent_curve = sent_signal.get_by_interval(time_interval)
+        received_curve = received_signal.get_by_interval(time_interval)
+        if sent_curve is None or received_curve is None or len(sent_curve) == 0 or len(received_curve) == 0:
+            return True  # one side has nothing for this interval: they cannot agree
+        no_flexibility = len(sent_curve) == 1 or len(received_curve) == 1
+        # A lone vertex is its own balance point; otherwise a signal without a marked balance point cannot be compared.
+        sent: Vertex | None = sent_signal.balance_point(time_interval) or (list(sent_curve.vertices)[0]
+                                                                            if len(sent_curve) == 1 else None)
+        received: Vertex | None = received_signal.balance_point(time_interval) or (
+            list(received_curve.vertices)[0] if len(received_curve) == 1 else None)
+        if sent is None or received is None:
+            return True
 
         # Determine whether there are a mixture of received and sent or calculated signals.
         are_received = [s.direction is SignalDirection.received for s in [sent_signal, received_signal]]
-        mixed_direction = True if any(are_received) and not all(are_received) else False
-        no_flexibility = True if len(sent_signal) == 1 or len(received_signal) == 1 else False
+        mixed_direction = any(are_received) and not all(are_received)
 
         return cls._diff_exceeds_threshold(received, sent, threshold, no_flexibility, mixed_direction)
 
@@ -323,6 +347,9 @@ class TransactiveSignal(SDMeasurement):
         record.update({
             "direction": self.direction,
             "protocol_version": self.PROTOCOL_VERSION,
+            "sequence": self.sequence,
+            "in_reply_to": self.in_reply_to,
+            "revised": self.revised,
             "market_id": self.market.id,
             "signal_time": self.signal_time.isoformat() if self.signal_time else None
         })
@@ -339,6 +366,9 @@ class TransactiveSignal(SDMeasurement):
                     {"name": "id", "type": "Uuid", "foreign_key": "measurement.id", "kwargs": {"primary_key": True}},
                     {"name": "direction", "enumeration": "SignalDirection"},
                     {"name": "protocol_version", "type": "Float"},
+                    {"name": "sequence", "type": "Integer", "kwargs": {"nullable": True}},
+                    {"name": "in_reply_to", "type": "Integer", "kwargs": {"nullable": True}},
+                    {"name": "revised", "type": "Boolean", "kwargs": {"nullable": True}},
                     {"name": "market_id", "foreign_key": "market.id"},
                     {"name": "signal_time", "type": "DateTime"}
                 ]

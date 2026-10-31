@@ -221,11 +221,12 @@ class TransactiveNode(Archivable):
         return self.get_objects_by_attribute(self.market_series, attribute, match, first_only)
 
     def get_market_by_name(self, name):
+        """The market with exactly this name, from any series. (Market names join the series name's words with
+        underscores, so the series name itself cannot be used to narrow the search.)"""
         for series in self.market_series:
-            if series.name in name:
-                matches = [m for m in series if m.name == name]
-                if matches:
-                    return matches[0]
+            for market in series:
+                if market.name == name:
+                    return market
         return None
 
     def get_assets_by_attribute(self, attribute, match, first_only=False):

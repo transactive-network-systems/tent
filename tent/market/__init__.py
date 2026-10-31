@@ -875,6 +875,23 @@ class Market(Component):
                 # METHOD 6: If all the above logic fails to assign the marginal price, assign as None.
                 self.marginal_prices.update(time_interval, None)
 
+    def refresh_prices_from_prior_market(self) -> dict:
+        """
+        Re-seed this market's marginal prices from the prior market in the series for the intervals they share.
+        check_marginal_prices() runs at construction, which for a rolling series is before the prior market has cleared,
+        so the prices it copied were the prior market's own opening prices. Call this when negotiation starts and the
+        prior market has cleared. Intervals the prior market does not cover keep their current price. Returns the
+        prices in force after the refresh, keyed by interval start time.
+        """
+        prior = self.prior_market_in_series
+        if prior is not None:
+            for time_interval in self.time_intervals:
+                price = self._extract_price_from_other_market(prior, time_interval)
+                if price is not None:
+                    self.marginal_prices.update(time_interval, price)
+        return {ti.start_time: self.marginal_prices.get_by_interval(ti).value for ti in self.time_intervals
+                if self.marginal_prices.get_by_interval(ti) is not None}
+
     def schedule(self):
         """
         Process called to

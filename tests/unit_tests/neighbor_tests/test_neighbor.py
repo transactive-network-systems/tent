@@ -43,7 +43,7 @@ def test_neighbor_initialization_basic():
     assert neighbor.transactive is False  # default
     assert neighbor.convergence_threshold == 0.05  # default
     assert neighbor.up_or_down == Direction.unknown  # default
-    assert neighbor.converged is False
+    assert neighbor._coordination == {} or len(neighbor._coordination) == 0
     assert isinstance(neighbor.convergence_flags, Measurement)
 
 

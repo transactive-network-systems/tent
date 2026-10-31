@@ -114,14 +114,14 @@ def test_check_for_convergence():
     """
     Test convergence checking between sent and received transactive signals.
     
-    CASES:
-    1. No signals have been sent yet
-    2. Identical sent and received signals (converged)
-    3. Signals differ by more than threshold (not converged)
-    4. No signal received since last send
-    5. Identical prepared and sent signals
-    6. Multiple matched signal records
-    7. Signals differ significantly with multiple points
+    CASES (acknowledgement protocol: sequence, in_reply_to, revised):
+    1. Nothing sent yet
+    2. Neighbor replied to the latest revised signal and agrees; the reply itself still needs an acknowledgement
+    3. Acknowledgement sent: nothing due
+    4. Reply disagrees beyond the threshold
+    5. New revised signal not yet acknowledged
+    6. Acknowledged with an unrevised reply
+    7. Local conditions change the flexibility vertices
     """
     print('  Running Neighbor.test_check_for_convergence()')
 
@@ -160,7 +160,6 @@ def test_check_for_convergence():
         default_vertices=[{"price": float("inf"), "quantity": 0.0, "cost": 0.0}],
         convergence_threshold=0.01
     )
-    test_model.converged = True  # Preset to test changes
 
     # Create test market with time interval
     test_market = DummyMarket("ConvergenceTestMarket", tn.data_manager)
@@ -168,158 +167,66 @@ def test_check_for_convergence():
     time_interval = TimeInterval(test_market, one_hour, dt)
     test_market.time_intervals = [time_interval]
 
-    # TEST 1: No signals have been sent
-    print('    Test 1: No signals sent yet')
-    
-    # Initialize empty signal dictionaries
-    test_model.last_sent_signals[test_market] = TransactiveSignal(test_market, test_model)
-    test_model.last_received_signals[test_market] = TransactiveSignal(test_market, test_model)
-    test_model.prepared_signals[test_market] = TransactiveSignal(test_market, test_model)
-    
-    test_model.check_for_convergence(test_market)
-    
-    convergence_flag = test_model.convergence_flags.get_by_interval(time_interval)
-    assert convergence_flag is not None, '- convergence flag should exist'
-    assert convergence_flag.value is False, '- convergence flag should be false when no signal sent'
-    assert test_model.converged is False, '- overall convergence should be false'
-    print('    ✓ Not converged (no signals sent)')
+    def signal(direction, quantity, vertices=None, sequence=None, in_reply_to=None, revised=True):
+        """A signal for the one interval with its balance point marked (a lone vertex is its own balance point)."""
+        sig = TransactiveSignal(test_market, test_model, direction=direction, signal_time=dt, sequence=sequence,
+                                in_reply_to=in_reply_to, revised=revised)
+        balance = Vertex(price=0.05, quantity=quantity, cost=0.0)
+        sig.update(time_interval, [balance] + list(vertices or []))
+        sig._TransactiveSignal__balance_vertices[time_interval] = balance
+        return sig
 
-    # TEST 2: Identical sent and received signals (should converge)
-    print('    Test 2: Identical sent and received signals')
-    
-    test_model.converged = False  # Reset to ensure test changes status
-    
-    # Create matching signals (sent exports +100, received imports -100)
-    sent_signal = TransactiveSignal(test_market, test_model, signal_time=dt, direction=SignalDirection.sent)
-    sent_vertex = Vertex(price=0.05, quantity=100.0, cost=0.0)
-    sent_signal.update(time_interval, [sent_vertex])
-    # Mark the vertex as the balance point
-    sent_signal._TransactiveSignal__balance_vertices[time_interval] = sent_vertex
-    test_model.last_sent_signals[test_market] = sent_signal
-    
-    received_signal = TransactiveSignal(test_market, test_model, signal_time=dt + one_hour, direction=SignalDirection.received)
-    received_vertex = Vertex(price=0.05, quantity=-100.0, cost=0.0)
-    received_signal.update(time_interval, [received_vertex])
-    # Mark the vertex as the balance point  
-    received_signal._TransactiveSignal__balance_vertices[time_interval] = received_vertex
-    test_model.last_received_signals[test_market] = received_signal
-    
-    # Prepared signal matches sent (no change)
-    test_model.prepared_signals[test_market] = sent_signal
-    
-    test_model.check_for_convergence(test_market)
-    
-    convergence_flag = test_model.convergence_flags.get_by_interval(time_interval)
-    assert convergence_flag.value is True, '- convergence flag should be true for matching signals'
-    assert test_model.converged is True, '- overall convergence should be true'
-    print('    ✓ Converged (signals match within threshold)')
+    def check():
+        test_model.check_for_convergence(test_market)
+        flag = test_model.convergence_flags.get_by_interval(time_interval)
+        assert flag is not None, '- convergence flag should exist'
+        return bool(flag.value), test_model.is_converged(test_market), test_model.is_signal_due(test_market)
 
-    # TEST 3: Signals differ beyond threshold (should not converge)
-    print('    Test 3: Signals differ beyond convergence threshold')
-    
-    # Modify received signal power by more than threshold (2% change)
-    received_vertex_modified = Vertex(price=0.05, quantity=-102.0, cost=0.0)
-    test_model.last_received_signals[test_market].update(
-        time_interval, [received_vertex_modified], archive=False, replace=True
-    )
-    test_model.last_received_signals[test_market]._TransactiveSignal__balance_vertices[time_interval] = received_vertex_modified
-    
-    test_model.check_for_convergence(test_market)
-    
-    convergence_flag = test_model.convergence_flags.get_by_interval(time_interval)
-    assert convergence_flag.value is False, '- convergence flag should be false when signals differ'
-    assert test_model.converged is False, '- overall convergence should be false'
-    print('    ✓ Not converged (signals differ by >1%)')
+    # CASE 1: nothing sent, nothing received -> not converged, a signal is due.
+    test_model.prepared_signals[test_market] = signal(SignalDirection.sent, 100.0)
+    assert check() == (False, False, True)
 
-    # TEST 4: No signal received since last send (edge case)
-    print('    Test 4: No signal received since last send')
-    
-    # Make sent signal newer than received
-    test_model.last_sent_signals[test_market].signal_time = dt + one_hour
-    test_model.last_received_signals[test_market].signal_time = dt
-    
-    test_model.check_for_convergence(test_market)
-    
-    convergence_flag = test_model.convergence_flags.get_by_interval(time_interval)
-    assert convergence_flag.value is True, '- should be converged when no new received signal'
-    assert test_model.converged is True, '- overall convergence should be true'
-    print('    ✓ Converged (no new received signal to compare)')
+    # CASE 2: this node sent signal 1 (revised); the neighbor replied to it (in_reply_to=1) and agrees at the balance
+    # point (sent exports +100, received imports -100). The reply is revised and unanswered, so an acknowledgement is due,
+    # but the interval is converged.
+    test_model._revised_sequence[test_market] = 1
+    test_model._sent_sequence[test_market] = 1
+    test_model.last_sent_signals[test_market] = signal(SignalDirection.sent, 100.0, sequence=1)
+    test_model.last_received_signals[test_market] = signal(SignalDirection.received, -100.0, sequence=1, in_reply_to=1)
+    assert check() == (True, True, True)
 
-    # TEST 5: Prepared signal matches sent signal
-    print('    Test 5: Prepared signal identical to sent signal')
-    
-    # Reset signal times for this test
-    old_time = dt - timedelta(hours=2)
-    test_model.last_sent_signals[test_market].signal_time = old_time
-    test_model.last_received_signals[test_market].signal_time = old_time - one_hour
-    
-    # Prepared signal matches sent (no conditions changed)
-    prepared_signal = TransactiveSignal(test_market, test_model)
-    prepared_vertex = Vertex(price=0.05, quantity=100.0, cost=0.0)
-    prepared_signal.update(time_interval, [prepared_vertex])
-    prepared_signal._TransactiveSignal__balance_vertices[time_interval] = prepared_vertex
-    test_model.prepared_signals[test_market] = prepared_signal
-    
-    test_model.check_for_convergence(test_market)
-    
-    convergence_flag = test_model.convergence_flags.get_by_interval(time_interval)
-    assert convergence_flag.value is True, '- should be converged when prepared matches sent'
-    assert test_model.converged is True, '- overall convergence should be true'
-    print('    ✓ Converged (prepared signal matches sent)')
+    # CASE 3: after the acknowledgement (sequence 2, revised=False, in_reply_to=1) nothing is due.
+    test_model._sent_sequence[test_market] = 2
+    test_model.last_sent_signals[test_market] = signal(SignalDirection.sent, 100.0, sequence=2, in_reply_to=1,
+                                                       revised=False)
+    assert check() == (True, True, False)
 
-    # TEST 6: Multiple matched signal vertices
-    print('    Test 6: Multiple vertices in matching signals')
-    
-    # Create signals with multiple vertices that match
-    multi_sent = TransactiveSignal(test_market, test_model, signal_time=old_time)
-    balance_vertex = Vertex(price=0.05, quantity=100.0, cost=0.0)
-    multi_vertices = [
-        balance_vertex,
-        Vertex(price=0.049, quantity=90.0, cost=0.0),
-        Vertex(price=0.051, quantity=110.0, cost=0.0)
-    ]
-    multi_sent.update(time_interval, multi_vertices)
-    multi_sent._TransactiveSignal__balance_vertices[time_interval] = balance_vertex
-    test_model.last_sent_signals[test_market] = multi_sent
-    
-    # Prepared signal matches sent
-    multi_prepared = TransactiveSignal(test_market, test_model)
-    multi_prepared.update(time_interval, multi_vertices)
-    multi_prepared._TransactiveSignal__balance_vertices[time_interval] = balance_vertex
-    test_model.prepared_signals[test_market] = multi_prepared
-    
-    test_model.check_for_convergence(test_market)
-    
-    convergence_flag = test_model.convergence_flags.get_by_interval(time_interval)
-    assert convergence_flag.value is True, '- should be converged with multiple matching vertices'
-    assert test_model.converged is True, '- overall convergence should be true'
-    print('    ✓ Converged (multiple vertices match)')
+    # CASE 4: the neighbor's reply disagrees beyond the 1% threshold -> not converged, a revised signal is due.
+    test_model.last_received_signals[test_market] = signal(SignalDirection.received, -102.0, sequence=2, in_reply_to=1)
+    assert check() == (False, False, True)
 
-    # TEST 7: Signals differ significantly with multiple vertices
-    print('    Test 7: Multiple vertices with significant difference')
-    
-    # Modify prepared signal to differ from sent
-    # The balance points agree (100.0) but a flexibility vertex moved from 90 to 85 kW, more than the 1% threshold: the
-    # neighbor must be told, so conditions have changed and the interval is not converged. (An earlier revision of this
-    # test asserted the opposite, to match an inverted comparison in TransactiveSignal.conditions_have_changed that has
-    # since been fixed.)
-    diff_prepared = TransactiveSignal(test_market, test_model)
-    diff_balance_vertex = Vertex(price=0.05, quantity=100.0, cost=0.0)
-    diff_vertices = [
-        diff_balance_vertex,
-        Vertex(price=0.049, quantity=85.0, cost=0.0),  # Changed from 90
-        Vertex(price=0.051, quantity=110.0, cost=0.0)
-    ]
-    diff_prepared.update(time_interval, diff_vertices)
-    diff_prepared._TransactiveSignal__balance_vertices[time_interval] = diff_balance_vertex
-    test_model.prepared_signals[test_market] = diff_prepared
-    
-    test_model.check_for_convergence(test_market)
-    
-    convergence_flag = test_model.convergence_flags.get_by_interval(time_interval)
-    assert convergence_flag.value is False, '- a flexibility vertex moved beyond the threshold: a revised signal is due'
-    assert test_model.converged is False, '- overall convergence should be false'
-    assert test_model.signal_due is True
+    # CASE 5: this node sent a new revised signal (3) that the neighbor has not acknowledged yet (its last reply answers
+    # 1). Whatever the stale reply says, the interval is not converged, and nothing is due until the neighbor answers.
+    test_model._sent_sequence[test_market] = 3
+    test_model._revised_sequence[test_market] = 3
+    test_model.last_sent_signals[test_market] = signal(SignalDirection.sent, 100.0, sequence=3, in_reply_to=2)
+    test_model.last_received_signals[test_market] = signal(SignalDirection.received, -100.0, sequence=2, in_reply_to=1)
+    assert check() == (False, False, False)
+
+    # CASE 6: the neighbor acknowledges 3 with an unrevised signal that agrees -> converged, nothing due.
+    test_model.last_received_signals[test_market] = signal(SignalDirection.received, -100.0, sequence=3, in_reply_to=3,
+                                                           revised=False)
+    assert check() == (True, True, False)
+
+    # CASE 7: local conditions change. The prepared signal's flexibility differs from the sent one (a vertex moved from
+    # 90 to 85 kW, more than the threshold) although the balance points agree: a revised signal is due, not converged.
+    flex = [Vertex(price=0.049, quantity=90.0, cost=0.0), Vertex(price=0.051, quantity=110.0, cost=0.0)]
+    test_model.last_sent_signals[test_market] = signal(SignalDirection.sent, 100.0, flex, sequence=3, in_reply_to=2)
+    test_model.prepared_signals[test_market] = signal(SignalDirection.sent, 100.0, flex)
+    assert check() == (True, True, False), 'identical flexibility: still converged'
+    moved = [Vertex(price=0.049, quantity=85.0, cost=0.0), Vertex(price=0.051, quantity=110.0, cost=0.0)]
+    test_model.prepared_signals[test_market] = signal(SignalDirection.sent, 100.0, moved)
+    assert check() == (False, False, True)
 
     # Success
     print('  ✅ test_check_for_convergence() ran to completion.\n')
@@ -752,6 +659,9 @@ def test_receive_transactive_signal():
         'neighbor': test_model.name,  # The neighbor sending this signal
         'protocol_version': 1,
         'signal_time': dt.isoformat(),
+        'sequence': 1,
+        'in_reply_to': None,
+        'revised': True,
         'unit': 4,  # MeasurementUnit.kW value
         'intervals': {
             time_interval.start_time.isoformat(): {
