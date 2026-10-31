@@ -43,7 +43,6 @@ under Contract DE-AC05-76RL01830
 
 import logging
 
-from collections import defaultdict
 from sortedcontainers import SortedList, SortedSet
 from typing import TYPE_CHECKING
 from weakref import proxy
@@ -598,21 +597,7 @@ class Market(Component):
 
         # Tell Local Assets it is time to actuate.
         self._actuate_assets()
-        # self.balanced_price_publish() # TODO: Is this something that should still exist?
         return None
-
-    def balanced_price_publish(self):  # TODO: Should this be replaced with archival functionality?
-        scheduled_powers = defaultdict(dict)
-        for entity in self.tn.neighbors + self.tn.local_assets:
-            for time_interval, scheduled_power in entity.scheduled_powers.all:
-                if time_interval.market is self:
-                    scheduled_powers[time_interval.start_time.isoformat()][entity.name] = scheduled_power.value
-        self.tn.publish(
-            'balanced_price_record', {
-                'tnt_market_name': self.name,
-                'balanced_prices': {k.start_time.isoformat(): v.value for k, v in self.marginal_prices.all},
-                'schedule_powers': scheduled_powers
-            })
 
     def _actuate_assets(self):
         for local_asset in self.tn.local_assets:
