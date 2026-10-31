@@ -63,13 +63,17 @@ Under the state machine
   balance point), record consensus (none yet).
 - ``while_in_negotiation`` (every tick): if any neighbor's signal arrived since the last pass, or the local problem is
   not balanced, balance locally. Then for each transactive neighbor prepare the signal, check convergence, and send
-  only when a signal is due. When every neighbor is converged the state is complete.
-- ``on_signal_received(neighbor)``: a reply that arrives after the market declared consensus reopens the state, so the
-  next tick evaluates the new information.
+  only when a signal is due. Negotiation is never marked complete before the market-lead time, so a signal or a local
+  change that arrives late in the window is still acted on. At the market-lead time the state completes cleanly when
+  full consensus holds; otherwise the state machine's timeout moves the market on with a warning. (The matching engine
+  follows the same rule, so orders submitted late in the window are still matched.)
+- ``while_in_market_lead``: collects, does not negotiate. A signal that was sent before the deadline but arrives after
+  it updates the neighbor's curve and the market rebalances locally once, so the schedule honours the neighbor's last
+  word, but nothing is sent. Consensus is recorded again. Signals arriving in DeliveryLead or later are logged and left
+  unused.
 - ``on_local_change(entity)``: a local asset or neighbor model whose conditions changed (forecast, meter, constraint)
-  calls this; the market rebalances and tells the neighbors if that changes anything.
-- ``transition_from_negotiation_to_market_lead``: record the final consensus state. The state machine's timeout moves
-  the market on at the market lead time whether or not consensus was reached, with a warning.
+  calls this; the market rebalances on its next tick and tells the neighbors if that changes anything.
+- ``transition_from_negotiation_to_market_lead``: record the final consensus state.
 
 Because a sent signal is compared with later prepared ones, ``Neighbor.send_transactive_signal`` keeps a snapshot
 (``TransactiveSignal.snapshot``) rather than the prepared object, which is revised in place on every pass.
@@ -82,8 +86,9 @@ message)`` to deliver a serialised signal to the neighbor named ``recipient`` an
 ``Neighbor.receive_transactive_signal`` is called with the serialised signals addressed to this node. Two naming
 conventions make routing work: a neighbor's ``name`` is the remote node's ``name``, and the remote node resolves the
 market by name, so every node that negotiates one consensus market must configure the series with the same ``name`` and
-timing so the spawned markets share names (``<series name>_<clearing time>``). Both nodes read the same ``Timer``,
-which in a simulation is the shared simulation clock. ``tests/mock_tn.py`` ``MockTN.connect_peer`` wires two in-process
+timing so the spawned markets share names (``<series name>_<clearing time>``). In a simulation every node should be configured with the same ``simulation_anchor_time`` (the real time at
+which simulated time equals ``simulation_start_time``), so that nodes started at different wall-clock times agree on the
+simulated time; a node started later joins the simulation in progress. ``tests/mock_tn.py`` ``MockTN.connect_peer`` wires two in-process
 nodes this way and ``tests/integration_tests/test_consensus_two_nodes.py`` drives them: a two-node exchange that
 reaches full consensus at the expected price and powers, a local change that reopens a settled negotiation, a peer that
 never replies, a three-node star that clears at one price, and a loss model under which the two sides price the exchange
