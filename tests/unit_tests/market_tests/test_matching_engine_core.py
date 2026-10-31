@@ -162,7 +162,7 @@ def test_market_supply_order_matches_standing_demand_limit(market):
     # Parentage is recorded through copies.
     assert demand_match.parent_order_id == standing.id
     assert supply_match.parent_order_id == aggressive.id
-    assert market._stateIsCompleted
+    assert not market._stateIsCompleted, 'negotiation stays open until the market-lead time'
 
     # ACTOR returns the leg an actor originated; BUYER/SELLER return every leg in which it holds that role.
     assert market.get_market_orders_by_actor(buyer) == [demand_match]
@@ -325,3 +325,18 @@ def test_order_expiry_from_series_keywords(market):
     before = Timer.now()
     mkt.while_in_negotiation()
     assert mkt.orderList[0].expire_by - before >= timedelta(seconds=900) - timedelta(seconds=5)
+
+
+def test_order_submitted_later_in_the_window_is_matched(market):
+    buyer, seller = Actor('buyer'), Actor('seller')
+    market.orderList.append(limit_demand(market, buyer, price=0.2, quantity=50.0))
+    market.while_in_negotiation()
+    assert market.matchList == [] and not market._stateIsCompleted
+    market.submit_order(market_supply(market, seller, 50.0))
+    market.while_in_negotiation()
+    assert len(market.matchList) == 2 and market.orderList == []
+    # The state completes only once the market-lead time has arrived.
+    from unittest.mock import patch
+    with patch.object(Timer, 'now', return_value=market.transition_times.market_lead):
+        market.while_in_negotiation()
+    assert market._stateIsCompleted

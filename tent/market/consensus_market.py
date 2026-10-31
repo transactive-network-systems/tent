@@ -44,8 +44,9 @@ under Contract DE-AC05-76RL01830
 import logging
 
 from tent.containers.measurement import Measurement
-from tent.enumerations import MarketState, MarketTypes, MeasurementType, MeasurementUnit
+from tent.enumerations import MarketTypes, MeasurementType, MeasurementUnit
 from tent.market import Market
+from tent.utils.timer import Timer
 
 _log = logging.getLogger(__name__)
 
@@ -69,12 +70,16 @@ class ConsensusMarket(Market):
       transactive neighbor.
     - while_in_negotiation (every tick): if any neighbor's signal has arrived since the last pass, or the local problem is
       not yet balanced, balance locally again. When balanced, prepare each transactive neighbor's signal, run its
-      convergence check, and send only to the neighbors that are not converged. When every neighbor is converged the
-      state is complete; the interval flags are recorded on every pass.
-    - on_signal_received (called by Neighbor.receive_transactive_signal): a reply that arrives after this market has
-      declared consensus reopens negotiation, so the state machine evaluates the new information on its next tick.
-    - transition_from_negotiation_to_market_lead: record the final consensus state, which may be "not reached" when the
-      negotiation period ran out (the state machine's timeout forces the transition).
+      convergence check, and send only to the neighbors for which a signal is due. Negotiation stays open for its whole
+      window: nothing marks the state complete before the market-lead time, so a signal or a local change that arrives
+      late in the window is still acted on. At the market-lead time the state completes cleanly if full consensus holds;
+      otherwise the state machine's timeout moves the market on with a warning.
+    - while_in_market_lead: collects, does not negotiate. A signal that was sent before the deadline but arrives after it
+      updates the neighbor's curve and the market rebalances locally once, so the schedule honours the neighbor's last
+      word, but nothing is sent. Consensus is recorded again, so a late disagreement is visible in the archive.
+    - on_local_change (called by an entity whose conditions moved): marks the market unbalanced so the next tick
+      rebalances and tells the neighbors if that changes anything.
+    - transition_from_negotiation_to_market_lead: record the final consensus state.
 
     Series settings used: method (Interpolation or Subgradient), duality_gap_threshold, default_price. Market keywords:
     max_balance_iterations (default 20) bounds the local balancing loop; Interpolation normally needs one pass.
@@ -90,7 +95,7 @@ class ConsensusMarket(Market):
         self.duality_gap: float | None = None  # relative gap of the last local balancing pass
         self.balance_iterations: int = 0        # iterations the last local balancing pass took
         self.negotiation_passes: int = 0        # while_in_negotiation passes that rebalanced
-        self._signals_seen: dict = {}           # neighbor id -> signal_time of the last received signal processed
+        self._signals_seen: dict = {}           # neighbor id -> sequence of the last received signal processed
         self.opening_prices: dict = {}          # interval start -> price in force when negotiation opened
 
     # ------------------------------------------------------------------------------------------------ helpers
@@ -108,7 +113,7 @@ class ConsensusMarket(Market):
             received = neighbor.last_received_signals.get(self)
             if received is None:
                 continue
-            if self._signals_seen.get(neighbor.id) != received.signal_time:
+            if self._signals_seen.get(neighbor.id) != received.sequence:
                 fresh.append(neighbor)
         return fresh
 
@@ -116,7 +121,7 @@ class ConsensusMarket(Market):
         for neighbor in self.transactive_neighbors:
             received = neighbor.last_received_signals.get(self)
             if received is not None:
-                self._signals_seen[neighbor.id] = received.signal_time
+                self._signals_seen[neighbor.id] = received.sequence
 
     # ------------------------------------------------------------------------------------------------ balancing
     def balance_locally(self) -> bool:
@@ -182,6 +187,13 @@ class ConsensusMarket(Market):
                 all_converged = False
         return all_converged
 
+    @property
+    def in_consensus(self) -> bool:
+        """Full consensus right now: locally balanced, no received signal still to be processed, and every transactive
+        neighbor converged at the last check."""
+        return (self.converged and not self._new_signals()
+                and all(n.is_converged(self) for n in self.transactive_neighbors))
+
     def record_consensus(self) -> None:
         """
         Record, per active time interval, whether full consensus holds: this market has converged AND every transactive
@@ -213,35 +225,44 @@ class ConsensusMarket(Market):
         self.record_consensus()
 
     def while_in_negotiation(self):
+        rebalanced = False
         if self._new_signals() or not self.converged:
             if not self.balance_locally():
                 self.record_consensus()
                 return  # No price yet (e.g. no supply offered). Wait for signals or the negotiation deadline.
             self.negotiation_passes += 1
-        if self.exchange_signals():
-            _log.debug(f'MARKET: {self.name} has reached full consensus.')
+            rebalanced = True
+        settled = all(n.is_converged(self) and not n.is_signal_due(self) for n in self.transactive_neighbors)
+        if rebalanced or not settled:
+            self.exchange_signals()
+            self.record_consensus()
+        # Negotiation is never completed early: a late signal or local change must still be acted on. At the deadline the
+        # state completes cleanly when consensus holds; otherwise the state machine's timeout fires with its warning.
+        if Timer.now() >= self.transition_times.market_lead and self.in_consensus:
+            _log.debug(f'MARKET: {self.name} closes negotiation in full consensus.')
             self._stateIsCompleted = True
-        self.record_consensus()
-
-    def reopen(self, reason: str) -> None:
-        """Negotiation is not over while new information can arrive: clear the completed flag so the next tick acts."""
-        if self.market_state is MarketState.Negotiation and self._stateIsCompleted:
-            _log.debug(f'MARKET: {self.name} reopens negotiation: {reason}.')
-            self._stateIsCompleted = False
-
-    def on_signal_received(self, neighbor) -> None:
-        """A neighbor's reply during Negotiation is new information: the next tick rebalances against it."""
-        self.reopen(f'signal from {neighbor.name}')
 
     def on_local_change(self, entity=None) -> None:
-        """Local conditions moved (forecast, meter, constraint): rebalance and tell the neighbors if that changes
-        anything. Legacy agents did this on a fixed reschedule interval; here the entity that changed says so."""
+        """Local conditions moved (forecast, meter, constraint): the next tick rebalances and tells the neighbors if that
+        changes anything. The entity that changed says so; nothing re-runs on a timer."""
+        _log.debug(f'MARKET: {self.name} will rebalance: local change in {getattr(entity, "name", entity)}.')
         self.converged = False
-        self.reopen(f'local change in {getattr(entity, "name", entity)}')
+
+    def while_in_market_lead(self):
+        """Collect, do not negotiate: honour a neighbor's last word that arrived after the deadline, send nothing."""
+        if self._new_signals():
+            _log.debug(f'MARKET: {self.name} absorbs a late signal in MarketLead.')
+            if self.balance_locally():
+                for neighbor in self.transactive_neighbors:
+                    neighbor.prep_transactive_signal(self)
+                    neighbor.check_for_convergence(self)  # flags only; nothing is sent after the deadline
+            self.record_consensus()
+        if Timer.now() >= self.transition_times.delivery_lead:
+            self._stateIsCompleted = True
 
     def transition_from_negotiation_to_market_lead(self):
         # Negotiation may have ended by timeout rather than consensus; record the consensus state either way.
         self.record_consensus()
-        if not all(bool(v) for v in self.full_consensus.values):
+        if not self.in_consensus:
             _log.warning(f'MARKET: {self.name} left Negotiation without full consensus in every interval.')
         super(ConsensusMarket, self).transition_from_negotiation_to_market_lead()

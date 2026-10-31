@@ -136,3 +136,29 @@ def test_transactive_signal_archives_its_curves(configured):
     assert len(curves) == 1 and curves[0]['time_interval_id'] == ti.id
     vertices = dm.query_data('vertex', conditions={'curve_id': curves[0]['id']})
     assert sorted((v['price'], v['quantity']) for v in vertices) == [(0.05, -10.0), (0.10, 40.0)]
+
+
+def test_shared_simulation_anchor(tmp_path):
+    """Agents in one simulation share simulation_anchor_time, so their simulated clocks agree whatever their start times."""
+    import time
+    from datetime import datetime, timezone
+    with open(SAMPLE_CONFIG) as f:
+        configs = json.load(f)
+    configs['data_manager']['db_params']['url'] = f'sqlite:///{tmp_path / "anchor.sqlite"}'
+    anchor = datetime(2026, 10, 31, 17, 0, tzinfo=timezone.utc)
+    configs['simulation_anchor_time'] = anchor.isoformat()
+    first = MockTN()
+    first.configure_node(json.loads(json.dumps(configs)))
+    t_first = Timer.now()
+    time.sleep(0.05)
+    second = MockTN()
+    second.configure_node(json.loads(json.dumps(configs)))  # configure_node consumes parts of the dict it is given
+    t_second = Timer.now()
+    assert first.simulation_anchor_time == anchor and second.simulation_anchor_time == anchor
+    assert Timer.created_time == anchor
+    # Both derive simulated time from the same anchor: the second node did not restart the simulated clock at its own
+    # start (the config runs at 100 real seconds per simulated hour, so real configuration time shows up 36-fold).
+    assert timedelta(0) <= t_second - t_first < timedelta(minutes=1)
+    assert t_second - first.simulation_start_time > timedelta(hours=1), 'joined the simulation in progress'
+    row = first.data_manager.query_data('transactive_node')[0]
+    assert row['simulation_anchor_time'] == anchor and row['created'] != anchor

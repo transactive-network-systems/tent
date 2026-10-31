@@ -531,14 +531,6 @@ class Market(Component):
 
         return None
 
-    def on_signal_received(self, neighbor) -> None:
-        """
-        Called by Neighbor.receive_transactive_signal after a transactive signal addressed to this market has been
-        stored. Market types that negotiate (see ConsensusMarket) use it to react to new information; the base market
-        and auctions read received signals at their scheduled points in the state machine and need nothing here.
-        """
-        return None
-
     def on_local_change(self, entity=None) -> None:
         """
         Called when a local asset or neighbor model has new information that may move this market's solution (a revised

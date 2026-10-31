@@ -463,8 +463,8 @@ class MatchingEngine(Market):
         """
         In this market state, actors may submit from zero to many offer or bid orders to secure a position in this
         market object's delivery period. Each pass matches any new (or newly revised) orders against the order book.
-        The state ends on the negotiation timing inherited from Market; there is nothing further for this market to
-        complete, so the state is marked complete as soon as the book has no unprocessed orders.
+        Negotiation stays open for its whole window so that orders submitted later are still matched; the state is
+        marked complete at the market-lead time.
         """
         self.quote_entities()
         new_orders = [x for x in self.orderList if x.status in (OrderStatus.NEW, OrderStatus.NEW_REVISED)]
@@ -475,7 +475,8 @@ class MatchingEngine(Market):
         # that cancelled itself for having no quantity) is dropped here.
         self.orderList = [x for x in self.orderList
                           if x.status in (OrderStatus.STANDING_ORDER, OrderStatus.REVISED_STANDING_ORDER)]
-        self._stateIsCompleted = True
+        if Timer.now() >= self.transition_times.market_lead:
+            self._stateIsCompleted = True
         return None
 
     def get_counteroffers(self, supply_or_demand: SupplyOrDemand or bool or None = SupplyOrDemand.SUPPLY):

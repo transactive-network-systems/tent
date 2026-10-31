@@ -74,6 +74,7 @@ class TransactiveNode(Archivable):
         self.simulation = False
         self.simulation_start_time = Timer.now()
         self.simulation_one_hour_in_seconds = 3600
+        self.simulation_anchor_time: datetime | None = None  # real time at which simulated time equals its start
         self.status = status                                    # future: will be enumeration
         now = datetime.now(timezone.utc).astimezone()
         self.tz = now.tzinfo.tzname(now)
@@ -146,11 +147,20 @@ class TransactiveNode(Archivable):
                                                         ).replace(tzinfo=ZoneInfo(self.tz))
             self.simulation_one_hour_in_seconds = int(config.get('simulation_one_hour_in_seconds',
                                                                  self.simulation_one_hour_in_seconds))
+        # The anchor is the real time at which simulated time equals simulation_start_time. Every agent in one simulation
+        # should share it (config key simulation_anchor_time), so that agents started at different wall-clock times still
+        # agree on the simulated time; a late starter joins at the current simulated time. Without it, this node's own
+        # creation time is used.
+        anchor = config.get('simulation_anchor_time')
+        if anchor:
+            anchor = parse_datetime(anchor)
+            anchor = anchor.replace(tzinfo=ZoneInfo(self.tz)) if anchor.tzinfo is None else anchor
+        self.simulation_anchor_time = anchor or self.real_time_created
         Timer.set(sim_one_hr_in_sec=self.simulation_one_hour_in_seconds,
                   sim_start_time=self.simulation_start_time,
                   simulation=self.simulation,
                   tz=ZoneInfo(self.tz),
-                  anchor=self.real_time_created
+                  anchor=self.simulation_anchor_time
         )
 
     def _setup_component_objects(self, config):
@@ -298,6 +308,7 @@ class TransactiveNode(Archivable):
             "simulation": self.simulation,
             "simulation_start_time": self.simulation_start_time,
             "simulation_one_hour_in_seconds": self.simulation_one_hour_in_seconds,
+            "simulation_anchor_time": self.simulation_anchor_time,
             "tz": self.tz
         })
         return record
@@ -324,6 +335,7 @@ class TransactiveNode(Archivable):
                     {"name": "simulation", "type": "Boolean"},
                     {"name": "simulation_start_time", "type": "DateTime"},
                     {"name": "simulation_one_hour_in_seconds", "type": "Float"},
+                    {"name": "simulation_anchor_time", "type": "DateTime", "kwargs": {"nullable": True}},
                     {"name": "tz", "type": "String", "type_args": [64]}  # IANA zone name
                 ],
                 "indices": [

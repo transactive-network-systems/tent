@@ -11,6 +11,7 @@ The expected equilibrium: the city supplies 100 kW at 0.04 + 0.04 * 100 / 1000 =
 price, campus schedules +100 kW from its city neighbor and city schedules -100 kW to its campus neighbor, and every
 interval records full consensus on both sides.
 """
+import logging
 from copy import copy
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
@@ -88,7 +89,7 @@ def negotiate(all_nodes, markets, clock, times, max_ticks=12):
     step_both(all_nodes, clock, times.negotiation)
     for seconds in range(1, max_ticks + 1):
         step_both(all_nodes, clock, times.negotiation + timedelta(seconds=seconds))
-        if all(m._stateIsCompleted for m in markets):
+        if all(m.in_consensus for m in markets):
             return seconds
     return None
 
@@ -127,7 +128,7 @@ def step_both(nodes, clock, t):
         tn.step()
 
 
-def test_two_nodes_reach_full_consensus(nodes, clock):
+def test_two_nodes_reach_full_consensus(nodes, clock, caplog):
     campus, city = nodes
     m_campus, m_city = market_of(campus), market_of(city)
     assert m_campus.name == m_city.name, 'a signal is routed to the market of the same name on the peer'
@@ -149,9 +150,10 @@ def test_two_nodes_reach_full_consensus(nodes, clock):
     # A few ticks of negotiation: absorb the peer's signal, rebalance, reply only while not converged.
     for seconds in range(1, 8):
         step_both(nodes, clock, times.negotiation + timedelta(seconds=seconds))
-        if m_campus._stateIsCompleted and m_city._stateIsCompleted:
+        if m_campus.in_consensus and m_city.in_consensus:
             break
-    assert m_campus._stateIsCompleted and m_city._stateIsCompleted, 'both nodes declared full consensus'
+    assert m_campus.in_consensus and m_city.in_consensus, 'both nodes reached full consensus'
+    assert not m_campus._stateIsCompleted, 'negotiation stays open until its deadline'
 
     for market in (m_campus, m_city):
         assert market.converged
@@ -179,9 +181,12 @@ def test_two_nodes_reach_full_consensus(nodes, clock):
     step_both(nodes, clock, times.negotiation + timedelta(seconds=30))
     assert {tn.name: tn.neighbors[0].last_sent_signals[m].id for tn, m in ((campus, m_campus), (city, m_city))} == sent_before
 
-    # The negotiation deadline moves both markets on, and the consensus history is in the archive.
-    step_both(nodes, clock, times.market_lead)
+    # The negotiation deadline moves both markets on cleanly (no forced completion), and the consensus history is in
+    # the archive.
+    with caplog.at_level(logging.WARNING, logger='tent.market'):
+        step_both(nodes, clock, times.market_lead)
     assert m_campus.market_state is MarketState.MarketLead and m_city.market_state is MarketState.MarketLead
+    assert not any('timed out' in r.getMessage() for r in caplog.records)
     for tn in nodes:
         headers = [h for h in tn.data_manager.by_table('measurement')
                    if h['measurement_type'] in (MeasurementType.FullConsensus, MeasurementType.FullConsensus.name)]
@@ -191,7 +196,7 @@ def test_two_nodes_reach_full_consensus(nodes, clock):
         assert consensus_values and consensus_values[-1] in (True, 1.0)
 
 
-def test_signal_arriving_after_consensus_reopens_negotiation(nodes, clock):
+def test_local_change_after_consensus_is_renegotiated(nodes, clock):
     campus, city = nodes
     m_campus, m_city = market_of(campus), market_of(city)
     times = m_campus.transition_times
@@ -199,9 +204,10 @@ def test_signal_arriving_after_consensus_reopens_negotiation(nodes, clock):
     step_both(nodes, clock, times.negotiation)
     for seconds in range(1, 8):
         step_both(nodes, clock, times.negotiation + timedelta(seconds=seconds))
-        if m_campus._stateIsCompleted:
+        if m_campus.in_consensus and m_city.in_consensus:
             break
-    assert m_campus._stateIsCompleted
+    assert m_campus.in_consensus and m_city.in_consensus
+    campus_received_before = campus.neighbors[0].last_received_signals[m_campus].sequence
 
     # The city's generator becomes more expensive: its curve shifts up, it rebalances and must tell the campus.
     city.local_assets[0].default_vertices.vertices[0].price = 0.06
@@ -209,12 +215,14 @@ def test_signal_arriving_after_consensus_reopens_negotiation(nodes, clock):
     m_city.on_local_change(city.local_assets[0])  # the asset model reports that its conditions changed
     clock['t'] = times.negotiation + timedelta(seconds=10)
     city.step()
-    assert not m_campus._stateIsCompleted, 'the new signal reopened the campus negotiation'
+    assert campus.neighbors[0].last_received_signals[m_campus].sequence > campus_received_before, \
+        'the city told the campus about its change'
+    assert not m_campus.in_consensus, 'the campus has not yet answered the revised signal'
     for seconds in range(11, 20):
         step_both(nodes, clock, times.negotiation + timedelta(seconds=seconds))
-        if m_campus._stateIsCompleted and m_city._stateIsCompleted:
+        if m_campus.in_consensus and m_city.in_consensus:
             break
-    assert m_campus._stateIsCompleted and m_city._stateIsCompleted
+    assert m_campus.in_consensus and m_city.in_consensus
     for market in (m_campus, m_city):
         for ti in market.time_intervals:
             assert market.marginal_prices.get_by_interval(ti).value == pytest.approx(0.064, abs=1e-6)
@@ -237,7 +245,7 @@ def test_no_reply_leaves_consensus_unreached_at_the_deadline(clock):
         clock['t'] = times.negotiation + timedelta(seconds=seconds)
         campus.step()
     assert market.converged, 'the local problem balances against the neighbor\'s default curve'
-    assert not market._stateIsCompleted, 'but without a reply there is no consensus'
+    assert not market.in_consensus, 'but without a reply there is no consensus'
     assert all(bool(v) is False for v in market.full_consensus.values)
     clock['t'] = times.market_lead
     campus.step()
@@ -392,9 +400,51 @@ def test_rolling_markets_open_at_the_prior_cleared_price(clock):
             assert opened[ti.start_time] == pytest.approx(expected, abs=1e-6), ti.name
     for seconds in range(1, 8):
         step_both(all_nodes, clock, t2.negotiation + timedelta(seconds=seconds))
-        if all(m._stateIsCompleted for m in second):
+        if all(m.in_consensus for m in second):
             break
-    assert all(m._stateIsCompleted for m in second)
+    assert all(m.in_consensus for m in second)
     for m in second:
         assert all(bool(v) for v in m.full_consensus.values)
         assert all(p == pytest.approx(0.044, abs=1e-6) for p in m.marginal_prices.values)
+
+
+def test_late_signal_is_absorbed_in_market_lead_without_a_reply(nodes, clock):
+    """A signal the city sends at the deadline reaches the campus after it entered MarketLead: the campus rebalances to
+    honour it, sends nothing, and records that consensus no longer holds for the changed intervals."""
+    campus, city = nodes
+    m_campus, m_city = market_of(campus), market_of(city)
+    times = m_campus.transition_times
+    assert negotiate(nodes, [m_campus, m_city], clock, times) is not None
+    # The campus hits the deadline first and moves to MarketLead.
+    clock['t'] = times.market_lead
+    campus.step()
+    assert m_campus.market_state is MarketState.MarketLead
+    sent_before = campus.neighbors[0].last_sent_signals[m_campus].sequence
+    # The city, still in its last negotiation tick, learns its generator got dearer and sends a revised signal.
+    city.local_assets[0].default_vertices.vertices[0].price = 0.06
+    city.local_assets[0].default_vertices.vertices[1].price = 0.10
+    m_city.on_local_change(city.local_assets[0])
+    clock['t'] = times.market_lead + timedelta(seconds=1)
+    city.step()
+    assert m_city.market_state is MarketState.MarketLead
+    assert campus.neighbors[0].last_received_signals[m_campus].revised
+    assert not m_campus.in_consensus, 'an unprocessed signal means no consensus yet'
+    # The campus absorbs it on its next tick: new price, no new signal. The exchange quantity is unchanged (the campus
+    # load is inelastic), so the two still agree on it and consensus is recorded again; the acknowledgement the revised
+    # signal would normally earn is owed but withheld after the deadline.
+    campus.step()
+    for ti in m_campus.time_intervals:
+        assert m_campus.marginal_prices.get_by_interval(ti).value == pytest.approx(0.064, abs=1e-6)
+    assert campus.neighbors[0].last_sent_signals[m_campus].sequence == sent_before, 'nothing is sent after the deadline'
+    assert campus.neighbors[0].is_signal_due(m_campus) and m_campus.in_consensus
+    # A signal arriving in DeliveryLead is stored but changes nothing.
+    for t in (times.delivery_lead,):
+        step_both(nodes, clock, t)
+    assert m_campus.market_state is MarketState.DeliveryLead
+    price_before = m_campus.marginal_prices.get_by_interval(m_campus.time_intervals[0]).value
+    city.local_assets[0].default_vertices.vertices[0].price = 0.07
+    m_city.on_local_change(city.local_assets[0])
+    clock['t'] = times.delivery_lead + timedelta(seconds=1)
+    city.step()
+    campus.step()
+    assert m_campus.marginal_prices.get_by_interval(m_campus.time_intervals[0]).value == price_before

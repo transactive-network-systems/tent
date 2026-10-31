@@ -50,7 +50,7 @@ from weakref import WeakKeyDictionary
 
 from tent.base import Entity
 from tent.containers import Measurement, SDCurve, TransactiveSignal, Vertex
-from tent.enumerations import Direction, MeasurementType, MeasurementUnit
+from tent.enumerations import Direction, MeasurementType, MeasurementUnit, MarketState
 from tent.market import Market
 from tent.utils.helpers import validate_bool
 from tent.utils.timer import Timer
@@ -566,8 +566,10 @@ class Neighbor(Entity):
         parsed_signal = TransactiveSignal.parse_signal(self.tn, signal_dict)
         if parsed_signal:
             self.last_received_signals[parsed_signal.market] = parsed_signal
-            if (hook := getattr(parsed_signal.market, 'on_signal_received', None)) is not None:
-                hook(self)  # let a negotiating market react to the new information
+            state = getattr(parsed_signal.market, 'market_state', None)
+            if state in (MarketState.DeliveryLead, MarketState.Delivery, MarketState.Reconcile, MarketState.Expired):
+                _log.info(f'{self.tn.name}: signal {parsed_signal.sequence} from {self.name} for {parsed_signal.market.name} '
+                          f'arrived in {state.name}; too late to be used.')
 
     def update_costs(self, market):
         """
