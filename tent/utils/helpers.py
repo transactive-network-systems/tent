@@ -47,6 +47,8 @@ import logging
 import re
 
 from datetime import datetime, time, timedelta
+from uuid import UUID
+from enum import Enum
 
 _log = logging.getLogger(__name__)
 
@@ -167,10 +169,20 @@ def get_class_from_spec(spec:dict, default_class_name: str = None, default_modul
     return getattr(module, class_name)
 
 def json_encoder(obj):
-    if isinstance(obj, datetime):
+    """
+    `default` hook for json.dumps covering the value types archive records and signals carry: datetimes and times as
+    ISO 8601, timedeltas as seconds, UUIDs as their string form, enumerations by name. Anything else is an error, as
+    json.dumps would report itself; returning obj.__dict__ (the former behaviour) silently produced wrong output.
+    """
+    if isinstance(obj, (datetime, time)):
         return obj.isoformat()
-    else:
-        return obj.__dict__
+    if isinstance(obj, timedelta):
+        return obj.total_seconds()
+    if isinstance(obj, UUID):
+        return str(obj)
+    if isinstance(obj, Enum):
+        return obj.name
+    raise TypeError(f'Object of type {type(obj).__name__} is not JSON serializable')
 
 def is_heavyloadhour(datetime_value):
     """True if time is within a HLH hour

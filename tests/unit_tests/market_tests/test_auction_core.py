@@ -78,3 +78,20 @@ def test_while_in_market_lead_raises_without_upstream():
     auc = build_auction(tn)
     with pytest.raises(RuntimeWarning):
         auc.while_in_market_lead()
+
+
+def test_actuate_assets_can_be_switched_off_per_series():
+    """A day-ahead series that is refined by a real-time one is configured not to actuate; the real-time one does."""
+    tn = Mock(); asset = Mock(); tn.local_assets = [asset]; tn.neighbors = []
+    series = Mock(); series.name = "TestSeries"; series.description = ""; series.intervals_to_clear = 1
+    series.duration = Mock(); series.duration.market_interval = timedelta(hours=1)
+    silent = Auction(transactive_node=tn, market_series=series, initial_market_state=MarketState.Inactive,
+                     transition_times=make_timings(), actuate_assets=False)
+    silent._actuate_assets()
+    asset.actuate.assert_not_called()
+    assert silent.get_record()['actuate_assets'] is False and silent.table_name == 'auction'
+    loud = build_auction(tn)
+    loud._actuate_assets()
+    asset.actuate.assert_called_once_with(loud)
+    assert loud.actuate_assets is True
+    assert any(d['name'] == 'auction' and d['inherits'] == 'market' for d in Auction.get_archive_definitions())

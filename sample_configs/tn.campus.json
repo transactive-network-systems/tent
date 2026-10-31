@@ -268,6 +268,7 @@
       "market_clearing_interval": 86400,
       "market_order": 1,
       "name": "Day-Ahead_Auction",
+      "actuate_assets": false,
       "method": "Interpolation",
       "price_model": null,
       "refined_series": null

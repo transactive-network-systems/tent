@@ -22,8 +22,6 @@ def known_archive_definitions() -> list[dict]:
     from tent.transactive_node import TransactiveNode
     from tent.market.auction import Auction
     from tent.market.consensus_market import ConsensusMarket
-    from tent.market.real_time_auction import RealTimeAuction
-    from tent.market.day_ahead_auction import DayAheadAuction
     from tent.market.matching_engine import MatchingEngine
     from tent.local_asset import LocalAsset
     from tent.local_asset.model_frame.model_frame_asset import ModelFrameAsset
@@ -33,7 +31,7 @@ def known_archive_definitions() -> list[dict]:
     from tent.meter_point import MeterPoint
     from tent.information_service_model import InformationServiceModel
     from tent.information_service_model.temperature_forecast_model import TemperatureForecastModel
-    classes = [TransactiveNode, Auction, ConsensusMarket, RealTimeAuction, DayAheadAuction, MatchingEngine, LocalAsset,
+    classes = [TransactiveNode, Auction, ConsensusMarket, MatchingEngine, LocalAsset,
                ModelFrameAsset, SolarPvResource, OpenLoopLoadPredictor, Neighbor, MeterPoint, InformationServiceModel,
                TemperatureForecastModel]
     definitions, seen = [], set()

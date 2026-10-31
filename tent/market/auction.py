@@ -45,6 +45,7 @@ import logging
 
 from tent.enumerations import Direction, MarketTypes
 from tent.market import Market
+from tent.utils.helpers import validate_bool
 
 _log = logging.getLogger(__name__)
 
@@ -57,9 +58,46 @@ class Auction(Market):
     """
     MARKET_TYPE = MarketTypes.auction
 
-    def __init__(self, *args, **kwargs):
-        # Properties and methods inherited from Market class:
+    def __init__(self, *args, actuate_assets: bool = True, **kwargs):
+        """
+        actuate_assets: whether this auction tells the local assets to actuate when it enters Delivery. A series whose
+        delivery periods are later refined by another series (a day-ahead auction corrected by a real-time one) is
+        configured with False, so that only the refining market actuates. Configured on the series like any other
+        market keyword: ``"actuate_assets": false``. Recorded in the ``auction`` extension table.
+        """
+        # Recorded by get_record(), so it must exist before Market.__init__ archives the market row.
+        self.actuate_assets: bool = validate_bool(actuate_assets, 'actuate_assets')
         super(Auction, self).__init__(*args, **kwargs)
+
+    def _actuate_assets(self):
+        if not self.actuate_assets:
+            _log.debug(f'MARKET: {self.name} does not actuate assets (actuate_assets is false for this series).')
+            return
+        super(Auction, self)._actuate_assets()
+
+    @property
+    def table_name(self):
+        return 'auction'
+
+    def get_record(self) -> dict:
+        record = super(Auction, self).get_record()
+        record.update({'actuate_assets': self.actuate_assets})
+        return record
+
+    @classmethod
+    def get_archive_definitions(cls) -> list[dict]:
+        definitions = super(Auction, cls).get_archive_definitions()
+        definitions.extend([
+            {
+                "name": "auction",
+                "inherits": "market",
+                "columns": [
+                    {"name": "id", "foreign_key": "market.id", "kwargs": {"primary_key": True}},
+                    {"name": "actuate_assets", "type": "Boolean"}
+                ]
+            }
+        ])
+        return definitions
 
     def transition_from_active_to_negotiation(self):
         """

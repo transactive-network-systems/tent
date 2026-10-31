@@ -435,8 +435,9 @@ def test_spawn_markets():
                 "name": "Day-Ahead Auction",
                 "class_name": "MarketSeries",
                 "module_name": "tent.market.market_series",
-                "market_class_name": "DayAheadAuction",
-                "market_module_name": "tent.market.day_ahead_auction",
+                "market_class_name": "Auction",
+                "market_module_name": "tent.market.auction",
+                "actuate_assets": False,
                 "description": "Day-Ahead Auction",
                 "market_clearing_interval": 86400,  # 24 hours
                 "intervals_to_clear": 24,

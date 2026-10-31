@@ -1,4 +1,3 @@
-import json
 import logging
 
 from datetime import datetime, time, timedelta, timezone
@@ -185,40 +184,3 @@ class LocalDataManager(ArchiveReader, DataManager):
     def _record_to_dict(self, table_name: str, record) -> dict:
         return self.decode_row({column.name: getattr(record, column.name) for column in self.tables[table_name].columns},
                                self.tables[table_name].columns)
-
-
-# TODO: Move to TransactiveNodeAgent.
-class VolttronDataManager(DataManager):
-    def __init__(self, parent, historian_topic: str = 'TNS/Archive', historian_vip: str = 'tns.historian'):
-        # NOTE: Parent is assumed to be a VOLTTRON Agent.
-        super(VolttronDataManager, self).__init__(parent)
-        # Store reference used by tests and internal methods
-        self.historian_topic = historian_topic
-        self.historian_vip = historian_vip
-
-    def init_archive(self):
-        # TODO: Should there be a key validation in header to create tables?
-        # TODO: Should this really be using RPC?
-        # TODO: Should it instead expose an RPC to allow the historian to collect tables?
-        message = json.dumps(self.definitions)
-        self.parent.rpc.call(self.historian_vip, 'create_tables', message)
-
-    def archive_data(self, records: Mapping|Sequence):
-        # TODO: This should use self.parent.vip.pubsub.publish directly.  Does anything need changed?
-        # TODO: This should use self.parent.vip.pubsub.publish directly.  Does anything need changed?
-        self.parent.publish(self.historian_topic, message=records)
-
-
-# # TODO: This should end up elsewhere, but for now, a record of how to initialize a local db:
-# def make_local_db():
-#     from tent.utils.data_manager_new import LocalDataManager
-#     from tent.utils.database_defs import all_tables
-#     from tent.transactive_node import TransactiveNode
-#     tn = TransactiveNode()
-#     dm = LocalDataManager(tn, db_params={'db_type': 'sqlite', 'url': 'sqlite:///testent.sqlite'})
-#     definitions = all_tables()
-#     dm.add_tables(definitions)
-#     dm.init_archive()
-#     return dm
-
-

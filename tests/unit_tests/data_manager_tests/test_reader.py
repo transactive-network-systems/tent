@@ -63,7 +63,7 @@ def test_runs_and_components(reader, archive):
     components = reader.components(tn_id=runs[0]['id'])
     assert components and all(c['type'] != 'component' for c in components), 'every component resolves to a concrete table'
     types = {c['type'] for c in components}
-    assert 'market_series' in types and 'market' in types
+    assert 'market_series' in types and 'auction' in types, 'markets are typed by their deepest table'
     series = next(c for c in components if c['type'] == 'market_series')
     assert 'market_class' in series and series['market_class'] == 'Auction', 'extension columns are merged in'
 

@@ -19,7 +19,9 @@ def test_configure_node_from_sample_config(tmp_path):
     tn.configure_node(configs)
     assert tn.market_series, 'the sample config defines market series'
     assert all(series.newest_market is not None for series in tn.market_series)
-    assert all(series.market_kwargs == {} for series in tn.market_series)
+    # The day-ahead series is configured not to actuate (its deliveries are refined by the real-time series).
+    by_name = {series.name: series.market_kwargs for series in tn.market_series}
+    assert by_name == {'Day-Ahead_Auction': {'actuate_assets': False}, 'Real-Time_Auction': {}}
     rows = tn.data_manager.query_data('market_series')
     assert len(rows) == len(tn.market_series)
     # Duration columns are SQLAlchemy Interval and read back as timedelta.

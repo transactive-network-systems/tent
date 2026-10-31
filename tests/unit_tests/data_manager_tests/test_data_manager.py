@@ -4,7 +4,7 @@ from collections import deque
 from datetime import datetime
 from uuid import uuid4
 
-from tent.data_manager.local_data_manager import LocalDataManager, VolttronDataManager
+from tent.data_manager.local_data_manager import LocalDataManager
 
 
 class TestLocalDataManagerUnits:
@@ -272,92 +272,3 @@ class TestLocalDataManagerUnits:
         ldm.archive_data({'table_name': 'entities', 'data': {'id': str(entity_id)}})
 
         assert ldm.query_data('entities')[0]['id'] == entity_id
-
-
-class TestVolttronDataManagerUnits:
-    """Unit tests for VolttronDataManager business logic"""
-    
-    def setup_method(self):
-        """Set up test fixtures"""
-        self.mock_tn = Mock()
-        
-    def test_init_stores_parameters(self):
-        """Test initialization stores all parameters correctly"""
-        vdm = VolttronDataManager(
-            self.mock_tn, 
-            historian_topic='Custom/Archive',
-            historian_vip='custom.historian'
-        )
-        
-        assert vdm.parent == self.mock_tn
-        # Note: VolttronDataManager stores 'parent', not 'tn'
-        assert vdm.historian_topic == 'Custom/Archive'
-        assert vdm.historian_vip == 'custom.historian'
-        
-    def test_init_default_parameters(self):
-        """Test initialization with default parameters"""
-        vdm = VolttronDataManager(self.mock_tn)
-        
-        assert vdm.historian_topic == 'TNS/Archive'
-        assert vdm.historian_vip == 'tns.historian'
-
-    def test_archive_data_publishes_records(self):
-        """Test that archive_data publishes records to correct topic"""
-        vdm = VolttronDataManager(self.mock_tn)
-        
-        records = [
-            {'table_name': 'test', 'data': {'id': 1}},
-            {'table_name': 'other', 'data': {'id': 2}}
-        ]
-        
-        vdm.archive_data(records)
-        
-        # Should publish to historian topic
-        self.mock_tn.publish.assert_called_once_with('TNS/Archive', message=records)
-
-    def test_archive_data_empty_records(self):
-        """Test archive_data handles empty records"""
-        vdm = VolttronDataManager(self.mock_tn)
-        
-        vdm.archive_data([])
-        
-        # Should still publish empty list
-        self.mock_tn.publish.assert_called_once_with('TNS/Archive', message=[])
-
-    @patch('tent.data_manager.local_data_manager.json.dumps')
-    def test_init_archive_calls_rpc(self, mock_json_dumps):
-        """Test that init_archive makes RPC call with definitions"""
-        vdm = VolttronDataManager(self.mock_tn)
-        vdm.definitions = {'test_table': {'name': 'test_table'}}
-        
-        mock_json_dumps.return_value = '{"test_table": {"name": "test_table"}}'
-        
-        vdm.init_archive()
-        
-        # Should serialize definitions and make RPC call
-        mock_json_dumps.assert_called_once_with(vdm.definitions)
-        self.mock_tn.rpc.call.assert_called_once_with(
-            'tns.historian', 
-            'create_tables', 
-            '{"test_table": {"name": "test_table"}}'
-        )
-
-    def test_init_archive_uses_custom_vip(self):
-        """Test init_archive uses custom historian VIP"""
-        custom_vip = 'my.custom.historian'
-        vdm = VolttronDataManager(self.mock_tn, historian_vip=custom_vip)
-        vdm.definitions = {}
-        
-        with patch('tent.data_manager.local_data_manager.json.dumps', return_value='{}'):
-            vdm.init_archive()
-            
-        # Should use custom VIP
-        self.mock_tn.rpc.call.assert_called_once_with(
-            custom_vip, 
-            'create_tables', 
-            '{}'
-        )
-
-
-if __name__ == "__main__":
-    pytest.main([__file__])
