@@ -129,15 +129,6 @@ class LocalAsset(Entity):
         # But give power scheduling priority for a LocalAsset
         self.schedule_power(market)
 
-        # Log if possible
-        """
-        if self.mtn is not None and self.power_topic != '':
-            sp = [(x.interval.name, x.value) for x in self.scheduledPowers]
-            self.mtn.vip.pubsub.publish(peer='pubsub',
-                                        topic=self.power_topic,
-                                        message={'power': sp})
-        """
-
         self.schedule_engagement(market)  # only applied to LocalAsset class
 
         # Update vertices and calculate reserve margins if schedule powers have been calculated
