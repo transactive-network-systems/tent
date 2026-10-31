@@ -224,7 +224,6 @@ Here is an example configuring a multi-resource building asset in `tn.campus.jso
   "name": "CampusSolarArray",
   "maximum_power": 120.0,
   "minimum_power": 0.0,
-  "scheduling_horizon": 86400,
   "model_configs": {
     "demand_curve_points": 2,
     "models": [

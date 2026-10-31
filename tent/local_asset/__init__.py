@@ -44,8 +44,6 @@ under Contract DE-AC05-76RL01830
 import logging
 
 from datetime import timedelta
-from typing import Union
-
 from tent.base import Entity
 from tent.containers import Measurement, TimeInterval, Vertex
 from tent.enumerations import MeasurementType, MeasurementUnit
@@ -85,8 +83,7 @@ class LocalAsset(Entity):
                  maximum_power=0.0,
                  minimum_power=0.0,
                  meter_points=None,
-                 name='',
-                 scheduling_horizon: Union[timedelta, float, int] = timedelta(hours=24)
+                 name=''
                  ):
         super(LocalAsset, self).__init__(cost_parameters, default_vertices, description, information_services, location,
                                          maximum_power, meter_points, minimum_power, name, transactive_node)
@@ -94,8 +91,6 @@ class LocalAsset(Entity):
         # These following static properties may be assigned as parameters:
         self.default_power: float = float(default_power)           # [avg.kW, signed] Assignable default power value(s)
         self.engagement_costs: list[float] = [float(ec) for ec in engagement_costs]  # {engagement, [$]; hold, [$]; disengagement, [$]} Transition costs
-        self.scheduling_horizon: timedelta = (scheduling_horizon if isinstance(scheduling_horizon, timedelta)
-            else timedelta(seconds=scheduling_horizon)) # [time duration] Future that price and energy shift are relevant
 
         # These following properties are dynamically managed and should not normally be manually configured:
         self.engagement_schedule: Measurement = Measurement(self, MeasurementType.EngagementSchedule, MeasurementUnit.Boolean, archive_now=False)  # True = engaged
@@ -308,108 +303,6 @@ class LocalAsset(Entity):
 
         _log.debug(f"{self.name} asset model active vertices are: {self.active_vertices.log_report}")
 
-    def get_extended_prices(self, market):
-        """
-        This method is available to facilitate estimation of opportunity cost for local assets that have a scheduling
-        horizon that extends farther into the future than supplied by the market in forward time intervals. For example,
-        a market may offer only one forward time interval with its price offer. Even in this example, auction markets do
-        not provide market prices at the times bids are to be formulated by the local asset. Local assets having states
-        (e.g., controlled interior temperature, battery charge state) must somehow calibrate prices farther into the
-        future as a foundation for understanding the opportunity cost.
-        This base method uses the following prioritization to populate the price horizon:
-        1. Actual marginal prices offered by the market object.
-        2. Actual marginal prices in prior sequential markets that are similar to the market object.
-        3. Actual marginal prices in prior markets that are being corrected by the market object.
-        4. Modeled prices using the market's price model
-        5. The market's default price value.
-        6. Nothing
-        NOTE: This method is similar to Market.check_marginal_prices(), but that method's purpose is to specifically
-              estimate marginal prices for active time intervals, not throughout the scheduling horizon.
-        :param market: The Market object for which these prices are relevant
-
-        :return: price_horizon, which may be placed into property self.schedulingHorizon by caller
-        """
-
-        # TODO: This function uses a Measurement with TimeIntervals from multiple markets and/or created locally.
-        #  Should this really be constructing a new IntervalSeries?
-        #  If it does, how to distinguish these from ones owned by the (canonical, as passed in) market?
-        #  If these should be the same intervals as the market, how to handle extra ones
-        #       (they can't be added to the market itself, since it shouldn't get extras)?
-        #  Adding an owner property to the intervals would make them unique, even sharing the same market.
-        #  If we have intervals from multiple markets, how to compare these or convert from market ones to local ones?
-        # The scheduling horizon is a distance into the future. The price horizon is initialized, then prices are found
-        # from now until the end of the scheduling horizon.
-        end_of_calculated_horizon = Timer.now()
-        end_of_scheduling_horizon = end_of_calculated_horizon + self.scheduling_horizon
-        price_horizon = Measurement(self, MeasurementType.MarginalPrice, MeasurementUnit.Monetary)
-
-        # Case 1: Actual marginal prices offered by the market object that has requested the asset to schedule.
-        if market.marginal_prices:
-            price_horizon = market.marginal_prices.copy()
-            end_of_calculated_horizon = market.marginal_prices.last.interval.start_time + market.series.duration.market_interval
-
-            if end_of_calculated_horizon >= end_of_scheduling_horizon:
-                return price_horizon
-
-        # Case 2: Actual marginal prices in prior sequential markets that are similar to the market object.
-        if market.prior_market_in_series and market.prior_market_in_series.marginal_prices:
-            # Get the marginal prices from the latest similar market.
-
-            # Find any market prices from the corrected market to add to the price horizon
-            for time_interval, marginal_price in market.prior_market_in_series.marginal_prices.all:
-                if time_interval.end_time > end_of_calculated_horizon:
-                    # TODO: This should probably be creating/updating an interval for this market with the same time.
-                    price_horizon.update(time_interval, marginal_price)
-                    end_of_calculated_horizon = time_interval.end_time
-
-            if end_of_calculated_horizon >= end_of_scheduling_horizon:
-                return price_horizon
-
-        # Case 3. Actual marginal prices in prior markets that are being corrected by the market object.
-        # Start by gathering similar prior markets that are in the market series being corrected
-        if market.priorRefinedMarket and market.priorRefinedMarket.marginal_prices:
-            # Find any market prices from the latest similar market to add to the price horizon
-            # TODO: If the refined market has different starts/durations than ours, are these TimeIntervals correct?
-            for time_interval, marginal_price in market.priorRefinedMarket.marginal_prices.all:
-                if time_interval.end_time > end_of_calculated_horizon:
-                    # TODO: This should probably be creating/updating an interval for this market with the same time.
-                    price_horizon.update(time_interval, marginal_price)
-                    end_of_calculated_horizon = time_interval.end_time
-
-            if end_of_calculated_horizon >= end_of_scheduling_horizon:
-                return price_horizon
-
-        # Case 4. Modeled prices using the market's price model
-        if market.price_model:
-            while end_of_scheduling_horizon > end_of_calculated_horizon:
-                # 240206DJH: This next line fails unit testing. I see that market.priceModel should now be equivalent to
-                #            an object of class HourlyAveragePriceModel, but it is being made equivalent to the model
-                #            itself instead.
-                price = market.price_model.get(end_of_calculated_horizon)
-                # Start where prices leave off, then align to the top of the next
-                # hour. Rounding the start time down instead would back-date the
-                # interval into time that is already priced, and because
-                # Measurement keys on TimeInterval identity that produces
-                # duplicate overlapping entries rather than updating one.
-                start_time = end_of_calculated_horizon
-                end_time = (start_time + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
-                duration = end_time - start_time
-                price_horizon.update(TimeInterval(market, duration, start_time), price[0])
-                end_of_calculated_horizon = end_time
-            return price_horizon
-
-        # Case 5. The market's default price value.
-        price = market.series.default_price
-        while end_of_scheduling_horizon > end_of_calculated_horizon:
-            start_time = end_of_calculated_horizon
-            # Align to the top of the next hour. datetime is immutable, so the
-            # result of replace() must be assigned.
-            end_time = (start_time + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
-            duration = end_time - start_time
-            price_horizon.update(TimeInterval(market, duration, start_time), price)
-            end_of_calculated_horizon = end_time
-        return price_horizon
-
     def update_costs(self, market):
         """
         191218DJH: This method was originally inherited from class (Abstract)Model. The purpose was to prescribe the set
@@ -455,7 +348,6 @@ class LocalAsset(Entity):
             'engagement_cost_2': self.engagement_costs[2],
             # 'holding_cost': self.holding_cost, TODO: Did this come from old schema?
             # 'disengagement_cost': self.disengagement_cost, TODO: Did this come from old schema?
-            'scheduling_horizon': self.scheduling_horizon
         })
         return record
 
@@ -471,10 +363,7 @@ class LocalAsset(Entity):
                     {"name": "default_power", "type": "Float"},
                     {"name": "engagement_cost_0", "type": "Float"},
                     {"name": "engagement_cost_1", "type": "Float"},
-                    {"name": "engagement_cost_2", "type": "Float"},
-                    #{"name": "holding_cost", "type": "Float"},
-                    #{"name": "disengagement_cost", "type": "Float"},
-                    {"name": "scheduling_horizon", "type": "Interval"}
+                    {"name": "engagement_cost_2", "type": "Float"}
                 ]
             }
         ])

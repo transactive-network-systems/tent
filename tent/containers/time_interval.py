@@ -113,7 +113,6 @@ class IntervalSeries:
         self.interval_duration = duration
         self.market = proxy(market, safe_weak_proxy_callback(self, 'market'))
         # TODO: How to have intervals be unique to markets, but comparable between markets?
-        # TODO: See the TODO notes in LocalAsset.get_extended_prices(). --- These concern TimeInterval handling.
         self.number_of_intervals = number_of_intervals
         self.total_duration = duration * number_of_intervals
         # Keys are datetime start times already comparable; no custom key function needed.

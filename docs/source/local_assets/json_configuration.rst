@@ -22,7 +22,6 @@ Below is an annotated JSON structure defining a campus building asset with physi
      "default_vertices": [[0, 0, 30.0, true]],
      "maximum_power": 250.0,
      "minimum_power": -500.0,
-     "scheduling_horizon": 86400,
      "temperature_forecast_name": "OutdoorTemperatureForecast",
      "model_configs": {
        "demand_curve_points": 2,
@@ -67,5 +66,4 @@ Configuration Properties
 * ``module_name``: Must be ``"tent.local_asset.model_frame.model_frame_asset"``.
 * ``maximum_power``: Upper generation or curtailment boundary in kW.
 * ``minimum_power``: Maximum allowable consumption in kW (negative in TENT convention).
-* ``scheduling_horizon``: Lookahead duration in seconds (e.g. 86400 for 24 hours).
 * ``model_configs.models``: Array of nested sub-model definitions. For physical models, set ``"model_type": "fmi"``.

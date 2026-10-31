@@ -224,8 +224,7 @@
       "maximum_power": 0.0,
       "minimum_power": -16400.0,
       "meter_points": null,
-      "name": "InelasticBuildings",
-      "scheduling_horizon": 86400
+      "name": "InelasticBuildings"
     },
     {
       "class_name": "SolarPvResource",
@@ -241,8 +240,7 @@
       "maximum_power": 120.0,
       "minimum_power": 0.0,
       "meter_points": null,
-      "name": "SolarPv",
-      "scheduling_horizon": 86400
+      "name": "SolarPv"
     }
   ],
   "market_series": [

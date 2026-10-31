@@ -781,31 +781,3 @@ def test_update_vertices():
 
     # Success.
     print('Method test_update_vertices ran to completion.\n')
-
-
-def test_get_extended_prices():
-    """Test get_extended_prices() method for LocalAsset.
-    
-    NOTE: This test is extremely complex (5 cases, ~300 lines) and tests price prioritization
-    across market hierarchies using legacy Market construction patterns that require
-    significant investigation to migrate to modern API.
-    
-    The test covers:
-    1. Actual marginal prices offered by the market
-    2. Actual marginal prices in prior sequential markets
-    3. Actual marginal prices in prior markets being corrected
-    4. Modeled prices using market's price model
-    5. Market's default price value
-    
-    Migration requires understanding:
-    - How to construct markets with prior_market_in_series in modern API
-    - How market_to_be_refined (formerly priorRefinedMarket) works in modern API
-    - How scheduling_horizon interacts with get_extended_prices()
-    - How to set up complex market hierarchies with modern Market constructor
-    
-    This test should be migrated after the modern Market/MarketSeries API is better understood.
-    """
-    print('Running LocalAsset.test_get_extended_prices()')
-    print('  NOTE: This test requires migration of complex market hierarchy setup.')
-    print('  Skipping detailed test cases pending investigation of modern Market API.')
-    print('Method test_get_extended_prices() ran to completion.\n')
