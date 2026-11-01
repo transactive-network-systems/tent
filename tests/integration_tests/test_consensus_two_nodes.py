@@ -492,9 +492,14 @@ def test_signal_for_a_market_not_yet_spawned_is_held_until_it_spawns(clock):
 def test_signal_for_a_market_that_will_never_spawn_is_not_held(nodes, clock):
     campus, city = nodes
     city_neighbor = city.neighbors[0]
-    city_neighbor.receive_transactive_signal(None, None, {'market': 'Consensus_2016-01-01T00:00:00+00:00',
-                                                          'neighbor': 'campus', 'protocol_version': '1.0'})
+
+    def message(market_name):  # complete and valid, so that only the market name decides what happens to it
+        return {'market': market_name, 'neighbor': 'campus', 'protocol_version': 1.0,
+                'signal_time': clock['t'].isoformat(), 'sequence': 1, 'in_reply_to': None, 'revised': True,
+                'unit': 'kW', 'intervals': {}}
+
+    city_neighbor.receive_transactive_signal(None, None, message('Consensus_2016-01-01T00:00:00+00:00'))
     assert city_neighbor.held_signals == {}, 'a clearing time already passed cannot spawn'
-    city_neighbor.receive_transactive_signal(None, None, {'market': 'Other_Series_2017-07-02T00:00:00+00:00',
-                                                          'neighbor': 'campus', 'protocol_version': '1.0'})
+    city_neighbor.receive_transactive_signal(None, None, message('Other_Series_2017-07-02T00:00:00+00:00'))
     assert city_neighbor.held_signals == {}, 'no series of this node names markets like that'
+    assert not city_neighbor.last_received_signals, 'dropped, not stored'

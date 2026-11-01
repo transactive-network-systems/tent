@@ -62,11 +62,12 @@ def test_archive_normaliser_refuses_naive_datetimes(tmp_path):
 
 def test_signal_with_naive_time_is_rejected_not_stored():
     from tent.containers.transactive_signal import TransactiveSignal
-    tn = Mock()
+    neighbor = Mock(); neighbor.name = 'N'
     market = Mock(); market.name = 'M'
-    tn.get_market_by_name.return_value = market
-    tn.get_neighbors_by_attribute.return_value = Mock()
+    neighbor.tn.get_market_by_name.return_value = market
     message = {'market': 'M', 'neighbor': 'N', 'protocol_version': TransactiveSignal.PROTOCOL_VERSION,
                'signal_time': '2026-10-31T12:00:00', 'sequence': 1, 'in_reply_to': None, 'revised': True,
                'unit': 'kW', 'intervals': {}}
-    assert TransactiveSignal.parse_signal(tn, message) is None
+    with pytest.raises(ValueError, match='signal_time'):
+        TransactiveSignal.parse_signal(neighbor, message)
+    assert not neighbor.tn.get_market_by_name.called, 'rejected before anything is looked up'

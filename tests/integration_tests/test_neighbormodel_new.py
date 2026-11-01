@@ -577,10 +577,10 @@ def test_receive_transactive_signal():
         def append(self, interval):
             self._intervals.append(interval)
         
-        def get_by_start_time(self, start_time_iso):
-            """Find time interval by ISO format start time string"""
+        def get_by_start_time(self, start_time):
+            """Find time interval by its (aware) start time, as IntervalSeries does"""
             for interval in self._intervals:
-                if interval.start_time.isoformat() == start_time_iso:
+                if interval.start_time == start_time:
                     return interval
             return None
         
@@ -657,31 +657,31 @@ def test_receive_transactive_signal():
     signal_dict = {
         'market': test_market.name,
         'neighbor': test_model.name,  # The neighbor sending this signal
-        'protocol_version': 1,
+        'protocol_version': 1.0,
         'signal_time': dt.isoformat(),
         'sequence': 1,
         'in_reply_to': None,
         'revised': True,
-        'unit': 4,  # MeasurementUnit.kW value
+        'unit': 'kW',
         'intervals': {
             time_interval.start_time.isoformat(): {
                 'balance_point': None,
-                'flexibility': {
-                    0: {
+                'flexibility': [
+                    {
                         'marginal_price': 0.1,
                         'quantity': 0,
                         'cost': 0,
                         'continuity': True,
                         'uncertainty': 0
                     },
-                    1: {
+                    {
                         'marginal_price': 0.2,
                         'quantity': 100,
                         'cost': 0,
                         'continuity': True,
                         'uncertainty': 0
                     }
-                }
+                ]
             }
         }
     }

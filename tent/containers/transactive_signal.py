@@ -48,9 +48,12 @@ from math import isfinite, sqrt
 from weakref import WeakKeyDictionary
 from typing import TYPE_CHECKING, Self
 
+from pydantic import ValidationError
+
 from tent.containers import SDCurve, SDMeasurement, TimeInterval, Vertex
+from tent.containers.transactive_signal_message import (PROTOCOL_VERSION, IntervalMessage, TransactiveSignalMessage,
+                                                        VertexMessage)
 from tent.enumerations import MeasurementType, MeasurementUnit, SignalDirection
-from tent.utils.helpers import require_aware
 from tent.utils.timer import Timer
 
 if TYPE_CHECKING:
@@ -61,7 +64,7 @@ _log = logging.getLogger(__name__)
 
 
 class TransactiveSignal(SDMeasurement):
-    PROTOCOL_VERSION = 1.0
+    PROTOCOL_VERSION = PROTOCOL_VERSION  # of the wire format, see TransactiveSignalMessage
 
     def __init__(self, market, neighbor, direction: SignalDirection | None = None, signal_time=None,
                  sequence: int | None = None, in_reply_to: int | None = None, revised: bool = True, **kwargs):
@@ -133,98 +136,72 @@ class TransactiveSignal(SDMeasurement):
                 clone.__balance_vertices[ti] = list(clone.get_by_interval(ti).vertices)[index]
         return clone
 
-    def generate_signal(self, scheduled_powers=None):
+    def generate_signal(self, scheduled_powers=None) -> dict:
+        """
+        The wire form of this signal (see TransactiveSignalMessage), stamped with the current time and marked as sent.
+        With scheduled_powers, the balance points are marked first. Intervals whose curve has no vertices are not
+        included. A vertex whose price has no wire form (-inf or NaN) is an error.
+        """
         if scheduled_powers is not None:
             self.mark_balance_points(scheduled_powers)
+        if self.sequence is None:
+            raise ValueError(f'The signal to {self.neighbor.name} for {self.market.name} has no sequence number; number '
+                             f'it before sending (see Neighbor.send_transactive_signal).')
         self.signal_time = Timer.now()
         self.direction = SignalDirection.sent
-        # self.archive()
         intervals = {}
         for ti, sd in self.all:
-            flexibility = {
-                i: {
-                    'marginal_price': v.price,
-                    'quantity': v.quantity,
-                    'cost': v.cost,
-                    'continuity': v.continuity,
-                    'uncertainty': v.uncertainty
-                } for i, v in enumerate(sd.vertices)
-            }
-            bp = self.balance_point(ti)
             vertices = list(sd.vertices)
-            intervals[ti.start_time.isoformat()] = {
-                'balance_point': vertices.index(bp) if bp is not None and bp in vertices else None,
-                'flexibility': flexibility
-            }
-        return {
-            'market': self.market.name,
-            'neighbor': self.neighbor.tn.name,
-            'protocol_version': self.PROTOCOL_VERSION,
-            'signal_time': self.signal_time.isoformat(),
-            'sequence': self.sequence,
-            'in_reply_to': self.in_reply_to,
-            'revised': self.revised,
-            'unit': self.unit.name,
-            'intervals': intervals
-        }
+            if not vertices:
+                continue
+            bp = self.balance_point(ti)
+            intervals[ti.start_time] = IntervalMessage(
+                balance_point=vertices.index(bp) if bp is not None and bp in vertices else None,
+                flexibility=[VertexMessage.from_price(v.price, v.quantity, v.cost, v.continuity, v.uncertainty)
+                             for v in vertices])
+        message = TransactiveSignalMessage(protocol_version=self.PROTOCOL_VERSION, market=self.market.name,
+                                           neighbor=self.neighbor.tn.name, signal_time=self.signal_time,
+                                           sequence=self.sequence, in_reply_to=self.in_reply_to, revised=self.revised,
+                                           unit=self.unit, intervals=intervals)
+        return message.to_wire()
 
     @classmethod
-    def parse_signal(cls, tn, message: dict) -> Self | None:
-        """Parse a transactive signal dictionary and update the SDMeasurement."""
-        # TODO: Currently assumes signal is being received from a remote.
-        #  If there is another reason to parse a signal, an "on_receipt" flag should be added to signature.
-        try:
-            if not isinstance(message, dict):
-                raise ValueError("Signal must be a dictionary.")
-            # TODO: Should we allow a range of supported protocol_versions?
-            if message['protocol_version'] != cls.PROTOCOL_VERSION:
-                raise ValueError(f"Unsupported protocol version: {message['protocol_version']}."
-                                 f" Expected: {cls.PROTOCOL_VERSION}.")
-            # TODO: This won't work yet, since the function to get market by name does not currently exist.
-            if not (market := tn.get_market_by_name(message['market'])):
-                _log.warning(f'Unable to find valid market "{message["market"]}" from received transactive signal.')
-                return  # TODO: Should we raise on bad market or neighbor and let the caller handle it?
-            if not (neighbor := tn.get_neighbors_by_attribute('name', message['neighbor'], first_only=True)):
-                _log.warning(f'Unable to find valid neighbor "{message["neighbor"]}" from received transactive signal.')
-            signal_time = (require_aware(datetime.fromisoformat(message['signal_time']), 'signal_time')
-                           if message.get('signal_time') else None)
-            in_reply_to = message['in_reply_to']
-            signal = cls(market=market, neighbor=neighbor, direction=SignalDirection.received,
-                         signal_time=signal_time, sequence=int(message['sequence']),
-                         in_reply_to=None if in_reply_to is None else int(in_reply_to),
-                         revised=bool(message['revised']), measurement_unit=message['unit'])
-        except (KeyError, TypeError, ValueError) as e:
-            _log.warning(f'Rejected transactive signal from {message.get("neighbor") if isinstance(message, dict) else message!r}: {e}')
-            return
-
-        for ti_start, interval_signal in message.get('intervals', {}).items():
-            time_interval = market.time_intervals.get_by_start_time(ti_start)
-            if not time_interval:
-                _log.warning(f'Received signal for time interval "{ti_start}",'
-                             f' which is not found in time intervals of market "{market.name}".')
-                continue
-            balance_point_index = interval_signal.get('balance_point', None)
-            flexibility = interval_signal.get('flexibility', {})
-            vertices = []
-            for i, record in flexibility.items():
-                try:
-                    vertex = Vertex(price=record['marginal_price'],
-                                    cost=record['cost'],
-                                    quantity=record['quantity'],
-                                    continuity=record['continuity'],
-                                    uncertainty=record['uncertainty'])
-                except KeyError as e:
-                    _log.warning(f"Missing required field in flexibility record {i}: {e}. Skipping this record.")
-                    continue
-                vertices.append(vertex)
-                if balance_point_index is not None and int(i) == int(balance_point_index):
-                    # If this is the balance point, we need to store the index for later retrieval.
-                    signal.__balance_vertices[time_interval] = vertex
-
-            signal.update(time_interval, vertices, archive=False, replace=True) #archive=True)
+    def parse_signal(cls, neighbor: 'Neighbor', message: dict | TransactiveSignalMessage) -> Self:
+        """
+        The received TransactiveSignal that `message` carries, filed under `neighbor` and archived. The message is the
+        wire form (see TransactiveSignalMessage) or an already validated one. It must validate, name `neighbor` as its
+        sender, name a market this node has, and cover only intervals of that market; otherwise ValueError says what
+        was wrong and nothing is stored.
+        """
+        if not isinstance(message, TransactiveSignalMessage):
+            try:
+                message = TransactiveSignalMessage.model_validate(message)
+            except ValidationError as e:
+                raise ValueError(f'malformed transactive signal: {e}') from e
+        if message.neighbor != neighbor.name:
+            raise ValueError(f'the signal names {message.neighbor!r} as its sender but arrived on the link to '
+                             f'{neighbor.name!r}')
+        market = neighbor.tn.get_market_by_name(message.market)
+        if market is None:
+            raise ValueError(f'unknown market {message.market!r}')
+        signal = cls(market=market, neighbor=neighbor, direction=SignalDirection.received,
+                     signal_time=message.signal_time, sequence=message.sequence, in_reply_to=message.in_reply_to,
+                     revised=message.revised, measurement_unit=message.unit)
+        for start_time, interval_message in message.intervals.items():
+            time_interval = market.time_intervals.get_by_start_time(start_time)
+            if time_interval is None:
+                raise ValueError(f'the interval starting {start_time.isoformat()} is not an interval of market '
+                                 f'{market.name!r}')
+            vertices = [Vertex(price=v.price, cost=v.cost, quantity=v.quantity, continuity=v.continuity,
+                               uncertainty=v.uncertainty) for v in interval_message.flexibility]
+            signal.update(time_interval, vertices, archive=False, replace=True)
+            if interval_message.balance_point is not None:
+                # The curve owns copies of the vertices it was given; the balance point must be the curve's own.
+                marked = vertices[interval_message.balance_point]
+                signal.__balance_vertices[time_interval] = next(
+                    v for v in signal.get_by_interval(time_interval).vertices if v == marked)
         signal.archive()
         return signal
-
 
     @staticmethod
     def _diff_exceeds_threshold(vertex_1, vertex_2, threshold, no_flexibility, mixed_direction):

@@ -40,7 +40,6 @@ PACIFIC NORTHWEST NATIONAL LABORATORY
 operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
-import json
 import logging
 from dataclasses import dataclass
 from copy import copy
@@ -49,7 +48,10 @@ from typing import Union
 from weakref import WeakKeyDictionary
 
 from tent.base import Entity
+from pydantic import ValidationError
+
 from tent.containers import Measurement, SDCurve, TransactiveSignal, Vertex
+from tent.containers.transactive_signal_message import TransactiveSignalMessage
 from tent.enumerations import Direction, MeasurementType, MeasurementUnit, MarketState
 from tent.market import Market
 from tent.utils.helpers import require_aware, validate_bool
@@ -568,28 +570,44 @@ class Neighbor(Entity):
         return sent_signal
 
     def receive_transactive_signal(self, _, __, signal_dict: dict, **___):
-        """Receive and save transactive records from a transactive Neighbor."""
-        _log.info(f'{self.tn.name} is receiving a transactive signal from {signal_dict.get("neighbor")}.')
+        """
+        Receive a transactive signal from this neighbor (subscription callback: time received, key, message). The
+        message must be the wire form (TransactiveSignalMessage) and name this neighbor as its sender; otherwise it is
+        logged and dropped, as is one for an unknown market. One for a market this node has not spawned yet is held
+        (see held_signals).
+        """
         if not self.transactive:
             _log.warning('Transactive signals are not expected to be received from non-transactive neighbors. '
                          'No signal is read.')
             return
-
-        market_name = signal_dict.get('market') if isinstance(signal_dict, dict) else None
-        if market_name and self.tn.get_market_by_name(market_name) is None and self._market_may_still_spawn(market_name):
-            # Not an unknown market, an early one: hold the newest signal for it until the series spawns it.
-            _log.info(f'{self.tn.name}: holding a signal from {self.name} for {market_name}, which has not been spawned '
-                      f'here yet.')
-            self.held_signals[market_name] = signal_dict
+        try:
+            message = TransactiveSignalMessage.model_validate(signal_dict)
+        except ValidationError as e:
+            _log.warning(f'{self.tn.name}: rejected a malformed transactive signal on the link to {self.name}: {e}')
             return
-
-        parsed_signal = TransactiveSignal.parse_signal(self.tn, signal_dict)
-        if parsed_signal:
-            self.last_received_signals[parsed_signal.market] = parsed_signal
-            state = getattr(parsed_signal.market, 'market_state', None)
-            if state in (MarketState.DeliveryLead, MarketState.Delivery, MarketState.Reconcile, MarketState.Expired):
-                _log.info(f'{self.tn.name}: signal {parsed_signal.sequence} from {self.name} for {parsed_signal.market.name} '
-                          f'arrived in {state.name}; too late to be used.')
+        if message.neighbor != self.name:
+            _log.warning(f'{self.tn.name}: rejected a transactive signal naming {message.neighbor!r} as its sender that '
+                         f'arrived on the link to {self.name}.')
+            return
+        _log.info(f'{self.tn.name} is receiving transactive signal {message.sequence} from {self.name} for '
+                  f'{message.market}.')
+        if self.tn.get_market_by_name(message.market) is None and self._market_may_still_spawn(message.market):
+            # Not an unknown market, an early one: hold the newest signal for it until the series spawns it.
+            _log.info(f'{self.tn.name}: holding a signal from {self.name} for {message.market}, which has not been '
+                      f'spawned here yet.')
+            self.held_signals[message.market] = signal_dict
+            return
+        try:
+            parsed_signal = TransactiveSignal.parse_signal(self, message)
+        except ValueError as e:
+            _log.warning(f'{self.tn.name}: rejected transactive signal {message.sequence} from {self.name} for '
+                         f'{message.market!r}: {e}')
+            return
+        self.last_received_signals[parsed_signal.market] = parsed_signal
+        state = getattr(parsed_signal.market, 'market_state', None)
+        if state in (MarketState.DeliveryLead, MarketState.Delivery, MarketState.Reconcile, MarketState.Expired):
+            _log.info(f'{self.tn.name}: signal {parsed_signal.sequence} from {self.name} for {parsed_signal.market.name} '
+                      f'arrived in {state.name}; too late to be used.')
 
     def _market_may_still_spawn(self, market_name: str) -> bool:
         """True if some series of this node names its markets like this one and has not passed the clearing time the
