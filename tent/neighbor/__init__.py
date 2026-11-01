@@ -507,6 +507,11 @@ class Neighbor(Entity):
 
             # The vertices are now suitable for creating transactive records representing the remote agent perspective.
             #  Store the corrected vertices in prepared_signals, where they are ready to send to the remote neighbor.
+            if sd_curve.empty:
+                # The bounds and corrections above never leave a curve empty; an empty one here is a bug upstream, and a
+                # signal with an empty interval would fail at the balance point or on the wire.
+                raise ValueError(f'prep_transactive_signal: the curve prepared for neighbor {self.name} in time interval '
+                                 f'{time_interval.name} is empty after bounds and corrections; it is not stored.')
             self.prepared_signals[market].update(time_interval, sd_curve, archive=False, replace=True)
         # Mark the power scheduled with this neighbor on every interval's curve, so the prepared signal carries the same
         # balance points the sent one will and the two can be compared by check_for_convergence.

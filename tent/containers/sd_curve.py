@@ -156,6 +156,29 @@ class SDCurve(Archivable):
                 * The passed arguments are hard minimum and maximum power limits.
                 * The maximum and minimum vertices in the SDCurve are soft constraints.
         """
+        if not self.vertices:
+            raise ValueError(f'apply_constraints_and_bounds: the curve for {self._owner_description()} has no vertices.')
+        # A curve lying entirely outside the hard limits (every vertex above the maximum, or below the minimum) has no
+        # feasible range: the only quantity the limits allow is the bound nearest the curve, and the curve becomes that
+        # lone inelastic vertex. (Intersecting the limits with such a curve used to leave an empty set, which broke
+        # everything downstream.) This happens, for example, when a node's residual curve towards a supplier shows a
+        # surplus the supplier cannot take back.
+        curve_min, curve_max = self.min_quantity(), self.max_quantity()
+        bound = None
+        if maximum_power is not None and curve_min > maximum_power:
+            bound = maximum_power
+        elif minimum_power is not None and curve_max < minimum_power:
+            bound = minimum_power
+        if bound is not None:
+            bound = float(bound) + 0.0  # -0.0 becomes 0.0
+            _log.warning(f'The curve for {self._owner_description()} lies entirely outside its limits '
+                         f'[{minimum_power}, {maximum_power}] (quantities {curve_min} to {curve_max}); it is replaced by '
+                         f'an inelastic vertex at {bound}.')
+            cost = self.prod_cost_from_vertices(bound)
+            self.vertices = SortedSet([Vertex(price=float('inf'), cost=cost if cost is not None else 0.0,
+                                              quantity=bound, curve=self)])
+            return None
+
         # Find the minimum and maximum powers from the SDCurve.
         #  These are soft constraints that represent a range of flexibility.
         min_power = self.min_quantity(limit=minimum_power)
@@ -173,14 +196,19 @@ class SDCurve(Archivable):
         elif len(self.vertices) == 1:
             self.replace_vertex(self.vertices[0], price=float('inf'))
         else:
-            owner_name = getattr(getattr(self.measurement, 'source', None), 'name', 'unknown')
-            _log.warning(f'Unexpected flexibility logic while bounding SDCurve in {owner_name}. '
+            _log.warning(f'Unexpected flexibility logic while bounding SDCurve in {self._owner_description()}. '
                        f'Maximum and minimum power are the same, but in separate vertices.')
 
         # Trim the list of vertices to remove any that are outside the soft flexibility range.
         # Preserve the SortedSet type to keep downstream set-like operations working.
         self.vertices = SortedSet([x for x in self.vertices if min_power <= x.quantity <= max_power])
         return None
+
+    def _owner_description(self) -> str:
+        """Who this curve belongs to and which interval, for messages."""
+        owner = getattr(getattr(self.measurement, 'source', None), 'name', None)
+        interval = getattr(self.interval, 'name', None)
+        return f'{owner or "an unowned curve"} in {interval or "no interval"}'
 
     def check_rationality(self, action="None"):
         """The check_rationality method checks whether a list of vertices is rational, meaning that signed power is a
@@ -314,6 +342,8 @@ class SDCurve(Archivable):
                         return a0 + a1 + a2  # production cost [$]
 
     def power_from_vertices(self, price: float) -> float:
+        if not self.vertices:
+            raise ValueError(f'power_from_vertices: the curve for {self._owner_description()} has no vertices.')
         if len(self.vertices) == 1:  # One active vertex was found in the given time interval.
             # Presume that using a single production vertex is shorthand for constant, inelastic production.
             return self.vertices[0].quantity  # [avg.kW]
@@ -349,6 +379,8 @@ class SDCurve(Archivable):
         """ Given a power [avg.kW], determine the corresponding marginal price [$/kWh] from the SDCurve.
         """
         # TODO: This and power_from_vertices assume a rational curve (power monotonic with price). Is this actually guaranteed?
+        if not self.vertices:
+            raise ValueError(f'price_from_vertices: the curve for {self._owner_description()} has no vertices.')
         if quantity < self.vertices[0].quantity:
             # The power is below the first vertex. Marginal price is indeterminate.
             #  Return price of the first vertex and warn. (This should be an unlikely condition.)

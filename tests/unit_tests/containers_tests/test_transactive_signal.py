@@ -74,3 +74,13 @@ def test_a_lone_vertex_is_its_own_balance_point(market_and_interval):
     assert TransactiveSignal.balance_points_differ(sent, received, ti, threshold=0.02) is False
     received.update(ti, [Vertex(price=0.05, quantity=60.0)], archive=False, replace=True)
     assert TransactiveSignal.balance_points_differ(sent, received, ti, threshold=0.02) is True
+
+
+def test_a_balance_point_cannot_be_marked_on_an_empty_curve(market_and_interval):
+    from sortedcontainers import SortedSet
+    tn, market, ti = market_and_interval
+    sig = signal(tn, market, ti, SENT, SignalDirection.sent)
+    sig.get_by_interval(ti).vertices = SortedSet()
+    import re
+    with pytest.raises(ValueError, match=re.escape(f'neighbor sentNeighbor holds an empty curve for interval {ti.name}')):
+        sig.mark_balance_points(_ScheduledPowers(ti, 0.0))

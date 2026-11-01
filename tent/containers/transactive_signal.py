@@ -106,6 +106,11 @@ class TransactiveSignal(SDMeasurement):
             sd_curve: SDCurve = self.get_by_interval(ti)
             if sd_curve is None:
                 continue
+            if sd_curve.empty:
+                # A signal never holds an empty curve (prep_transactive_signal refuses one); reaching this is a bug.
+                raise ValueError(f'Signal {self.direction.name if self.direction else "prepared"} for neighbor '
+                                 f'{self.neighbor.name} holds an empty curve for interval {ti.name}; a balance point '
+                                 f'cannot be marked on it.')
             quantity = -float(sp.value)
             vertices = list(sd_curve.vertices)
             tolerance = 1e-6 * max(1.0, abs(quantity))

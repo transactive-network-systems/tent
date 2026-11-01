@@ -209,3 +209,35 @@ def test_check_rationality_fix_up_leaves_this_curve_as_it_was(measurement, inter
 	assert all(v in fixed.vertices for v in fixed.vertices)
 	deleted, count = c.check_rationality('delete_up')
 	assert count == 1 and [(v.price, v.quantity) for v in deleted.vertices] == [(0.1, 5.0), (0.3, 8.0)]
+
+
+def test_a_curve_entirely_outside_its_limits_collapses_to_the_nearest_bound(measurement, interval, caplog):
+	# A residual curve showing a surplus (all quantities positive) offered to a supplier that can only deliver
+	# (limits [-20000, 0]): the feasible quantity is the bound 0, not an empty set.
+	c = make_curve(measurement, interval, [Vertex(0.03, cost=1.0, quantity=124.7), Vertex(0.08, cost=5.0, quantity=1300.0)])
+	with caplog.at_level('WARNING'):
+		c.apply_constraints_and_bounds(minimum_power=-20000.0, maximum_power=-0.0)
+	assert [(v.price, v.quantity, v.cost) for v in c.vertices] == [(float('inf'), 0.0, 1.0)], 'inelastic at the bound, costed from the nearest vertex'
+	assert str(c.vertices[0].quantity) == '0.0', 'not -0.0'
+	assert any('lies entirely outside its limits [-20000.0, -0.0]' in r.message for r in caplog.records)
+	below = make_curve(measurement, interval, [Vertex(0.03, cost=2.0, quantity=-900.0), Vertex(0.08, cost=7.0, quantity=-300.0)])
+	below.apply_constraints_and_bounds(minimum_power=-100.0, maximum_power=0.0)
+	assert [(v.price, v.quantity) for v in below.vertices] == [(float('inf'), -100.0)]
+
+
+def test_a_curve_crossing_its_limits_is_still_trimmed_to_them(measurement, interval):
+	c = make_curve(measurement, interval, [Vertex(0.03, quantity=-500.0), Vertex(0.08, quantity=500.0)])
+	c.apply_constraints_and_bounds(minimum_power=-20000.0, maximum_power=0.0)
+	assert [v.quantity for v in c.vertices] == [-500.0, 0.0]
+	assert c.vertices[1].price == pytest.approx(0.055), 'interpolated at the bound'
+
+
+def test_lookups_on_an_empty_curve_say_so(measurement, interval):
+	c = make_curve(measurement, interval, [Vertex(0.03, quantity=1.0)])
+	c.vertices = SortedSet()
+	with pytest.raises(ValueError, match='price_from_vertices: the curve for SRC in .* has no vertices'):
+		c.price_from_vertices(0.0)
+	with pytest.raises(ValueError, match='power_from_vertices'):
+		c.power_from_vertices(0.05)
+	with pytest.raises(ValueError, match='apply_constraints_and_bounds'):
+		c.apply_constraints_and_bounds(-1.0, 1.0)
