@@ -14,8 +14,13 @@ All adapters are also lazily accessible directly from :mod:`der_interface.adapte
 
 from __future__ import annotations
 
-from . import gridlabd, ochre, pvlib, replay
+import importlib
+
 from .factory import PRESET_CONFIGS, from_config, load_adapter
+
+# The adapter subpackages need their simulators' optional dependencies (pandas, pvlib, ochre), so they are loaded on
+# first use, by name through __getattr__, instead of being imported here.
+_SUBPACKAGES = ("gridlabd", "ochre", "pvlib", "replay")
 
 __all__ = [
     "from_config",
@@ -42,6 +47,8 @@ __all__ = [
 
 
 def __getattr__(name: str):
+    if name in _SUBPACKAGES:
+        return importlib.import_module(f"{__name__}.{name}")
     if name == "ReplayAdapter":
         from .replay.replay import ReplayAdapter
 
