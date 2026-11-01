@@ -45,4 +45,4 @@ def test_external_target_manager_constructs_through_the_base_init():
     parent = Mock()
     parent.name = 'Asset'
     manager = ExternalTargetActuationManager(parent=parent, control_interval=5)
-    assert manager.control_interval == 5 and manager.occupancy_manager is None
+    assert manager.control_interval == timedelta(seconds=5) and manager.occupancy_manager is None

@@ -2,13 +2,14 @@ import logging
 
 from datetime import datetime
 
+from tent import registry
+from tent.config import ConfigModel, ReconfigurationError, Setting, class_spec
 from tent.containers.time_interval import TimeInterval
 from tent.containers.vertex import Vertex
 from tent.local_asset import LocalAsset
 from tent.market import Market
-from tent.utils.helpers import get_class_from_spec, spec_kwargs
 
-from .models.base import ModelFrame
+from .models.base import Model, ModelFrame, ModelFrameConfigs
 from ..actuation_manager import ActuationManager
 from ..occupancy_manager import OccupancyManager
 
@@ -16,26 +17,34 @@ _log = logging.getLogger(__name__)
 
 
 class ModelFrameAsset(LocalAsset, ModelFrame):
-    def __init__(self,
-                 transactive_node,
-                 model_configs: dict = None,
-                 temperature_forecast_name: str = '',
-                 actuation_manager: dict = None,
-                 occupancy_manager: dict = None,
-                 *args, **kwargs):
-        model_configs = model_configs if model_configs else {}
-        ModelFrame.__init__(self, model_configs, **kwargs)
-        LocalAsset.__init__(self, transactive_node, *args, **kwargs)
+    class Config(LocalAsset.Config):
+        model_configs: ModelFrameConfigs | None = Setting(
+            None, reconfigurable=True,
+            description='The device models of the frame (demand_curve_points and models). A running asset takes a '
+                        'change that keeps the same models (by subscribe_key and class) and changes only their '
+                        'reconfigurable settings; anything else rebuilds the node.')
+        temperature_forecast_name: str = Setting(
+            '', reconfigurable=True, reference='information_service_models',
+            description='Name of the temperature forecast service (among information_services) the models use.')
+        actuation_manager: class_spec('NullActuationManager') | None = Setting(
+            None, spec_of='ActuationManager', spec_default='NullActuationManager',
+            description='The actuation manager that writes cleared schedules to the devices; class_name defaults to '
+                        'NullActuationManager. Null means no actuation manager.')
+        occupancy_manager: class_spec('SimpleOccupancyManager') | None = Setting(
+            None, spec_of='OccupancyManager', spec_default='SimpleOccupancyManager', reconfigurable=True,
+            description='The occupancy manager (schedule) that tells the models whether the building is occupied; '
+                        'class_name defaults to SimpleOccupancyManager. Null means always occupied.')
 
-        self.temperature_forecast_name = temperature_forecast_name
+    def __init__(self, transactive_node, config: ConfigModel | None = None, **kwargs):
+        cfg = self._configure(config, kwargs)
+        ModelFrame.__init__(self, cfg.model_configs)
+        LocalAsset.__init__(self, transactive_node, config=cfg)
+
+        self.temperature_forecast_name = cfg.temperature_forecast_name
 
         # The occupancy and actuation managers name their classes like every other configured component (see
         # tent.registry); SimpleOccupancyManager and NullActuationManager apply when a configuration names none.
-        self.occupancy_manager: OccupancyManager | None = None
-        if occupancy_manager:  # TODO: Implement default behavior if occupancy_manager is not specified (make an always occupied base class).
-            spec = {'class_name': 'SimpleOccupancyManager', **occupancy_manager}
-            om_class = get_class_from_spec(spec, OccupancyManager)
-            self.occupancy_manager = om_class(**spec_kwargs(spec))
+        self.occupancy_manager: OccupancyManager | None = self._build_occupancy_manager(cfg.occupancy_manager)
 
         self.actuation_manager: ActuationManager | None = None
         for subscribe_key in self.models:
@@ -43,12 +52,72 @@ class ModelFrameAsset(LocalAsset, ModelFrame):
                 continue
             self.tn.register_subscription(subscribe_key=subscribe_key, callback=self.new_model_data)
 
-        if actuation_manager:
-            spec = {'class_name': 'NullActuationManager', **actuation_manager}
-            am_class = get_class_from_spec(spec, ActuationManager)
+        if cfg.actuation_manager is not None:
+            spec = cfg.actuation_manager
+            am_class = registry.resolve(spec.class_name, ActuationManager, spec.module_name)
             self.actuation_manager = am_class(parent=self, occupancy_manager=self.occupancy_manager,
-                                              transactive_node=self.tn, **spec_kwargs(spec))
+                                              transactive_node=self.tn, **spec.settings())
             _log.info(f'Configured actuator {am_class.__name__} for asset: {self.name}')
+
+    @staticmethod
+    def _build_occupancy_manager(spec) -> OccupancyManager | None:
+        if spec is None:
+            return None
+        om_class = registry.resolve(spec.class_name, OccupancyManager, spec.module_name)
+        return om_class(**spec.settings())
+
+    # ------------------------------------------------------------------------------------------- reconfiguration
+
+    def check_reconfigure(self, changes):
+        new_config = super().check_reconfigure(changes)
+        if 'model_configs' in changes:
+            self._model_changes(new_config.model_configs)  # raises when the models cannot take the change in place
+        return new_config
+
+    def _model_changes(self, new_frame: ModelFrameConfigs | None) -> list[tuple[Model, dict]]:
+        """The per-model changes a new model_configs block asks for, when every model keeps its class and subscribe_key,
+        the frame keeps its demand_curve_points, and only reconfigurable model settings differ."""
+        who = self.describe(name=self.name)
+        current = self.config.model_configs
+        if (new_frame is None) != (current is None):
+            raise ReconfigurationError(f'{who}: model_configs cannot be added to or removed from a running asset.')
+        if new_frame is None:
+            return []
+        if new_frame.demand_curve_points != current.demand_curve_points:
+            raise ReconfigurationError(f'{who}: model_configs.demand_curve_points cannot be changed on a running asset.')
+        current_entries = {entry.subscribe_key: entry for entry in current.models}
+        new_entries = {entry.subscribe_key: entry for entry in new_frame.models}
+        if set(current_entries) != set(new_entries):
+            raise ReconfigurationError(f'{who}: the set of models changed (by subscribe_key: '
+                                       f'{sorted(set(current_entries) ^ set(new_entries))}); a running asset keeps its '
+                                       f'models.')
+        changes = []
+        for key, entry in new_entries.items():
+            before = current_entries[key]
+            if (entry.class_name, entry.module_name) != (before.class_name, before.module_name):
+                raise ReconfigurationError(f'{who}: model {key!r} changed class; a running asset keeps its models.')
+            model = self.models[key]
+            new_model_config = model.validate_config({**entry.settings(), 'subscribe_key': key,
+                                                      'demand_curve_points': new_frame.demand_curve_points},
+                                                     name=key)
+            changed = model.config.changed_fields(new_model_config)
+            if changed:
+                try:
+                    model.check_reconfigure({name: getattr(new_model_config, name) for name in changed})
+                except ReconfigurationError as error:
+                    raise ReconfigurationError(f'{who}: {error}') from None
+                changes.append((model, {name: getattr(new_model_config, name) for name in changed}))
+        return changes
+
+    def _apply_reconfiguration(self, cfg, changed: set[str]) -> None:
+        super()._apply_reconfiguration(cfg, changed - {'model_configs', 'occupancy_manager'})
+        if 'model_configs' in changed:
+            for model, model_changes in self._model_changes(cfg.model_configs):
+                model.reconfigure(model_changes)
+        if 'occupancy_manager' in changed:
+            self.occupancy_manager = self._build_occupancy_manager(cfg.occupancy_manager)
+            if self.actuation_manager is not None:
+                self.actuation_manager.set_occupancy_manager(self.occupancy_manager)
 
     def new_model_data(self, time_received: datetime, subscribe_key: str, message: dict):
         """Ingest new data for models in ModelFrame (subscription callback: time received, key, message)."""

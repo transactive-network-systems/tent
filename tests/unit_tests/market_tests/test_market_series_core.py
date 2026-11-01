@@ -58,13 +58,13 @@ def _node():
 
 
 @pytest.mark.parametrize('settings, message', [
-    ({'market_clearing_interval': 0}, 'market_clearing_interval must be positive'),
-    ({'interval_duration': 0}, 'interval_duration must be positive'),
-    ({'intervals_to_clear': 0}, 'intervals_to_clear must be at least 1'),
-    ({'duration_negotiation': -5}, 'duration_negotiation must not be negative'),
+    ({'market_clearing_interval': 0}, 'market_clearing_interval: must be positive; got 0.0'),
+    ({'interval_duration': 0}, 'interval_duration: must be positive; got 0.0'),
+    ({'intervals_to_clear': 0}, 'intervals_to_clear: Input should be greater than or equal to 1'),
+    ({'duration_negotiation': -5}, 'duration_negotiation: must not be negative; got -5.0'),
 ])
 def test_series_timings_are_validated_by_field(settings, message):  # audit T-INC-07
-    with pytest.raises(ValueError, match=f'MarketSeries Core: {message}'):
+    with pytest.raises(ValueError, match=f"MarketSeries 'Core': {message}"):
         MarketSeries(transactive_node=_node(), market_class=Market, name='Core', **settings)
 
 
@@ -83,7 +83,8 @@ def test_price_model_spec_keywords_reach_the_model_and_the_spec_is_not_consumed(
 
 
 def test_price_model_spec_with_an_unknown_keyword_fails_at_construction():  # audit T-INC-08
-    with pytest.raises(TypeError, match="price_model HourlyAveragePriceModel rejected its keywords.*'forgetting_factr'"):
+    with pytest.raises(ValueError, match="MarketSeries 'Core': price_model HourlyAveragePriceModel rejected its keywords "
+                                         ".*unknown configuration key 'forgetting_factr'"):
         MarketSeries(transactive_node=_node(), market_class=Market, name='Core',
                      price_model={'class_name': 'HourlyAveragePriceModel', 'module_name': 'tent.market.price_models',
                                   'forgetting_factr': 3})

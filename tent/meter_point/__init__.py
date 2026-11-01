@@ -51,12 +51,12 @@ overrides poll() the same way. poll() never raises out of the host's loop for on
 with its traceback, the last value stands and the next period tries again.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from math import ceil
 from statistics import mean
-from typing import Union
 
 from tent.base import Component
+from tent.config import ConfigModel, NamedConfig, PositiveSeconds, Setting, enum_by_name
 from tent.enumerations import MeasurementType, MeasurementUnit
 from tent.utils.helpers import require_aware
 from tent.utils.time_series_buffer import TimeSeriesBuffer
@@ -64,45 +64,32 @@ from tent.utils.timer import Timer
 
 
 class MeterPoint(Component):
-    def __init__(self,
-                 transactive_node,
-                 data_period_seconds: float = 10,
-                 description: str = '',
-                 max_buffer_seconds: float = 3600,
-                 # TODO: Is measurement_interval intended as the market interval or the polling period?
-                 #  2022-03-28: Assuming that this is set to the interval to be considered by the
-                 #  mean_measurements function (i.e used for DC interval in neighbor_model). Is this correct?
-                 measurement_interval: Union[timedelta, int] = timedelta(hours=1),
-                 measurement_type: Union[MeasurementType, str, int] = MeasurementType.Unknown,
-                 measurement_unit: Union[MeasurementUnit, str, int] = MeasurementUnit.Unknown,
-                 name: str = '',
-                 scale_factor: float = 1.0
-                 ):
-        super(MeterPoint, self).__init__(description, name, transactive_node)
+    class Config(NamedConfig):
+        data_period_seconds: float = Setting(10, gt=0, description='[s] period between readings; sizes the buffer with '
+                                                                   'max_buffer_seconds and paces a pulled meter.')
+        max_buffer_seconds: float = Setting(3600, gt=0, description='[s] length of reading history kept.')
+        measurement_interval: PositiveSeconds = Setting(
+            3600, description='[s] interval over which readings are averaged (current_interval_measurements).')
+        measurement_type: enum_by_name(MeasurementType) = Setting('Unknown', description='What is measured.')
+        measurement_unit: enum_by_name(MeasurementUnit) = Setting('Unknown', description='Unit of the readings.')
+        scale_factor: float = Setting(1.0, reconfigurable=True,
+                                      description='[dimensionless] factor applied to every reading; -1 reverses the '
+                                                  'sign of the meter.')
 
-        max_len = ceil(max_buffer_seconds / data_period_seconds) + 1
+    def __init__(self, transactive_node, config: ConfigModel | None = None, **kwargs):
+        cfg = self._configure(config, kwargs)
+        super(MeterPoint, self).__init__(cfg.description, cfg.name, transactive_node, config=cfg)
+
+        max_len = ceil(cfg.max_buffer_seconds / cfg.data_period_seconds) + 1
         self.buffer = TimeSeriesBuffer(maxlen=max_len, dt_class=Timer)
 
         # These are static properties that may be passed as parameters:
-        self.data_period_seconds = float(data_period_seconds)
-        self.max_buffer_seconds = float(max_buffer_seconds)
-        self.measurement_interval = measurement_interval if isinstance(measurement_interval, timedelta) \
-            else timedelta(seconds=measurement_interval)
-
-        if isinstance(measurement_type, MeasurementType):
-            self.measurement_type = measurement_type
-        elif isinstance(measurement_type, int):
-            self.measurement_type = MeasurementType(measurement_type)
-        else:
-            self.measurement_type = MeasurementType[measurement_type]
-
-        if isinstance(measurement_unit, MeasurementUnit):
-            self.measurement_unit = measurement_unit
-        elif isinstance(measurement_unit, int):
-            self.measurement_unit = MeasurementUnit(measurement_unit)
-        else:
-            self.measurement_unit = MeasurementUnit[measurement_unit]
-        self.scale_factor = float(scale_factor)  # Use -1 to reverse the sign of the meter.
+        self.data_period_seconds = float(cfg.data_period_seconds)
+        self.max_buffer_seconds = float(cfg.max_buffer_seconds)
+        self.measurement_interval = cfg.measurement_interval
+        self.measurement_type = cfg.measurement_type
+        self.measurement_unit = cfg.measurement_unit
+        self.scale_factor = float(cfg.scale_factor)  # Use -1 to reverse the sign of the meter.
 
     @property
     def current_interval_measurements(self) -> list:

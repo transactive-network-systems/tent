@@ -45,6 +45,7 @@ import logging
 
 from datetime import timedelta
 from tent.base import Entity
+from tent.config import ConfigModel, Setting
 from tent.containers import Measurement, TimeInterval, Vertex
 from tent.enumerations import MeasurementType, MeasurementUnit
 from tent.utils.timer import Timer
@@ -71,31 +72,31 @@ class LocalAsset(Entity):
     # Storage - optimize revenue, less cost
     # Controllable - unconstrained scheduling based on a polynomial production or utility def
 
-    def __init__(self,
-                 transactive_node,
-                 cost_parameters=(0.0, 0.0, 0.0),
-                 default_power=0.0,
-                 default_vertices=None,
-                 description='',
-                 engagement_costs=(0.0, 0.0, 0.0),
-                 information_services=None,
-                 location='',
-                 maximum_power=0.0,
-                 minimum_power=0.0,
-                 meter_points=None,
-                 name=''
-                 ):
-        super(LocalAsset, self).__init__(cost_parameters, default_vertices, description, information_services, location,
-                                         maximum_power, meter_points, minimum_power, name, transactive_node)
+    class Config(Entity.Config):
+        default_power: float = Setting(0.0, reconfigurable=True,
+                                       description='[avg.kW, signed, generation positive] power scheduled when the asset '
+                                                   'has no better estimate.')
+        engagement_costs: tuple[float, float, float] = Setting(
+            (0.0, 0.0, 0.0), reconfigurable=True,
+            description='[$] transition costs [disengagement, hold, engagement]; see engagement_cost().')
+
+    def __init__(self, transactive_node, config: ConfigModel | None = None, **kwargs):
+        cfg = self._configure(config, kwargs)
+        super(LocalAsset, self).__init__(transactive_node, config=cfg)
 
         # These following static properties may be assigned as parameters:
-        self.default_power: float = float(default_power)           # [avg.kW, signed] Assignable default power value(s)
-        self.engagement_costs: list[float] = [float(ec) for ec in engagement_costs]  # [disengagement, hold, engagement] transition costs [$]; see engagement_cost()
+        self.default_power: float = float(cfg.default_power)       # [avg.kW, signed] Assignable default power value(s)
+        self.engagement_costs: list[float] = list(cfg.engagement_costs)  # [disengagement, hold, engagement] transition costs [$]; see engagement_cost()
 
         # These following properties are dynamically managed and should not normally be manually configured:
         self.engagement_schedule: Measurement = Measurement(self, MeasurementType.EngagementSchedule, MeasurementUnit.Boolean, archive_now=False)  # True = engaged
         self.schedule_calculated: bool = False            # Flag set True after asset has scheduled power
         self.transition_costs: Measurement = Measurement(self, MeasurementType.TransitionCost, MeasurementUnit.Monetary, archive_now=False)
+
+    def _apply_reconfiguration(self, cfg, changed: set[str]) -> None:
+        super()._apply_reconfiguration(cfg, changed - {'engagement_costs'})
+        if 'engagement_costs' in changed:
+            self.engagement_costs = list(cfg.engagement_costs)
 
     # SEALED - DO NOT MODIFY
     def schedule(self, market):

@@ -83,14 +83,18 @@ def make_series(tn, **kwargs):
 
 def test_matching_strategy_configured_on_series(market):
     tn = market.tn
-    series = make_series(tn, matching_strategy=['order_age', 'ORDER_VOLUME'])
-    assert series.market_kwargs == {'matching_strategy': ['order_age', 'ORDER_VOLUME']}
+    series = make_series(tn, matching_strategy=['ORDER_AGE', 'ORDER_VOLUME'])
+    assert series.market_kwargs == {'matching_strategy': [MatchingStrategy.ORDER_AGE, MatchingStrategy.ORDER_VOLUME],
+                                    'order_expiry': None}, 'the validated market settings, defaults included'
     assert series.newest_market.matching_strategy == [MatchingStrategy.ORDER_AGE, MatchingStrategy.ORDER_VOLUME]
     series.spawn()  # every spawned market gets the same keywords
     assert series.newest_market.matching_strategy == [MatchingStrategy.ORDER_AGE, MatchingStrategy.ORDER_VOLUME]
-    # Members and values are accepted too; a single item need not be wrapped in a list.
+    # Members are accepted too; a single item need not be wrapped in a list. Values and other spellings are not.
     assert make_series(tn, matching_strategy=MatchingStrategy.NONE).newest_market.matching_strategy == [MatchingStrategy.NONE]
-    assert make_series(tn, matching_strategy=[2]).newest_market.matching_strategy == [MatchingStrategy.ORDER_VOLUME]
+    with pytest.raises(ValueError, match="matching_strategy.0: must be the name of a MatchingStrategy member"):
+        make_series(tn, matching_strategy=[2])
+    with pytest.raises(ValueError, match="matching_strategy.0: must be the name of a MatchingStrategy member"):
+        make_series(tn, matching_strategy=['order_age'])
     # Each market records the strategy it actually uses, normalised, in its extension table.
     series.newest_market.archive()
     rows = [r for r in tn.data_manager.by_table('matching_engine') if r['id'] == series.newest_market.id]
@@ -98,8 +102,9 @@ def test_matching_strategy_configured_on_series(market):
 
 
 def test_unknown_market_keyword_fails_at_configuration(market):
-    with pytest.raises(TypeError):
-        make_series(market.tn, matching_strateg=['ORDER_AGE'])  # typo reaches MatchingEngine.__init__ and is rejected
+    with pytest.raises(ValueError, match="MarketSeries 'Matching Series' \\(market settings of MatchingEngine\\): unknown "
+                                         "configuration key 'matching_strateg'"):
+        make_series(market.tn, matching_strateg=['ORDER_AGE'])  # a typo is rejected by MatchingEngine.Config
 
 
 def test_spawn_keywords_cannot_be_configured(market):
@@ -216,9 +221,9 @@ def test_no_counteroffers_leaves_order_standing(market):
 
 def add_entities(market):
     tn = market.tn
-    load = LocalAsset(transactive_node=tn, name='Load', cost_parameters=[])
-    gen = LocalAsset(transactive_node=tn, name='Gen', cost_parameters=[])
-    remote = Neighbor(transactive_node=tn, name='Remote', cost_parameters=[])
+    load = LocalAsset(transactive_node=tn, name='Load')
+    gen = LocalAsset(transactive_node=tn, name='Gen')
+    remote = Neighbor(transactive_node=tn, name='Remote')
     tn.local_assets = [load, gen]
     tn.neighbors = [remote]
     return load, gen, remote

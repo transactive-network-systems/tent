@@ -5,6 +5,9 @@ from dataclasses import dataclass, field
 from datetime import timedelta
 from enum import Enum
 
+from pydantic import field_validator
+
+from tent.config import ConfigModel, PositiveSeconds, Setting, enum_by_name
 from tent.containers.measurement import Measurement
 from tent.containers.order import Order, OrderStatus, SupplyOrDemand, Vertex, VTypes
 from tent.enumerations import MarketTypes, MeasurementType, MeasurementUnit
@@ -82,36 +85,32 @@ class MatchingEngine(Market):
     """
     MARKET_TYPE = MarketTypes.matching_engine
 
-    def __init__(self, *args, matching_strategy: list | str | MatchingStrategy | None = None,
-                 order_expiry: timedelta | float | None = None, **kwargs):
+    class Config(Market.Config):
+        matching_strategy: list[enum_by_name(MatchingStrategy)] = Setting(
+            ['ORDER_VOLUME'], min_length=1,
+            description='Tie-break order for same-price orders, by name: NONE, ORDER_AGE, ORDER_VOLUME, '
+                        'PROPORTIONAL_VOLUME. A single name is accepted as a list of one.')
+        order_expiry: PositiveSeconds | None = Setting(
+            None, reconfigurable=True,
+            description='[s] lifetime of the orders the engine quotes for local entities; null means they stand until '
+                        'the market clears.')
+
+        @field_validator('matching_strategy', mode='before')
+        @classmethod
+        def _one_strategy_is_a_list(cls, value):
+            return [value] if isinstance(value, (str, MatchingStrategy)) else value
+
+    def __init__(self, *args, config: ConfigModel | None = None, **kwargs):
+        runtime, settings = self.split_keywords(kwargs)
+        cfg = self._configure(config, settings)
         # Recorded by get_record(), so it must exist before Market.__init__ archives the market row.
-        self.matching_strategy: list[MatchingStrategy] = self._parse_matching_strategy(matching_strategy)
-        super(MatchingEngine, self).__init__(*args, **kwargs)
+        self.matching_strategy: list[MatchingStrategy] = list(cfg.matching_strategy)
+        super(MatchingEngine, self).__init__(*args, config=cfg, **runtime)
         self.order_measurement: Measurement = Measurement(self, MeasurementType.Order, MeasurementUnit.kW)
         self.orderList: list[Order] = []  # List of standing orders not yet matched
         self.matchList: list[Order] = []  # List of orders successfully matched
-        self.order_expiry: timedelta | None = (order_expiry if isinstance(order_expiry, timedelta) or order_expiry is None
-                                               else timedelta(seconds=float(order_expiry)))
+        self.order_expiry: timedelta | None = cfg.order_expiry
         self.quotes: dict[tuple, Quote] = {}
-
-    @staticmethod
-    def _parse_matching_strategy(spec) -> list[MatchingStrategy]:
-        """Accept MatchingStrategy members, their names, or their values, singly or as a list; default if empty."""
-        if spec is None or spec == []:
-            return list(MATCHING_STRATEGY)
-        if isinstance(spec, (str, int, MatchingStrategy)):
-            spec = [spec]
-        strategies = []
-        for item in spec:
-            if isinstance(item, MatchingStrategy):
-                strategies.append(item)
-            elif isinstance(item, int):
-                strategies.append(MatchingStrategy(item))
-            elif isinstance(item, str):
-                strategies.append(MatchingStrategy[item.upper()])
-            else:
-                raise TypeError(f'Unrecognised matching strategy: {item!r}')
-        return strategies
 
     @property
     def table_name(self):

@@ -94,13 +94,13 @@ def test_neighbor_direction_conversion():
     neighbor1 = Neighbor(transactive_node=tn, up_or_down=Direction.downstream, **params)
     assert neighbor1.up_or_down == Direction.downstream
     
-    # Test with int
-    neighbor2 = Neighbor(transactive_node=tn, up_or_down=1, **params)  # assuming 1 = upstream
-    assert isinstance(neighbor2.up_or_down, Direction)
-    
-    # Test with string
+    # Test with string (the member name is the configuration form)
     neighbor3 = Neighbor(transactive_node=tn, up_or_down='upstream', **params)
     assert neighbor3.up_or_down == Direction.upstream
+
+    # Enumeration values are storage, not configuration: an int is rejected naming the members
+    with pytest.raises(ValueError, match="up_or_down: must be the name of a Direction member.*'upstream'"):
+        Neighbor(transactive_node=tn, up_or_down=1, **params)
 
 
 def test_neighbor_cost_parameters_assignment():
@@ -117,10 +117,10 @@ def test_neighbor_cost_parameters_assignment():
     # Verify cost parameters are correctly assigned
     assert neighbor.cost_parameters == [10.5, 0.02, 0.001]
     
-    # Test that string numbers are converted to floats
+    # Strings are not numbers: a configuration error naming the coefficient
     params['cost_parameters'] = ['15.5', '0.03', '0.002']
-    neighbor2 = Neighbor(transactive_node=tn, **params)
-    assert neighbor2.cost_parameters == [15.5, 0.03, 0.002]
+    with pytest.raises(ValueError, match="cost_parameters: coefficients must be numbers; got '15.5'"):
+        Neighbor(transactive_node=tn, **params)
 
 
 def test_neighbor_subscription_registration():
@@ -369,7 +369,7 @@ class TestHeavyLoadHours:  # audit T-30
         assert self.supplier().is_heavy_load_hour(datetime(2026, 12, 25, 12, 0)) is True
 
     def test_bad_inputs_are_errors(self):
-        with pytest.raises(ValueError, match='holidays must be ISO dates'):
+        with pytest.raises(ValueError, match="BulkSupplierDC 'BPA': holidays.0: Input should be a valid date"):
             self.supplier(holidays=['Christmas'])
         with pytest.raises(TypeError, match='needs a datetime'):
             self.supplier().is_heavy_load_hour('2026-07-10T12:00')

@@ -43,6 +43,7 @@ under Contract DE-AC05-76RL01830
 
 import logging
 
+from tent.config import ConfigModel, Setting
 from tent.containers.measurement import Measurement
 from tent.enumerations import MarketTypes, MeasurementType, MeasurementUnit
 from tent.market import Market
@@ -88,10 +89,16 @@ class ConsensusMarket(Market):
     """
     MARKET_TYPE = MarketTypes.consensus
 
-    def __init__(self, *args, max_balance_iterations: int = 20, **kwargs):
+    class Config(Market.Config):
+        max_balance_iterations: int = Setting(20, ge=1, reconfigurable=True,
+                                              description='Most balancing iterations one local balancing pass takes.')
+
+    def __init__(self, *args, config: ConfigModel | None = None, **kwargs):
+        runtime, settings = self.split_keywords(kwargs)
+        cfg = self._configure(config, settings)
         # The solution method is a MarketSeries setting (series.method); Market.__init__ does not take it.
-        super(ConsensusMarket, self).__init__(*args, **kwargs)
-        self.max_balance_iterations: int = int(max_balance_iterations)
+        super(ConsensusMarket, self).__init__(*args, config=cfg, **runtime)
+        self.max_balance_iterations: int = int(cfg.max_balance_iterations)
         # Per interval: this market converged AND every transactive neighbor agrees. See record_consensus().
         self.full_consensus: Measurement = Measurement(self, MeasurementType.FullConsensus, MeasurementUnit.Boolean)
         self.duality_gap: float | None = None  # relative gap of the last local balancing pass

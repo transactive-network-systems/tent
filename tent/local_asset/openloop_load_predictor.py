@@ -43,9 +43,9 @@ under Contract DE-AC05-76RL01830
 
 import logging
 
-from typing import List
 
 
+from tent.config import ConfigModel, Setting
 from tent.enumerations import MeasurementType
 from tent.local_asset import LocalAsset
 
@@ -79,22 +79,44 @@ class OpenLoopLoadPredictor(LocalAsset):
     #   TEMP - degrees Fahrenheit - a predicted hourly temperature forecast.
     """
 
-    def __init__(self,
-                 dow_intercept: List[float],
-                 season: List[int],
-                 values: List[List[int]],
-                 default_temperature: float = 56.6,
-                 scale_factor: float = 1,
-                 *args, **kwargs):
-        super(OpenLoopLoadPredictor, self).__init__(*args, **kwargs)
-        self.default_temperature = default_temperature
-        self.dow_intercept = dow_intercept
-        self.season = season
-        self.values = values
+    class Config(LocalAsset.Config):
+        dow_intercept: list[float] = Setting(..., min_length=7, max_length=7, reconfigurable=True,
+                                             description='[avg.kW] regression intercept per weekday, Monday first.')
+        season: list[int] = Setting(..., min_length=12, max_length=12, reconfigurable=True,
+                                    description='Season regime index per month, January first (a row group of values).')
+        values: list[list[float]] = Setting(
+            ..., reconfigurable=True,
+            description='Regression rows [intercept avg.kW, temperature factor avg.kW/degF], one per hour of the day '
+                        'and season regime.')
+        default_temperature: float = Setting(56.6, reconfigurable=True,
+                                             description='[degF] temperature used when no forecast is available.')
+        scale_factor: float = Setting(1.0, reconfigurable=True,
+                                      description='[dimensionless] factor applied to the predicted load.')
+
+    def __init__(self, transactive_node, config: ConfigModel | None = None, **kwargs):
+        cfg = self._configure(config, kwargs)
+        super(OpenLoopLoadPredictor, self).__init__(transactive_node, config=cfg)
+        self.default_temperature = cfg.default_temperature
+        self.dow_intercept = list(cfg.dow_intercept)
+        self.season = list(cfg.season)
+        self.values = [list(row) for row in cfg.values]
+        self.scale_factor = cfg.scale_factor
         # TODO: This should probably allow configuration of a named ism instead.
-        self.temperature_forecaster = next((s for s in self.information_services
-                                            if s.information_type == MeasurementType.Temperature), None)
-        self.scale_factor = scale_factor
+        self.temperature_forecaster = self._find_temperature_forecaster()
+
+    def _find_temperature_forecaster(self):
+        return next((s for s in self.information_services if s.information_type == MeasurementType.Temperature), None)
+
+    def _apply_reconfiguration(self, cfg, changed: set[str]) -> None:
+        super()._apply_reconfiguration(cfg, changed - {'dow_intercept', 'season', 'values'})
+        if 'dow_intercept' in changed:
+            self.dow_intercept = list(cfg.dow_intercept)
+        if 'season' in changed:
+            self.season = list(cfg.season)
+        if 'values' in changed:
+            self.values = [list(row) for row in cfg.values]
+        if 'information_services' in changed:
+            self.temperature_forecaster = self._find_temperature_forecaster()
 
     def schedule_power(self, mkt):
         """

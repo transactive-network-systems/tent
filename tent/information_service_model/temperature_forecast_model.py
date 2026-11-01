@@ -48,9 +48,12 @@ import logging
 
 from datetime import timedelta
 from pathlib import Path
-from typing import Union
+from typing import Any
+
+from pydantic import field_validator
 from zoneinfo import ZoneInfo
 
+from tent.config import ConfigModel, NonNegativeSeconds, Setting, enum_by_name
 from tent.information_service_model import InformationServiceModel
 from tent.enumerations import MeasurementType, MeasurementUnit
 from tent.utils.helpers import parse_datetime
@@ -69,29 +72,78 @@ class TemperatureForecastModel(InformationServiceModel):
     a configuration error. Relative paths are resolved against the process's working directory and archived resolved.
     """
 
-    def __init__(self,
-                 location: dict = None,
-                 max_gap_time: Union[timedelta, float, int] = timedelta(hours=4),
-                 temperature_point_name: str = '',
-                 tmy_fallback_path: str = '',
-                 weather_file_path: str = None,
-                 *args, **kwargs):
+    class Config(InformationServiceModel.Config):
+        information_type: enum_by_name(MeasurementType) = Setting(
+            'Temperature', description='Always Temperature for this service (consumers select it by type).')
+        information_units: enum_by_name(MeasurementUnit) = Setting('degF', description='Always degF for this service.')
+
+        @field_validator('information_type')
+        @classmethod
+        def _is_temperature(cls, value):
+            if value is not MeasurementType.Temperature:
+                raise ValueError(f'is always Temperature for a temperature forecast; leave it out or give "Temperature", '
+                                 f'not {value.name!r}')
+            return value
+
+        @field_validator('information_units')
+        @classmethod
+        def _is_degf(cls, value):
+            if value is not MeasurementUnit.degF:
+                raise ValueError(f'is always degF for a temperature forecast; leave it out or give "degF", not '
+                                 f'{value.name!r}')
+            return value
+        location: dict[str, Any] | None = Setting(
+            None, reconfigurable=True,
+            description='Location a service-backed forecast asks about (such as {"lat": 46.2, "long": -119.2}); null '
+                        'for a file-backed forecast.')
+        max_gap_time: NonNegativeSeconds = Setting(
+            14400, reconfigurable=True,
+            description='[s] longest gap in the data a service-backed forecast fills before falling back to the file.')
+        temperature_point_name: str = Setting(
+            '', reconfigurable=True,
+            description='Name of the temperature point in a service\'s reply; empty means OutdoorAirTemperature.')
+        tmy_fallback_path: str = Setting(
+            '', reconfigurable=True,
+            description='CSV file (columns Timestamp, Value in degF) a service-backed forecast falls back to; the '
+                        'forecast file itself when weather_file_path is empty.')
+        weather_file_path: str | None = Setting(
+            None, reconfigurable=True,
+            description='CSV file (columns Timestamp, Value in degF) the forecast is read from; relative paths are '
+                        'resolved against the working directory. Null with an empty tmy_fallback_path means no file.')
+
+    def __init__(self, transactive_node, config: ConfigModel | None = None, **kwargs):
+        cfg = self._configure(config, kwargs)
         # This service is a temperature forecast whatever the configuration says: consumers select it by type.
-        kwargs['information_type'] = MeasurementType.Temperature
-        kwargs['information_units'] = MeasurementUnit.degF
-        super(TemperatureForecastModel, self).__init__(*args, **kwargs)
+        super(TemperatureForecastModel, self).__init__(transactive_node, config=cfg)
+        self.information_type = MeasurementType.Temperature
+        self.information_units = MeasurementUnit.degF
         # Service settings, kept whether or not a file is configured (a service-backed subclass reads them).
-        self.location: list[dict] = [dict(location)] if location else []
-        self.max_gap_time: timedelta = (max_gap_time if isinstance(max_gap_time, timedelta)
-                                        else timedelta(seconds=float(max_gap_time)))
-        self.oat_point_name: str = str(temperature_point_name) if temperature_point_name else 'OutdoorAirTemperature'
+        self.location: list[dict] = [dict(cfg.location)] if cfg.location else []
+        self.max_gap_time: timedelta = cfg.max_gap_time
+        self.oat_point_name: str = str(cfg.temperature_point_name) if cfg.temperature_point_name else 'OutdoorAirTemperature'
         self.weather_data: list[dict] = []
         self.last_modified = None
         # The forecast file: weather_file_path when given, otherwise the fallback file of a service-backed subclass.
+        self.weather_file_path: str | None = None
+        self._open_weather_file(cfg.weather_file_path, cfg.tmy_fallback_path)
+
+    def _open_weather_file(self, weather_file_path: str | None, tmy_fallback_path: str) -> None:
         configured = weather_file_path if weather_file_path else tmy_fallback_path
-        self.weather_file_path: str | None = self._resolve_weather_file(configured) if configured else None
+        self.weather_file_path = self._resolve_weather_file(configured) if configured else None
+        self.weather_data = []
+        self.last_modified = None
         if self.weather_file_path is not None:
             self.init_weather_data()
+
+    def _apply_reconfiguration(self, cfg, changed: set[str]) -> None:
+        derived = {'location', 'temperature_point_name', 'weather_file_path', 'tmy_fallback_path'}
+        super()._apply_reconfiguration(cfg, changed - derived)
+        if 'location' in changed:
+            self.location = [dict(cfg.location)] if cfg.location else []
+        if 'temperature_point_name' in changed:
+            self.oat_point_name = str(cfg.temperature_point_name) if cfg.temperature_point_name else 'OutdoorAirTemperature'
+        if changed & {'weather_file_path', 'tmy_fallback_path'}:
+            self._open_weather_file(cfg.weather_file_path, cfg.tmy_fallback_path)
 
     def _resolve_weather_file(self, configured) -> str:
         path = Path(str(configured)).expanduser()

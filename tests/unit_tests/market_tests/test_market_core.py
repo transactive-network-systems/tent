@@ -23,8 +23,8 @@ def market_with_entities():
     tn = MockTN()
     market = make_market(tn)
     ti = market.time_intervals[0]
-    asset = LocalAsset(transactive_node=tn, cost_parameters=[])
-    neighbor = Neighbor(transactive_node=tn, cost_parameters=[])
+    asset = LocalAsset(transactive_node=tn)
+    neighbor = Neighbor(transactive_node=tn)
     tn.local_assets, tn.neighbors = [asset], [neighbor]
     neighbor.active_vertices.update(ti, curve(ti, [Vertex(0.02, 0, 0), Vertex(0.05, 0, 10)]))
     asset.active_vertices.update(ti, curve(ti, [Vertex(INF, 0, -4)]))
@@ -98,8 +98,8 @@ class TestSumVertices:
         tn = MockTN()
         market = make_market(tn)
         ti = market.time_intervals[0]
-        asset = LocalAsset(transactive_node=tn, cost_parameters=[])
-        neighbor = Neighbor(transactive_node=tn, cost_parameters=[])
+        asset = LocalAsset(transactive_node=tn)
+        neighbor = Neighbor(transactive_node=tn)
         tn.local_assets, tn.neighbors = [asset], [neighbor]
         asset.active_vertices.update(ti, curve(ti, [Vertex(0.2, 0, -110), Vertex(0.2, 0, -90)]))
         neighbor.active_vertices.update(ti, curve(ti, [Vertex(0.1, 0, 0), Vertex(0.3, 0, 200)]))

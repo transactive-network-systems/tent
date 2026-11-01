@@ -34,7 +34,7 @@ def test_calculate_reserve_margin():
     ti = test_mkt.time_intervals[0]
 
     # Create test LocalAsset with modern API
-    test_model = LocalAsset(transactive_node=test_node, cost_parameters=[])
+    test_model = LocalAsset(transactive_node=test_node)
     test_node.local_assets = [test_model]
     
     # Set scheduled power using modern IntervalSeries API
@@ -97,7 +97,7 @@ def test_engagement_cost():
     test_node = MockTN()
 
     # Create a test LocalAsset object with modern API
-    test_model = LocalAsset(transactive_node=test_node, cost_parameters=[])
+    test_model = LocalAsset(transactive_node=test_node)
 
     # Assign engagement costs for [disengagement, hold, engagement]
     test_model.engagement_costs = [1, 2, 3]
@@ -153,7 +153,7 @@ def test_schedule_engagement():
     test_mkt = make_market(test_node, datetime.now(timezone.utc), intervals_to_clear=2)
 
     # Establish test model that is a LocalAsset with modern API
-    test_model = LocalAsset(transactive_node=test_node, cost_parameters=[])
+    test_model = LocalAsset(transactive_node=test_node)
     test_node.local_assets = [test_model]
 
     # Run the first test case
@@ -214,7 +214,7 @@ def test_schedule_power():
     test_mkt = make_market(test_node, datetime.now(timezone.utc), intervals_to_clear=2)
 
     # Establish test model that is a LocalAsset with a default power property
-    test_model = LocalAsset(transactive_node=test_node, cost_parameters=[])
+    test_model = LocalAsset(transactive_node=test_node)
     test_node.local_assets = [test_model]
     test_model.default_power = 3.14159
 
@@ -287,7 +287,7 @@ def test_update_dual_costs():
     test_market.marginal_prices.update(time_interval, 0.1)
 
     # Create a test LocalAsset
-    test_model = LocalAsset(transactive_node=test_node, cost_parameters=[])
+    test_model = LocalAsset(transactive_node=test_node)
     test_node.local_assets = [test_model]
 
     # Create and store a scheduled power in the active time interval
@@ -338,7 +338,7 @@ def test_update_production_costs():
     time_interval = test_market.time_intervals[0]
 
     # Create a test LocalAsset
-    test_model = LocalAsset(transactive_node=test_node, cost_parameters=[])
+    test_model = LocalAsset(transactive_node=test_node)
     test_node.local_assets = [test_model]
 
     # Create and store a scheduled power in the active time interval
@@ -387,7 +387,7 @@ def test_update_vertices():
     time_interval = test_market.time_intervals[0]
     
     # Create a test LocalAsset
-    test_model = LocalAsset(transactive_node=test_node, cost_parameters=[])
+    test_model = LocalAsset(transactive_node=test_node)
     test_node.local_assets = [test_model]
     
     # Create and store a scheduled power in the active time interval

@@ -4,6 +4,7 @@ import logging
 from weakref import WeakSet
 
 from tent.base.component import Component
+from tent.config import ConfigModel, CostParameters, DefaultVertices, NamedConfig, NameReferences, Setting
 from tent.containers import Measurement, SDCurve, SDMeasurement, TimeInterval, Vertex
 from tent.enumerations import MeasurementType, MeasurementUnit
 
@@ -11,48 +12,44 @@ _log = logging.getLogger(__name__)
 
 
 class Entity(Component, abc.ABC):
-    def __init__(self, cost_parameters: list[float], default_vertices: list[Vertex | list[float] | dict],
-                 description: str, information_services: list, location: str, maximum_power: float, meter_points: list,
-                 minimum_power: float, name: str, transactive_node):
-        super(Entity, self).__init__(description, name, transactive_node)
-        # cost_parameters: [float, float, float] Coefficients of quadratic cost function
-        # TODO: What are reasonable defaults for cost parameters? Is [1,1,1] better than [0,0,0]?
-        self.cost_parameters: list[float] = [float(cp) for cp in cost_parameters] if cost_parameters else [0.0, 0.0, 0.0]
-        if len(self.cost_parameters) != 3:
-            raise ValueError(f'{name}: cost_parameters must have three coefficients, got {cost_parameters!r}')
-        self.location = str(location)  # [text]
-        self.maximum_power = float(maximum_power)  # [avg.kW, signed] Asset's physical "hard" constraint
-        self.minimum_power = float(minimum_power)  # [avg.kW, signed] Asset's physical "hard" constraint
+    class Config(NamedConfig):
+        cost_parameters: CostParameters = Setting(
+            None, reconfigurable=True,
+            description='Coefficients [a0, a1, a2] of the quadratic production-cost formula a0 + a1*p + 0.5*a2*p^2 '
+                        '[$/h with p in kW]; null means no cost.')
+        default_vertices: DefaultVertices = Setting(
+            None, reconfigurable=True,
+            description='Vertices of the default supply/demand curve, each [price $/kWh, cost $, quantity avg.kW, '
+                        'continuity, uncertainty] (one to five values, "inf" for an infinite price) or a dict with '
+                        'those keys; null means one inelastic vertex at 1 kW.')
+        information_services: NameReferences('information_service_models') = Setting(
+            None, reconfigurable=True,
+            description='Names of the information services (forecasts) this entity uses; null means none.')
+        location: str = Setting('', reconfigurable=True, description='Free-text location.')
+        maximum_power: float = Setting(0.0, reconfigurable=True,
+                                       description='[avg.kW, signed, generation positive] physical upper power limit.')
+        meter_points: NameReferences('meter_points') = Setting(
+            None, reconfigurable=True, description='Names of the meter points that measure this entity; null means none.')
+        minimum_power: float = Setting(0.0, reconfigurable=True,
+                                       description='[avg.kW, signed, generation positive] physical lower power limit.')
+
+    def __init__(self, transactive_node, config: ConfigModel | None = None, **kwargs):
+        cfg = self._configure(config, kwargs)
+        super(Entity, self).__init__(cfg.description, cfg.name, transactive_node, config=cfg)
+        self.cost_parameters: list[float] = list(cfg.cost_parameters)  # [a0, a1, a2] of the quadratic cost function
+        self.location = str(cfg.location)  # [text]
+        self.maximum_power = float(cfg.maximum_power)  # [avg.kW, signed] Asset's physical "hard" constraint
+        self.minimum_power = float(cfg.minimum_power)  # [avg.kW, signed] Asset's physical "hard" constraint
 
         # Setup Vertices for Default Supply/Demand Curve
-        self.default_vertices = SDCurve(None, None,
-                                        default_vertices if default_vertices
-                                            else [Vertex(price=float("inf"), cost=0.0, quantity=1.0)])
-        if len(self.default_vertices) == 1:
-            self.default_vertices.replace_vertex(self.default_vertices.vertices[0], price=float('inf'))
+        self.default_vertices = self._default_curve(cfg.default_vertices)
 
         # [InformationService] See class InformationService
-        self.information_services = WeakSet()
-        information_services = information_services if information_services is not None else []
-        if all([isinstance(ism, Component) for ism in information_services]):
-            self.information_services.update(information_services)
-        elif all([isinstance(ism, str) for ism in information_services]):
-            self.information_services.update(self.tn.get_isms_by_attribute('name', information_services))
-        else:
-            raise ValueError(f'All information services assigned to LocalAsset {self.name} must be an instance of class'
-                             f' InformationServiceModel or the name of an InformationServiceModel held by the'
-                             f' TransactiveNode.')
-
+        self.information_services = WeakSet(self._resolve_references(cfg.information_services, 'information service',
+                                                                     'get_isms_by_attribute'))
         # [MeterPoint] See class MeterPoint
-        self.meter_points = WeakSet()
-        meter_points = meter_points if meter_points is not None else []
-        if all([isinstance(mp, Component) for mp in meter_points]):
-            self.meter_points.update(meter_points)
-        elif all([isinstance(mp, str) for mp in meter_points]):
-            self.meter_points.update(self.tn.get_meters_by_attribute('name', meter_points))
-        else:
-            raise ValueError(f'All meter points assigned to LocalAsset {self.name} must be an instance of class'
-                             f' MeterPoint or the name of a MeterPoint held by the TransactiveNode.')
+        self.meter_points = WeakSet(self._resolve_references(cfg.meter_points, 'meter point',
+                                                             'get_meters_by_attribute'))
 
         ##################################
         # Dynamically assigned attributes:
@@ -66,6 +63,43 @@ class Entity(Component, abc.ABC):
                                             MeasurementUnit.kW, archive_now=False)  # [avg.kW, signed]
         self.total_dual_cost = 0.0  # [$] Sum of dual costs in forward time intervals
         self.total_production_cost = 0.0  # [$, non-negative] Sum of production costs in forward intervals
+
+    @staticmethod
+    def _default_curve(vertices: list | None) -> SDCurve:
+        """The default supply/demand curve from the configured vertices (a single inelastic vertex when none)."""
+        curve = SDCurve(None, None, vertices if vertices else [Vertex(price=float("inf"), cost=0.0, quantity=1.0)])
+        if len(curve) == 1:
+            curve.replace_vertex(curve.vertices[0], price=float('inf'))
+        return curve
+
+    def _resolve_references(self, references: list | None, what: str, lookup: str) -> list:
+        """The components a configured list of names refers to (components given as objects are taken as they are),
+        found through the node method named `lookup`. A name that matches nothing on the node is a configuration error,
+        not a silently shorter list."""
+        if not references:
+            return []
+        if all(isinstance(reference, Component) for reference in references):
+            return list(references)
+        found = getattr(self.tn, lookup)('name', list(references))
+        missing = sorted(set(references) - {component.name for component in found})
+        if missing:
+            raise ValueError(f'{self.describe(name=self.name)}: no {what} named {missing} is configured on the node; '
+                             f'{what}s are referred to by the name they are configured with.')
+        return found
+
+    def _apply_reconfiguration(self, cfg, changed: set[str]) -> None:
+        derived = {'cost_parameters', 'default_vertices', 'information_services', 'meter_points'}
+        super()._apply_reconfiguration(cfg, changed - derived)
+        if 'cost_parameters' in changed:
+            self.cost_parameters = list(cfg.cost_parameters)
+        if 'default_vertices' in changed:
+            self.default_vertices = self._default_curve(cfg.default_vertices)
+        if 'information_services' in changed:
+            self.information_services = WeakSet(self._resolve_references(cfg.information_services, 'information service',
+                                                                         'get_isms_by_attribute'))
+        if 'meter_points' in changed:
+            self.meter_points = WeakSet(self._resolve_references(cfg.meter_points, 'meter point',
+                                                                 'get_meters_by_attribute'))
 
     def calculate_reserve_margin(self, market):
         """ Estimate available (spinning) reserve margin for this asset.

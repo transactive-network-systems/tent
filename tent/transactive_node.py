@@ -43,14 +43,19 @@ under Contract DE-AC05-76RL01830
 import abc
 import logging
 
+from copy import deepcopy
 from datetime import datetime, timezone
 from itertools import chain
 from sortedcontainers import SortedList
-from typing import Any, Callable
+from typing import Annotated, Any, Callable, Mapping
 from uuid import UUID
 from zoneinfo import ZoneInfo, available_timezones
 
+from pydantic import BeforeValidator, field_validator, model_validator
+
+from tent import registry
 from tent.base import Archivable
+from tent.config import ClassSpec, ConfigModel, Configurable, ConfigurationError, ReconfigurationError, Setting
 import tent.containers as containers
 from tent.data_manager import DataManager
 from tent.data_manager.null_data_manager import NullDataManager
@@ -60,16 +65,139 @@ from tent.market import Market
 from tent.market.market_series import MarketSeries
 from tent.meter_point import MeterPoint
 from tent.neighbor import Neighbor
-from tent.utils.helpers import get_class_from_spec, parse_datetime, require_aware, spec_kwargs, validate_bool
+from tent.utils.helpers import get_class_from_spec, parse_datetime, require_aware, spec_kwargs
 from tent.utils.timer import Timer
 
 _log = logging.getLogger(__name__)
 
 
-class TransactiveNode(Archivable):
+def _parse_configured_datetime(value):
+    return parse_datetime(value) if value is not None else None
+
+
+ConfiguredDatetime = Annotated[datetime | None, BeforeValidator(_parse_configured_datetime)]
+"""An ISO 8601 datetime; without an offset it is in the node's zone (tz), with one it is converted to that zone."""
+
+# Spellings an earlier agent configuration format used for the node's lists; they are errors naming the current key.
+LEGACY_NODE_KEYS = {'meterPoints': 'meter_points', 'informationServiceModels': 'information_service_models',
+                    'localAssets': 'local_assets', 'markets': 'market_series', 'marketSeries': 'market_series',
+                    'neighbours': 'neighbors'}
+
+
+class TransactiveNode(Configurable, Archivable):
     """
     TransactiveNode is the local perspective of the computational agent among a network of such nodes.
     """
+
+    class Config(ConfigModel):
+        """
+        The node configuration: the node's own settings, the settings its host (the VOLTTRON agent) reads, the data
+        manager, and the five component lists. Each component list entry names its class (class_name, module_name for
+        a class TENT does not ship) and gives that class's settings, validated by the class's own Config
+        (TransactiveNode.validate_configuration does this for the whole file before anything is built).
+        """
+        # The node
+        name: str = Setting('', description='Name of the node; neighbors address it by this name.')
+        description: str = Setting('', description='Free text.')
+        actor_id: str | None = Setting(None, description='Permanent identity of the actor this node represents, '
+                                                         'constant across restarts and configuration changes.')
+        organization_id: str | None = Setting(None, description='Identity of the business entity the actor belongs to.')
+        tz: str = Setting('UTC', description='IANA zone name (such as "America/Los_Angeles") the node keeps time in.')
+        mechanism: str = Setting('consensus', description='Coordination mechanism (future use).')
+        status: str = Setting('unknown', description='Node status (future use).')
+        loop_sleep_duration: float = Setting(0.01, ge=0, description='[s] pause between state-machine iterations.')
+        # Simulation
+        simulation: bool = Setting(False, description='Whether the node runs on simulated time.')
+        simulation_start_time: ConfiguredDatetime = Setting(
+            None, description='ISO 8601 datetime at which simulated time starts; without an offset it is in tz. '
+                              'Null means the time the node is configured.')
+        simulation_one_hour_in_seconds: int = Setting(3600, gt=0,
+                                                      description='[s] real seconds per simulated hour.')
+        simulation_anchor_time: ConfiguredDatetime = Setting(
+            None, description='ISO 8601 real time at which simulated time equals simulation_start_time; shared by '
+                              'every agent of one simulation (the host sets it from its environment). Null means the '
+                              'time this node was created.')
+        # Host (agent) settings, read by the TransactiveNodeAgent, not by the node
+        db_topic: str | None = Setting(None, description='Root of the message-bus topics the agent publishes under.')
+        subscribe_all_platforms: bool | None = Setting(None, description='Whether the agent subscribes across '
+                                                                        'platforms.')
+        topics: dict[str, str] | None = Setting(None, description='Subscription key to message-bus topic, for the '
+                                                                 'agent.')
+        # Components
+        data_manager: ClassSpec | None = Setting(None, spec_of='DataManager',
+                                                 description='The archive (class_name and its settings); null means '
+                                                             'nothing is archived.')
+        meter_points: list[ClassSpec] = Setting([], spec_of='MeterPoint', description='The meter points.')
+        information_service_models: list[ClassSpec] = Setting([], spec_of='InformationServiceModel',
+                                                              description='The information services (forecasts).')
+        local_assets: list[ClassSpec] = Setting([], spec_of='LocalAsset', description='The local assets.')
+        neighbors: list[ClassSpec] = Setting([], spec_of='Neighbor', description='The neighbors.')
+        market_series: list[ClassSpec] = Setting([], spec_of='MarketSeries',
+                                                 description='The market series, each with market_class_name.')
+
+        @model_validator(mode='before')
+        @classmethod
+        def _reject_legacy_keys(cls, data):
+            if isinstance(data, Mapping):
+                legacy = [key for key in data if key in LEGACY_NODE_KEYS]
+                if legacy:
+                    raise ValueError('; '.join(f'{key!r} is not a configuration key; use {LEGACY_NODE_KEYS[key]!r}'
+                                               for key in legacy))
+            return data
+
+        @field_validator('tz')
+        @classmethod
+        def _iana_zone(cls, value):
+            if value not in available_timezones():
+                raise ValueError(f'tz must be an IANA zone name such as "America/Los_Angeles" or "UTC"; got {value!r}')
+            return value
+
+        @model_validator(mode='after')
+        def _times_in_the_node_zone(self):
+            zone = ZoneInfo(self.tz)
+            if self.simulation_start_time is not None:
+                self.simulation_start_time = require_aware(self.simulation_start_time, 'simulation_start_time',
+                                                           assume=zone).astimezone(zone)
+            if self.simulation_anchor_time is not None:
+                self.simulation_anchor_time = require_aware(self.simulation_anchor_time, 'simulation_anchor_time',
+                                                            assume=zone)
+            for list_name in registry.NODE_LISTS:
+                names = [spec.settings().get('name', '') for spec in getattr(self, list_name)]
+                duplicates = sorted({name for name in names if names.count(name) > 1})
+                if duplicates:
+                    raise ValueError(f'{list_name} have duplicate names {duplicates}; each component needs its own.')
+            return self
+
+    @classmethod
+    def validate_configuration(cls, configs: Mapping) -> 'TransactiveNode.Config':
+        """
+        The node configuration validated through the models, without building anything: the node's own settings, then
+        the data manager and every component (class resolved through tent.registry, settings validated by the class's
+        Config, nested specifications recursively). Raises ConfigurationError (a ValueError) naming the component and
+        the key for anything the models reject; class resolution failures raise as tent.registry does.
+        """
+        cfg = cls.Config.validate_for(cls.__name__, configs)
+        if cfg.data_manager is not None:
+            dm_class = registry.resolve(cfg.data_manager.class_name, DataManager, cfg.data_manager.module_name)
+            if dm_class.declares_config():
+                cls._validate_component_spec(dm_class, cfg.data_manager.spec(), 'data_manager')
+        for list_name, base_name in registry.NODE_LISTS.items():
+            base = registry.base_class(base_name)
+            for index, spec in enumerate(getattr(cfg, list_name)):
+                component_class = registry.resolve(spec.class_name, base, spec.module_name)
+                if component_class.declares_config():
+                    cls._validate_component_spec(component_class, spec.spec(), f'{list_name}[{index}]')
+        return cfg
+
+    @staticmethod
+    def _validate_component_spec(component_class: type, spec: dict, where: str) -> None:
+        try:
+            if issubclass(component_class, MarketSeries):
+                component_class.validate_spec(spec, TransactiveNode._market_class_from_series_config(spec))
+            else:
+                component_class.validate_spec(spec)
+        except ConfigurationError as error:
+            raise ConfigurationError(f'{where}: {error.owner}', error.problems) from None
 
     def __init__(self, description='', loop_sleep_duration=0.01, mechanism='consensus', name='', status='unknown',
                  node_id: UUID | None = None, created: datetime | None = None):
@@ -90,6 +218,8 @@ class TransactiveNode(Archivable):
         self.tz = 'UTC'  # IANA zone name; configured per node. (The host's abbreviation, e.g. PDT, is not a zone.)
 
         self._data_manager = None
+        self.config: TransactiveNode.Config | None = None   # the validated configuration, from configure_node
+        self.configuration: dict = {}                       # the configuration as given to configure_node
 
         # The agent must keep track of various devices and their models that are listed among these properties.
         self.information_service_models = []
@@ -123,7 +253,11 @@ class TransactiveNode(Archivable):
             self.default_config["simulation_one_hour_in_seconds"] = self.simulation_one_hour_in_seconds
 
     def configure_node(self, configs):
+        """Build the node from `configs` (see Config). The whole configuration is validated through the models first,
+        so a configuration the models reject fails here before any component exists."""
         _log.debug('IN CONFIGURE NODE')
+        self.config = self.validate_configuration(configs)
+        self.configuration = deepcopy(dict(configs))
         updated_configs = self._update_node_configurations(configs)
         self._setup_timer(updated_configs)
         self._setup_data_manager(updated_configs)
@@ -134,41 +268,38 @@ class TransactiveNode(Archivable):
         self.data_manager.init_archive()
 
     def _update_node_configurations(self, configs):
+        """Read the node's own settings from `configs`. Returns the configuration with the node's defaults filled in,
+        as a dict, for hosts that read their own settings from it (the agent's db_topic, topics, ...)."""
         _log.debug('IN _UPDATE_NODE_CONFIGURATIONS')
         updated_configs = self.default_config.copy()
         updated_configs.update(configs)
+        cfg = self.config if self.config is not None else self.Config.validate_for(type(self).__name__, configs)
 
         # TransactiveNode Configurations:
-        self.description = updated_configs.get('description', self.description)
-        self.loop_sleep_duration = updated_configs.get('loop_sleep_duration', self.loop_sleep_duration)
-        self.mechanism = updated_configs.get('mechanism', self.mechanism)
-        self.name = updated_configs.get('name', self.name)
-        self.actor_id = updated_configs.get('actor_id', self.actor_id)
-        self.organization_id = updated_configs.get('organization_id', self.organization_id)
-        self.status = updated_configs.get('status', self.status)
-        self.tz = updated_configs.get('tz', self.tz)
-        if self.tz not in available_timezones():
-            raise ValueError(f'tz must be an IANA zone name such as "America/Los_Angeles" or "UTC"; got {self.tz!r}')
+        self.description = cfg.description
+        self.loop_sleep_duration = cfg.loop_sleep_duration
+        self.mechanism = cfg.mechanism
+        self.name = cfg.name
+        self.actor_id = cfg.actor_id
+        self.organization_id = cfg.organization_id
+        self.status = cfg.status
+        self.tz = cfg.tz
         return updated_configs
 
     def _setup_timer(self, config):
         # Simulation Configurations:
-        self.simulation = validate_bool(config.get('simulation', self.simulation), 'simulation')
+        cfg = self.config
+        self.simulation = cfg.simulation
         if self.simulation:
             # A start time without an offset is in the node's zone; one with an offset is converted to that zone.
-            start = parse_datetime(config.get('simulation_start_time', self.simulation_start_time))
-            self.simulation_start_time = require_aware(start, 'simulation_start_time',
-                                                       assume=ZoneInfo(self.tz)).astimezone(ZoneInfo(self.tz))
-            self.simulation_one_hour_in_seconds = int(config.get('simulation_one_hour_in_seconds',
-                                                                 self.simulation_one_hour_in_seconds))
+            if cfg.simulation_start_time is not None:
+                self.simulation_start_time = cfg.simulation_start_time
+            self.simulation_one_hour_in_seconds = int(cfg.simulation_one_hour_in_seconds)
         # The anchor is the real time at which simulated time equals simulation_start_time. Every agent in one simulation
         # should share it (config key simulation_anchor_time), so that agents started at different wall-clock times still
         # agree on the simulated time; a late starter joins at the current simulated time. Without it, this node's own
         # creation time is used.
-        anchor = config.get('simulation_anchor_time')
-        if anchor:
-            anchor = require_aware(parse_datetime(anchor), 'simulation_anchor_time', assume=ZoneInfo(self.tz))
-        self.simulation_anchor_time = anchor or self.real_time_created
+        self.simulation_anchor_time = cfg.simulation_anchor_time or self.real_time_created
         Timer.set(sim_one_hr_in_sec=self.simulation_one_hour_in_seconds,
                   sim_start_time=self.simulation_start_time,
                   simulation=self.simulation,
@@ -177,40 +308,33 @@ class TransactiveNode(Archivable):
         )
 
     def _setup_component_objects(self, config):
-        # Configure TransactiveNode Component Classes
+        # Configure TransactiveNode Component Classes, in dependency order: entities refer to meter points and
+        # information services by name, market series to earlier series.
         _log.debug('IN _SETUP_COMPONENT_OBJECTS')
         try:
-            self.meter_points = self._configure_components(config.get('meter_points'), MeterPoint)
-            _log.debug('DONE WITH METER_POINTS')
-            self.information_service_models = self._configure_components(config.get('information_service_models'),
-                                                                        InformationServiceModel)
-            _log.debug('DONE WITH ISM')
-            self.local_assets = self._configure_components(config.get('local_assets'), LocalAsset)
-            _log.debug('DONE WITH ASSETS')
-            self.neighbors = self._configure_components(config.get('neighbors'), Neighbor)
-            _log.debug('DONE WITH NEIGHBORS')
-            self.market_series = self._configure_components(config.get('market_series'), MarketSeries)
-            # TODO: Organize them by market order?
-            _log.debug('DONE WITH MARKETS')
+            for list_name, base_name in registry.NODE_LISTS.items():
+                self._configure_components(config.get(list_name), registry.base_class(base_name), list_name)
+                _log.debug(f'DONE WITH {list_name.upper()}')
         except ValueError as e:
             _log.error("ERROR PROCESSING CONFIGURATION {}".format(e))
             raise
 
-    def _configure_components(self, configs, base: type):
-        """Instantiates and configures each component object defined in a passed list of configurations.
-        Each configuration names its class (see tent.registry) and must resolve to a subclass of `base`; its other
-        keys are the component's constructor keywords. The configurations are only read, so the same ones can be
-        given again to rebuild the node. Returns list of instantiated and configured components.
+    def _configure_components(self, configs, base: type, attribute: str):
+        """Instantiates and configures each component object defined in a passed list of configurations into the node
+        list `attribute`. Each configuration names its class (see tent.registry) and must resolve to a subclass of
+        `base`; its other keys are the component's constructor keywords, validated by the class's Config. The node list
+        is filled as the components are built, so a component may refer by name to one configured before it. The
+        configurations are only read, so the same ones can be given again to rebuild the node. Returns the list.
         """
         components = []
+        setattr(self, attribute, components)
         component_type = base.__name__
         _log.info(f'Configuring {component_type}')
         if not configs:
             _log.info(f'No {component_type} configurations were provided.')
             return components
         for config in configs:
-            # A copy: get_class_from_spec consumes class_name and module_name and the market keys are popped below, and
-            # the caller's configuration must still be whole (to configure another node, or this one again).
+            # A copy: the caller's configuration must still be whole (to configure another node, or this one again).
             config = dict(config)
             _log.info(f'Configuring {config.get("class_name")}: {config.get("name")}')
             component_class = get_class_from_spec(config, base)
@@ -254,6 +378,74 @@ class TransactiveNode(Archivable):
             _log.warning(f'Node {self.name!r} has no data_manager configuration; nothing will be archived.')
             self._data_manager = NullDataManager(self)
         self.data_manager.add_tables(self.get_archive_definitions())
+
+    # ----------------------------------------------------------------------------------------------- reconfiguration
+
+    def reconfigure(self, new_config: Mapping) -> bool:
+        """
+        Take a new full configuration while running when it differs from the current one only in reconfigurable fields
+        of existing components (matched by list, name and class): each component's reconfigure applies its changes and
+        True is returned. Anything else (node settings, the data manager, a component added, removed or of another
+        class, a field that is not reconfigurable) returns False, with the reason logged, and nothing is changed; the
+        host then rebuilds the node. A configuration the models reject raises (ConfigurationError) as configure_node
+        would.
+        """
+        if self.config is None:
+            raise RuntimeError('The node has no configuration yet; call configure_node first.')
+        new_cfg = self.validate_configuration(new_config)
+        plan = self._reconfiguration_plan(new_cfg)
+        if plan is None:
+            return False
+        for component, changes in plan:
+            component.reconfigure(changes)
+        self.config = new_cfg
+        self.configuration = deepcopy(dict(new_config))
+        _log.info(f'Node {self.name!r} took the new configuration in place: '
+                  f'{[(c.name, sorted(changes)) for c, changes in plan] or "no component changed"}.')
+        return True
+
+    def _reconfiguration_plan(self, new_cfg: 'TransactiveNode.Config') -> list[tuple] | None:
+        """(component, changes) pairs that take the node from its configuration to `new_cfg` in place, or None (with
+        the reason logged) when the node must be rebuilt."""
+        def rebuild(reason: str):
+            _log.info(f'Node {self.name!r} must be rebuilt for the new configuration: {reason}')
+            return None
+
+        component_lists = set(registry.NODE_LISTS)
+        current_node = self.config.model_dump(exclude=component_lists)
+        new_node = new_cfg.model_dump(exclude=component_lists)
+        changed_node_fields = sorted(key for key in current_node if current_node[key] != new_node[key])
+        if changed_node_fields:
+            return rebuild(f'node settings {changed_node_fields} changed.')
+        plan = []
+        for list_name in registry.NODE_LISTS:
+            current_specs = {spec.settings().get('name', ''): spec for spec in getattr(self.config, list_name)}
+            new_specs = {spec.settings().get('name', ''): spec for spec in getattr(new_cfg, list_name)}
+            if set(current_specs) != set(new_specs):
+                return rebuild(f'{list_name} were added or removed: {sorted(set(current_specs) ^ set(new_specs))}.')
+            components = {component.name: component for component in getattr(self, list_name)}
+            for name, new_spec in new_specs.items():
+                current_spec = current_specs[name]
+                if (new_spec.class_name, new_spec.module_name) != (current_spec.class_name, current_spec.module_name):
+                    return rebuild(f'{list_name} {name!r} changed class.')
+                component = components.get(name)
+                if component is None:
+                    return rebuild(f'{list_name} {name!r} is configured but not built.')
+                settings = {key: value for key, value in new_spec.spec().items()
+                            if key not in component.RUNTIME_SPEC_KEYS}
+                if isinstance(component, MarketSeries):
+                    market_class = self._market_class_from_series_config(new_spec.spec()) or Market
+                    if market_class is not component.market_class:
+                        return rebuild(f'market series {name!r} changed its market class.')
+                try:
+                    changes = component.diff_configuration(settings)
+                    if changes:
+                        component.check_reconfigure(changes)
+                except ReconfigurationError as error:
+                    return rebuild(str(error))
+                if changes:
+                    plan.append((component, changes))
+        return plan
 
     def get_meters_by_attribute(self, attribute, match, first_only=False):
         return self.get_objects_by_attribute(self.meter_points, attribute, match, first_only)

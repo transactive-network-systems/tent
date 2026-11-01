@@ -6,8 +6,7 @@ _log = logging.getLogger(__name__)
 
 
 class DirectRatioActuationManager(ActuationManager):
-    def __init__(self, **kwargs):
-        super(DirectRatioActuationManager, self).__init__(**kwargs)
+    Config = ActuationManager.Config
 
     def actuate(self, mkt):
         super(DirectRatioActuationManager, self).actuate(mkt)

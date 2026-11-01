@@ -14,16 +14,20 @@ def test_predictor_picks_up_the_temperature_forecast_model():
     assert forecaster.information_units is MeasurementUnit.degF
     assert not hasattr(forecaster, 'informationType'), 'the legacy attribute is gone'
     tn.information_service_models = [forecaster]
-    predictor = OpenLoopLoadPredictor(transactive_node=tn, name='Load', cost_parameters=[], information_services=['Weather'],
+    predictor = OpenLoopLoadPredictor(transactive_node=tn, name='Load', information_services=['Weather'],
                                       dow_intercept=[0.0] * 7, season=[1] * 12, values=[[0] * 24])
     assert predictor.temperature_forecaster is forecaster
 
 
 def test_configuration_cannot_override_the_forecast_type():
+    import pytest
     Timer.simulation = False
     tn = MockTN()
+    with pytest.raises(ValueError, match="TemperatureForecastModel 'Weather': information_type: is always Temperature"):
+        TemperatureForecastModel(transactive_node=tn, name='Weather', weather_file_path=None,
+                                 information_type=MeasurementType.Unknown)
     forecaster = TemperatureForecastModel(transactive_node=tn, name='Weather', weather_file_path=None,
-                                          information_type=MeasurementType.Unknown)
+                                          information_type='Temperature', information_units='degF')
     assert forecaster.information_type is MeasurementType.Temperature
 
 
@@ -45,7 +49,7 @@ def test_a_forecast_of_zero_degrees_is_used_not_the_default():
     forecaster = TemperatureForecastModel(transactive_node=tn, name='Weather')
     tn.information_service_models = [forecaster]
     # dow intercepts of zero, every month in season 1, every table row (intercept 0, factor 1): load is -temperature.
-    predictor = OpenLoopLoadPredictor(transactive_node=tn, name='Load', cost_parameters=[], information_services=['Weather'],
+    predictor = OpenLoopLoadPredictor(transactive_node=tn, name='Load', information_services=['Weather'],
                                       dow_intercept=[0.0] * 7, season=[1] * 12, values=[[0, 1]] * 144,
                                       default_temperature=56.6)
     mkt = Mock(); mkt.name = 'M'

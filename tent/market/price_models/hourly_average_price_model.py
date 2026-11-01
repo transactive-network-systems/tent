@@ -3,8 +3,9 @@ import logging
 from collections import deque
 from datetime import datetime
 from statistics import mean, stdev, StatisticsError
-from typing import Dict
+from pydantic import model_validator
 
+from tent.config import ConfigModel, Setting
 from tent.market.price_models.base import PriceModel
 
 _log = logging.getLogger(__name__)
@@ -19,21 +20,37 @@ class HourlyAveragePriceModel(PriceModel):
     Note: In order for this to work, the Market.priceModel table must be initialized from its preceding Market
           object of the same type, i.e., sharing the same market name.
     """
-    def __init__(self, initial_model: Dict[int, deque] = None, forgetting_factor: int = 14, default_price=0.035):
+    class Config(PriceModel.Config):
+        forgetting_factor: int = Setting(14, ge=1, description='Number of prior prices averaged per hour of day.')
+        initial_model: dict[int, list[float]] | None = Setting(
+            None, description='A pre-trained model: hour of day (0 to 23) to the forgetting_factor most recent prices '
+                              '[$/kWh]; null starts from default_price.')
+
+        @model_validator(mode='after')
+        def _initial_model_is_complete(self):
+            if self.initial_model is not None:
+                hours = sorted(self.initial_model)
+                if hours != list(range(24)):
+                    raise ValueError(f'initial_model must have the hours 0 to 23 as keys; got {hours}')
+                short = [hour for hour, prices in self.initial_model.items() if len(prices) != self.forgetting_factor]
+                if short:
+                    raise ValueError(f'initial_model must hold forgetting_factor ({self.forgetting_factor}) prices per '
+                                     f'hour; hours {short} do not')
+            return self
+
+    def __init__(self, config: ConfigModel | None = None, **kwargs):
         """
         :param: initial_model (optional): Pre-trained model.  If not provided, model will be built over time.
         :param: forgetting_factor: [integer] Number of prior values over which model is averaged.
         """
-        if initial_model:
-            if (not isinstance(initial_model, dict) or len(initial_model) != 24
-                or any([len(initial_model.get(h, [])) != forgetting_factor for h in range(0,24)])):
-                _log.warning(f'Initial model is not valid for BasePriceModel with forgetting factor {forgetting_factor}.'
-                             ' Starting from empty model.')
-                self.current_model = self._init_model(forgetting_factor=forgetting_factor, default_price=default_price)
-            else:
-                self.current_model = initial_model
+        super(HourlyAveragePriceModel, self).__init__(config, **kwargs)
+        cfg = self.config
+        if cfg.initial_model is not None:
+            self.current_model = {hour: deque(prices, maxlen=cfg.forgetting_factor)
+                                  for hour, prices in cfg.initial_model.items()}
         else:
-            self.current_model = self._init_model(forgetting_factor=forgetting_factor, default_price=default_price)
+            self.current_model = self._init_model(forgetting_factor=cfg.forgetting_factor,
+                                                  default_price=cfg.default_price)
 
     @staticmethod
     def _init_model(forgetting_factor: int, default_price):

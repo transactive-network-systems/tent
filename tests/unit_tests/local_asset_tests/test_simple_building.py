@@ -15,7 +15,7 @@ def _hourly_market(tn):
 def test_update_vertices_covers_all_24_hours():
     tn = MockTN()
     market = _hourly_market(tn)
-    building = SimpleBuilding(transactive_node=tn, name='Building', cost_parameters=[])
+    building = SimpleBuilding(transactive_node=tn, name='Building')
     tn.local_assets = [building]
     building.update_vertices(market)
     hours = set()
@@ -34,7 +34,7 @@ def test_update_vertices_covers_all_24_hours():
 def test_default_vertices_are_not_shared_with_active_curves():
     tn = MockTN()
     market = _hourly_market(tn)
-    building = SimpleBuilding(transactive_node=tn, name='Building', cost_parameters=[])
+    building = SimpleBuilding(transactive_node=tn, name='Building')
     tn.local_assets = [building]
     defaults = [(v.price, v.quantity) for v in building.default_vertices.vertices]
     building.update_vertices(market)

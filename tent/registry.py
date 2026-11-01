@@ -142,3 +142,195 @@ def resolve(class_name: str, base: type, module_name: str | None = None) -> type
                         f'{base.__module__}.{base.__qualname__}.')
     _log.info(f'Loaded {cls.__module__}.{cls.__qualname__} from {source} for a {base.__name__} slot.')
     return cls
+
+
+# ------------------------------------------------------------------------------------------- bases and the schema
+
+# The base class of every configurable slot, by the name the Config models use in Setting(spec_of=...).
+BASES: dict[str, str] = {
+    'DataManager': 'tent.data_manager:DataManager',
+    'MarketSeries': 'tent.market.market_series:MarketSeries',
+    'Market': 'tent.market:Market',
+    'PriceModel': 'tent.market.price_models:PriceModel',
+    'Neighbor': 'tent.neighbor:Neighbor',
+    'LocalAsset': 'tent.local_asset:LocalAsset',
+    'Model': 'tent.local_asset.model_frame.models:Model',
+    'ActuationManager': 'tent.local_asset.actuation_manager:ActuationManager',
+    'OccupancyManager': 'tent.local_asset.occupancy_manager:OccupancyManager',
+    'InformationServiceModel': 'tent.information_service_model:InformationServiceModel',
+    'MeterPoint': 'tent.meter_point:MeterPoint',
+}
+
+# The node's component lists and the base each one's entries must resolve to.
+NODE_LISTS: dict[str, str] = {
+    'meter_points': 'MeterPoint',
+    'information_service_models': 'InformationServiceModel',
+    'local_assets': 'LocalAsset',
+    'neighbors': 'Neighbor',
+    'market_series': 'MarketSeries',
+}
+
+JSON_SCHEMA_DIALECT = 'https://json-schema.org/draft/2020-12/schema'
+
+
+def base_class(name: str) -> type:
+    """The base class of the slot `name` (a key of BASES)."""
+    try:
+        module_name, attribute = BASES[name].split(':')
+    except KeyError:
+        raise ValueError(f'{name!r} is not a configurable slot; the slots are {sorted(BASES)}.') from None
+    return _import_attribute(module_name, attribute, f'the base class of {name!r} slots')
+
+
+def registered_classes(base: type) -> dict[str, type]:
+    """Every class TENT ships or an installed distribution registers (tent.components entry points) that is a subclass
+    of `base`, by name. A registered name that fails to load is an error here: the schema must describe what a
+    configuration can actually name."""
+    classes: dict[str, type] = {}
+    for name in list(SHIPPED) + sorted(entry_point_classes()):
+        try:
+            cls = resolve(name, object)
+        except ValueError as error:  # a name both shipped and registered by a distribution
+            raise ValueError(f'The configuration schema cannot be built: {error}') from error
+        if issubclass(cls, base):
+            classes[name] = cls
+    return classes
+
+
+def configuration_schema() -> dict:
+    """
+    The JSON Schema (draft 2020-12) of a TransactiveNode configuration, assembled from the Config models: the node's
+    own settings, and for the data manager, every component list and every nested class specification (price model,
+    model-frame models, actuation and occupancy managers) a oneOf over the registered classes of that slot, each
+    variant discriminated by its ``class_name`` constant and allowing no undeclared keys. A market series variant
+    exists per (series class, market class) pair, discriminated by ``class_name`` and ``market_class_name``, since
+    a series entry holds the settings of both.
+    """
+    from tent.config import SPEC_DEFAULT, SPEC_OF  # local: tent.config imports tent.utils.helpers, which imports this
+    from tent.market.market_series import MarketSeries
+    from tent.transactive_node import TransactiveNode
+
+    defs: dict[str, dict] = {}
+
+    def model_schema(model: type) -> dict:
+        schema = model.model_json_schema(ref_template='#/$defs/{model}')
+        for name, definition in schema.pop('$defs', {}).items():
+            if name in defs and defs[name] != definition:
+                raise ValueError(f'Two different configuration models are both named {name!r}; the schema needs '
+                                 f'unique model names.')
+            defs.setdefault(name, definition)
+        return schema
+
+    def replace_specs(node):
+        """Point every nested class specification at the union of the classes its slot takes (the marker stays, for
+        the tool)."""
+        if isinstance(node, dict):
+            if SPEC_OF in node:
+                target = spec_union(node[SPEC_OF], node.get(SPEC_DEFAULT))
+                if node.get('type') == 'array' or 'items' in node:
+                    node['items'] = target
+                else:
+                    nullable = any(alternative.get('type') == 'null' for alternative in node.get('anyOf', []))
+                    node.pop('$ref', None)
+                    node.pop('anyOf', None)
+                    if nullable:
+                        node['anyOf'] = [target, {'type': 'null'}]
+                    else:
+                        node['$ref'] = target['$ref']
+                return
+            for value in node.values():
+                replace_specs(value)
+        elif isinstance(node, list):
+            for value in node:
+                replace_specs(value)
+
+    def class_name_property(cls: type, const: str | None = None) -> dict:
+        return {'const': const or cls.__name__, 'description': 'The class to build.'}
+
+    def module_name_property(cls: type) -> dict:
+        return {'type': 'string', 'default': cls.__module__,
+                'description': 'Module of the class; needed only for a class TENT does not ship.'}
+
+    def component_variant(cls: type, base_name: str, is_default: bool = False) -> dict:
+        """The schema of one class's entry. The default class of a slot (price model, occupancy and actuation manager)
+        is also what an entry without class_name names, so for it class_name is not required."""
+        schema = model_schema(cls.Config)
+        replace_specs(schema)
+        properties = {'class_name': class_name_property(cls), 'module_name': module_name_property(cls),
+                      **schema.get('properties', {})}
+        if is_default:
+            properties['class_name'] = {**properties['class_name'], 'default': cls.__name__}
+        return {'title': cls.__name__, 'type': 'object', 'additionalProperties': False, 'properties': properties,
+                'required': ([] if is_default else ['class_name']) + list(schema.get('required', [])),
+                'description': (cls.__doc__ or '').strip()}
+
+    def model_variant(cls: type) -> dict:
+        schema = model_schema(cls.Config)
+        settings = dict(schema.get('properties', {}))
+        settings.pop('subscribe_key', None)
+        settings.pop('demand_curve_points', None)
+        required = [name for name in schema.get('required', []) if name in settings]
+        model_config = {'type': 'object', 'additionalProperties': schema.get('additionalProperties', False),
+                        'properties': settings, 'required': required}
+        return {'title': cls.__name__, 'type': 'object', 'additionalProperties': False,
+                'properties': {'class_name': class_name_property(cls), 'module_name': module_name_property(cls),
+                               'subscribe_key': {'type': 'string', 'minLength': 1,
+                                                 'description': "Key the node subscribes to for this model's "
+                                                                'measurements; unique within the frame.'},
+                               'model_config': model_config},
+                'required': ['class_name', 'subscribe_key'] + (['model_config'] if required else []),
+                'description': (cls.__doc__ or '').strip()}
+
+    def series_variant(series_cls: type, market_cls: type) -> dict:
+        variant = component_variant(series_cls, 'MarketSeries')
+        market_schema = model_schema(market_cls.Config)
+        replace_specs(market_schema)
+        variant['title'] = f'{series_cls.__name__} of {market_cls.__name__}'
+        variant['properties'].update({
+            'market_class_name': class_name_property(market_cls),
+            'market_module_name': {'type': 'string', 'default': market_cls.__module__,
+                                   'description': 'Module of the market class; needed only for a class TENT does not '
+                                                  'ship.'},
+            **market_schema.get('properties', {})})
+        variant['required'] = ['class_name', 'market_class_name', *variant['required'][1:],
+                               *market_schema.get('required', [])]
+        return variant
+
+    defaults: dict[str, str | None] = {}
+
+    def spec_union(base_name: str, default_class: str | None = None) -> dict:
+        definition_name = f'Any{base_name}'
+        if defaults.setdefault(base_name, default_class) != default_class:
+            raise ValueError(f'{base_name} slots name different default classes ({defaults[base_name]!r} and '
+                             f'{default_class!r}); the schema needs one per slot.')
+        if definition_name not in defs:
+            defs[definition_name] = {}  # placeholder against recursion while the variants are built
+            base = base_class(base_name)
+            configurable = {name: cls for name, cls in registered_classes(base).items()
+                            if hasattr(cls, 'Config') and cls.declares_config()}
+            if base_name == 'Model':
+                variants = [model_variant(cls) for cls in configurable.values()]
+            elif base_name == 'MarketSeries':
+                markets = {name: cls for name, cls in registered_classes(base_class('Market')).items()
+                           if cls.declares_config()}
+                variants = [series_variant(series_cls, market_cls) for series_cls in configurable.values()
+                            for market_cls in markets.values()]
+            else:
+                variants = [component_variant(cls, base_name, is_default=(name == default_class))
+                            for name, cls in configurable.items()]
+            defs[definition_name] = {'title': f'Any {base_name}', 'oneOf': variants,
+                                     'description': f'A configured {base_name}: one of the registered classes, chosen by '
+                                                    f'class_name.'}
+        return {'$ref': f'#/$defs/{definition_name}'}
+
+    node = model_schema(TransactiveNode.Config)
+    replace_specs(node)
+    done: set[str] = set()
+    while set(defs) - done:  # nested models (ModelFrameConfigs) hold specifications too; unions add definitions
+        for name in sorted(set(defs) - done):
+            replace_specs(defs[name])
+            done.add(name)
+    defs.pop('ClassSpec', None)  # every specification now points at its slot's union
+    defs.pop('ModelSpec', None)
+    node.update({'$schema': JSON_SCHEMA_DIALECT, 'title': 'TENT node configuration', '$defs': defs})
+    return node
