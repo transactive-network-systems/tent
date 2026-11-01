@@ -47,6 +47,7 @@ from datetime import datetime
 from typing import Any
 from weakref import proxy, WeakKeyDictionary
 
+from tent.containers import archiving
 from tent.base import Archivable, Component
 from tent.containers.time_interval import TimeInterval
 from tent.enumerations import MeasurementType, MeasurementUnit
@@ -67,9 +68,31 @@ class MeasurementValue(Archivable):
             self.archive()
 
     def update(self, value: float | bool, archive=True):
+        """Set the value and write a new version of it, unless it is the value already held: an identical version says
+        nothing a reader could use, and the archive reports one as a duplicate."""
+        changed = value != self.value
         self.value = value
-        if archive:
+        if archive and changed:
             self.archive()
+
+    def archive_records(self) -> list[dict]:
+        """This value's archive rows, marked as archived, for a caller that writes them in a batch (see
+        tent.containers.archiving)."""
+        return [self.archive_record()]
+
+    def archive(self, records: list[dict] = None):
+        """Write this value, or register it to be written once when the enclosing deferred_archiving block ends."""
+        if archiving.is_deferring():
+            try:
+                key = ('measurement_value', self.measurement.id, self.interval.name)
+            except ReferenceError:
+                key = None
+            archiving.defer(self, key)
+            return
+        if records is None:
+            super(MeasurementValue, self).archive()
+        else:
+            super(MeasurementValue, self).archive(records)
 
     def _get_numeric_value(self, other):
         """Extract numeric value from MeasurementValue or plain numeric type."""

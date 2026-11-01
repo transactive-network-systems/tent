@@ -197,7 +197,6 @@ class Neighbor(Entity):
             converged=all(bool(self.convergence_flags.get_by_interval(ti).value) for ti in market.time_intervals),
             signal_due=any(due_flags))
         self._coordination[market] = state
-        _log.debug(f"Convergence flags for {self.name} are {self.convergence_flags.log_report}")
         _log.debug(f"Coordination with {self.name} in {market.name}: converged {state.converged}; "
                    f"signal due: {state.signal_due}.")
 

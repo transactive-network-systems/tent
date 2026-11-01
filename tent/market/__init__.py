@@ -750,7 +750,6 @@ class Market(Component):
         """
         self.assign_system_vertices()
         self._cleared_powers.clear()
-        _log.debug(f"{self.name} market active vertices are: {self.active_vertices.log_report}")
 
         # Index through active time intervals.
         for time_interval in self.time_intervals:
@@ -1133,7 +1132,6 @@ class Market(Component):
 
             self.net_powers.update(time_interval, total_generation + total_demand)
 
-        _log.debug(f"{self.name} market netPowers are: {self.net_powers.log_report}")
 
     @property
     def table_name(self):

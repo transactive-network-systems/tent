@@ -26,7 +26,11 @@ vertex of lowest price among those nearest the crossing, so a price step clears 
 its power at the cleared price: an entity whose curve is flat there (a tariff supplier, a ``ResponseNeighbor`` stating
 a price) takes the residual of the others rather than reading its own curve, which at the interpolated price would give
 its minimum (``Market.assign_cleared_powers``, read back by ``Entity.market_power``). The loop is bounded by the
-market keyword ``max_balance_iterations`` (default 20); with piece-wise linear curves one pass suffices.
+market keyword ``max_balance_iterations`` (default 20) and stops as soon as an iteration leaves every price where it
+was, since the curves were rebuilt at those prices and the next iteration would repeat it; with piece-wise linear
+curves one pass suffices. Everything a pass reschedules (powers, costs, curves) is archived once when the pass ends
+(``tent.containers.archiving.deferred_archiving``, one transaction), not once per iteration, and a value that is
+updated to what it already holds writes no new version.
 
 **Coordination (between nodes).** For each transactive neighbor the node prepares a transactive signal: the residual
 system curve with that neighbor excluded, bounded to what the node can exchange with it, stated from the neighbor's
@@ -73,10 +77,13 @@ Under the state machine
 
 - ``transition_from_active_to_negotiation``: initialise prices (in a rolling series, from the prior market's cleared
   prices for the intervals they share), balance locally, send an opening signal to every transactive neighbor (with its
-  balance point), record consensus (none yet).
+  balance point) whether or not the local balance closed, record consensus (none yet). A node whose local problem
+  cannot balance (its only supply is a neighbor's default curve, say) still has a residual curve to offer, and without
+  it neither side can move.
 - ``while_in_negotiation`` (every tick): if any neighbor's signal arrived since the last pass, or the local problem is
-  not balanced, balance locally. Then for each transactive neighbor prepare the signal, check convergence, and send
-  only when a signal is due. Negotiation is never marked complete before the market-lead time, so a signal or a local
+  not balanced, balance locally. Then, whether or not that closed, for each transactive neighbor prepare the signal,
+  check convergence, and send only when a signal is due (nothing sent yet, the local curve changed, or the neighbor
+  disagrees). Negotiation is never marked complete before the market-lead time, so a signal or a local
   change that arrives late in the window is still acted on. At the market-lead time the state completes cleanly when
   full consensus holds; otherwise the state machine's timeout moves the market on with a warning. (The matching engine
   follows the same rule, so orders submitted late in the window are still matched.)
