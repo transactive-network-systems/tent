@@ -272,7 +272,7 @@ class TransactiveNode(Archivable):
             try:
                 service.update_information(market)
             except Exception:
-                _log.exception(f'{self.name}: information service {service.name} failed to update for {market.name}; '
+                _log.exception(f'{self.name}: information service {service.name!r} failed to update for {market.name}; '
                                f'its consumers use their defaults for this market.')
 
     def on_market_spawned(self, market) -> None:
