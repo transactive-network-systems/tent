@@ -15,7 +15,6 @@ Below is an annotated JSON structure defining a campus building asset with physi
 
    {
      "class_name": "ModelFrameAsset",
-     "module_name": "tent.local_asset.model_frame.model_frame_asset",
      "name": "CampusEngineeringBuilding",
      "description": "Multi-resource campus facility with rooftop PV and flexible HVAC",
      "default_power": 0.0,
@@ -28,7 +27,7 @@ Below is an annotated JSON structure defining a campus building asset with physi
        "models": [
          {
            "subscribe_key": "devices/rooftop_solar",
-           "model_type": "fmi",
+           "class_name": "FlexibilityModelFrameAdapter",
            "model_config": {
              "preset": "residential_pv",
              "rated_kw": 120.0,
@@ -50,7 +49,7 @@ Below is an annotated JSON structure defining a campus building asset with physi
          },
          {
            "subscribe_key": "devices/uncontrolled_baseload",
-           "model_type": "uncontrolled",
+           "class_name": "UncontrolledLoad",
            "model_config": {
              "default_power": -45.0
            }
@@ -62,8 +61,14 @@ Below is an annotated JSON structure defining a campus building asset with physi
 Configuration Properties
 ------------------------
 
-* ``class_name``: Must be ``"ModelFrameAsset"``.
-* ``module_name``: Must be ``"tent.local_asset.model_frame.model_frame_asset"``.
+* ``class_name``: The asset class, here ``"ModelFrameAsset"``. Classes TENT ships are named alone; a class from
+  another package also gives ``module_name`` (see :ref:`Build_Configurations`).
 * ``maximum_power``: Upper generation or curtailment boundary in kW.
 * ``minimum_power``: Maximum allowable consumption in kW (negative in TENT convention).
-* ``model_configs.models``: Array of nested sub-model definitions. For physical models, set ``"model_type": "fmi"``.
+* ``model_configs.models``: Array of nested sub-model definitions. Each names its class with ``class_name``
+  (``Thermostat``, ``Lighting``, ``UncontrolledLoad``, or ``FlexibilityModelFrameAdapter`` for a physical simulator
+  model; a class from another package also gives ``module_name``), the topic it listens to with ``subscribe_key``, and
+  the model's own settings in ``model_config``. Every model class is a subclass of
+  ``tent.local_asset.model_frame.models.Model``.
+* ``occupancy_manager`` and ``actuation_manager``: Optional blocks naming their class the same way;
+  ``SimpleOccupancyManager`` and ``NullActuationManager`` apply when a block gives no ``class_name``.

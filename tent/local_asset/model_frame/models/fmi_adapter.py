@@ -17,10 +17,12 @@ from tent.flexibility import (
     from_config as load_fmi_adapter,
 )
 
+from .base import Model
+
 _log = logging.getLogger(__name__)
 
 
-class FlexibilityModelFrameAdapter(object):
+class FlexibilityModelFrameAdapter(Model):
     """Wraps any FlexibilityModelInterface adapter as a Model in TENT's ModelFrame.
 
     Allows OCHRE dwellings, GridLAB-D houses/water heaters/feeders, pvlib solar arrays,

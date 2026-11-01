@@ -6,9 +6,10 @@ from tent.containers.time_interval import TimeInterval
 from tent.containers.vertex import Vertex
 from tent.local_asset import LocalAsset
 from tent.market import Market
-from tent.utils.helpers import get_class_from_spec
+from tent.utils.helpers import get_class_from_spec, spec_kwargs
 
 from .models.base import ModelFrame
+from ..actuation_manager import ActuationManager
 from ..occupancy_manager import OccupancyManager
 
 _log = logging.getLogger(__name__)
@@ -28,27 +29,25 @@ class ModelFrameAsset(LocalAsset, ModelFrame):
 
         self.temperature_forecast_name = temperature_forecast_name
 
-        # TODO: Occupation and ActuationManagers should probably be loaded from class methods on the base classes.
-        # Initialize Scheduler
+        # The occupancy and actuation managers name their classes like every other configured component (see
+        # tent.registry); SimpleOccupancyManager and NullActuationManager apply when a configuration names none.
         self.occupancy_manager: OccupancyManager | None = None
         if occupancy_manager:  # TODO: Implement default behavior if occupancy_manager is not specified (make an always occupied base class).
-            om_class = get_class_from_spec(occupancy_manager, 'SimpleOccupancyManager', 'tent.local_asset.occupancy_manager')
-            self.occupancy_manager = om_class(**occupancy_manager)
+            spec = {'class_name': 'SimpleOccupancyManager', **occupancy_manager}
+            om_class = get_class_from_spec(spec, OccupancyManager)
+            self.occupancy_manager = om_class(**spec_kwargs(spec))
 
-        self.actuation_manager = None
+        self.actuation_manager: ActuationManager | None = None
         for subscribe_key in self.models:
             if 'Uncontrolled' in subscribe_key:
                 continue
             self.tn.register_subscription(subscribe_key=subscribe_key, callback=self.new_model_data)
 
-        # Initialize Actuation Manager
         if actuation_manager:
-            # TODO: The default module_prefix doesn't quite work with the default class.
-            #  Need better detection logic in the helper function.
-            am_class = get_class_from_spec(actuation_manager, 'NullActuationManager', transactive_node=self.tn,
-                                           default_module_prefix='tent.local_asset.actuation_manager')
+            spec = {'class_name': 'NullActuationManager', **actuation_manager}
+            am_class = get_class_from_spec(spec, ActuationManager)
             self.actuation_manager = am_class(parent=self, occupancy_manager=self.occupancy_manager,
-                                              **actuation_manager)
+                                              transactive_node=self.tn, **spec_kwargs(spec))
             _log.info(f'Configured actuator {am_class.__name__} for asset: {self.name}')
 
     def new_model_data(self, time_received: datetime, subscribe_key: str, message: dict):

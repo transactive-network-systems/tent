@@ -1,5 +1,4 @@
 """Node configuration: timezone handling (audit T-02)."""
-from copy import deepcopy
 from unittest.mock import Mock, patch
 
 import pytest
@@ -14,8 +13,9 @@ def _configure(configs):
     Timer.simulation = False
     tn = MockTN()
     with patch('tent.data_manager.local_data_manager.LocalDataManager.init_archive', Mock(return_value=None)):
-        # get_class_from_spec consumes the spec it is given (class_name, module_name), so each node gets its own copy.
-        tn.configure_node({'data_manager': deepcopy(LOCAL_DM), **configs})
+        tn.configure_node({'data_manager': LOCAL_DM, **configs})
+    assert LOCAL_DM == {'class_name': 'LocalDataManager', 'module_name': 'tent.data_manager.local_data_manager',
+                        'db_params': {}}, 'configuring reads the dictionaries and leaves them as they were'
     return tn
 
 

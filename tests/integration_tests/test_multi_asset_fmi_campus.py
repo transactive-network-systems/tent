@@ -53,7 +53,7 @@ def multi_asset_campus_node():
             "models": [
                 {
                     "subscribe_key": "devices/campus_pv",
-                    "model_type": "fmi",
+                    "class_name": "FlexibilityModelFrameAdapter",
                     "model_config": {
                         "preset": "residential_pv",
                         "resource_id": "campus_pv",
@@ -62,7 +62,7 @@ def multi_asset_campus_node():
                 },
                 {
                     "subscribe_key": "devices/campus_battery",
-                    "model_type": "fmi",
+                    "class_name": "FlexibilityModelFrameAdapter",
                     "model_config": {
                         "preset": "residential_battery",
                         "resource_id": "campus_battery",
@@ -72,7 +72,7 @@ def multi_asset_campus_node():
                 },
                 {
                     "subscribe_key": "devices/campus_water_heater",
-                    "model_type": "fmi",
+                    "class_name": "FlexibilityModelFrameAdapter",
                     "model_config": {
                         "preset": "water_heater_50gal",
                         "resource_id": "campus_wh",
@@ -81,7 +81,7 @@ def multi_asset_campus_node():
                 },
                 {
                     "subscribe_key": "devices/base_load",
-                    "model_type": "uncontrolled",
+                    "class_name": "UncontrolledLoad",
                     "model_config": {
                         "uncontrolled_load_schedule": [-25.0] * 24,
                     },

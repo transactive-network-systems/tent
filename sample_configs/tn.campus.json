@@ -9,7 +9,6 @@
   "tz": "UTC",
   "data_manager": {
     "class_name": "LocalDataManager",
-    "module_name": "tent.data_manager.local_data_manager",
     "db_params": {
       "db_type": "sqlite",
       "url": "sqlite:///testent.sqlite"
@@ -18,7 +17,6 @@
   "meter_points": [
     {
       "class_name": "MeterPoint",
-      "module_name": "tent.meter_point",
       "data_period_seconds": 10,
       "description": "",
       "max_buffer_seconds": 3600,
@@ -32,7 +30,6 @@
   "information_service_models": [
     {
       "class_name": "TemperatureForecastModel",
-      "module_name": "tent.information_service_model.temperature_forecast_model",
       "name": "TemperatureForecast",
       "location": "",
       "temperature_point_name": "",
@@ -43,7 +40,6 @@
   "local_assets": [
     {
       "class_name": "OpenLoopLoadPredictor",
-      "module_name": "tent.local_asset.openloop_load_predictor",
       "scale_factor": 2.1514946070528995,
       "dow_intercept": [
     4873.7724,
@@ -228,7 +224,6 @@
     },
     {
       "class_name": "SolarPvResource",
-      "module_name": "tent.local_asset.solar_pv_resource_model",
       "cloud_factor": 1.0,
       "cost_parameters": [0.0, 0.0, 0.0],
       "default_power": 0.0,
@@ -246,9 +241,7 @@
   "market_series": [
 {
       "class_name": "MarketSeries",
-      "module_name": "tent.market.market_series",
       "market_class_name": "Auction",
-      "market_module_name": "tent.market.auction",
       "commitment": true,
       "default_price": 0.0428,
       "delivery_anchor_time": "02:00",
@@ -273,9 +266,7 @@
     },
     {
       "class_name": "MarketSeries",
-      "module_name": "tent.market.market_series",
       "market_class_name": "Auction",
-      "market_module_name": "tent.market.auction",
       "commitment": true,
       "default_price": 0.0428,
       "delivery_anchor_time": "02:00",
@@ -301,7 +292,6 @@
   "neighbors": [
     {
       "class_name": "Neighbor",
-      "module_name": "tent.neighbor",
       "convergence_threshold": 0.05,
       "cost_parameters": [0.0, 0.0, 0.0],
       "default_vertices": [[0.046, 160, 0, true], [0.048, 1100.0, 20000.0, true]],
@@ -324,7 +314,6 @@
     },
     {
       "class_name": "Neighbor",
-      "module_name": "tent.neighbor",
       "convergence_threshold": 0.02,
       "cost_parameters": [0, 0, 0],
       "default_vertices": [["inf", 0, -60.0, true]],
@@ -347,7 +336,6 @@
     },
     {
        "class_name": "Neighbor",
-       "module_name": "tent.neighbor",
        "convergence_threshold": 0.02,
        "cost_parameters": [0, 0, 0],
        "default_vertices": [["inf", 0, -60.0, true]],

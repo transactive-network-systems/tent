@@ -41,15 +41,39 @@ operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
 
-import importlib
+import abc
 import logging
-
+from datetime import datetime
 from typing import List
+
+from tent.utils.helpers import get_class_from_spec, spec_kwargs
 
 _log = logging.getLogger(__name__)
 __version__ = "0.1"
 
-__all__ = ['ModelFrame']
+__all__ = ['Model', 'ModelFrame']
+
+
+class Model(abc.ABC):
+    """
+    One device model inside a ModelFrame: it predicts the power and the flexibility of its device for an interval and
+    takes in the measurements published for it. A model-frame asset names each model's class with `class_name` (and
+    `module_name` for a class TENT does not ship; see tent.registry) and constructs it with that entry's
+    `model_config`, extended with the entry's `subscribe_key` and the frame's `demand_curve_points`, as the first
+    argument and the frame as `parent`.
+    """
+
+    @abc.abstractmethod
+    def predict_power(self, params: dict = None, set_point=None) -> float:
+        """The device's power [kW, generation positive] for the interval described by params."""
+
+    @abc.abstractmethod
+    def predict_flexibility(self, params: dict = None) -> List[float]:
+        """demand_curve_points powers [kW, generation positive] spanning the device's flexibility for the interval."""
+
+    @abc.abstractmethod
+    def update_data(self, data: dict, now: datetime) -> None:
+        """Take in a measurement message published for this model's subscribe_key at time now."""
 
 
 class ModelFrame(object):
@@ -59,27 +83,18 @@ class ModelFrame(object):
         if not config:
             return
         self.demand_curve_points = config.get('demand_curve_points', 2)
-        base_module = "tent.local_asset.model_frame.models."
         for model in config['models']:
             try:
                 subscribe_key = model["subscribe_key"]
-                model_type = model["model_type"]
             except KeyError as e:
                 raise KeyError(f"Model configuration is missing key: {e}") from e
-            model_config = model.get('model_config', {})
-            model_config['demand_curve_points'] = self.demand_curve_points
-            model_config['subscribe_key'] = subscribe_key
-
-            if model_type == "fmi":
-                # A flexibility-model (external simulator) adapter; imported here so the core never needs it.
-                from .fmi_adapter import FlexibilityModelFrameAdapter
-                self.models[subscribe_key] = FlexibilityModelFrameAdapter(model_config, parent=self)
-            else:
-                # "<module>.<Class>" within the model-frame models package. (Classes from elsewhere go through the
-                # same registry as every other configured class; see get_class_from_spec.)
-                _file, m_type = model_type.split(".", 1)
-                module = importlib.import_module(base_module + _file)
-                self.models[subscribe_key] = getattr(module, m_type)(model_config, parent=self)
+            if 'model_type' in model:
+                raise ValueError(f'Model {subscribe_key!r}: model_type is not a configuration key; name the model class '
+                                 f'with class_name (and module_name for a class TENT does not ship).')
+            model_class = get_class_from_spec(model, Model)
+            model_config = {**model.get('model_config', {}), 'demand_curve_points': self.demand_curve_points,
+                            'subscribe_key': subscribe_key}
+            self.models[subscribe_key] = model_class(model_config, parent=self)
 
     def model_flexibility(self, params: dict = None) -> List[float]:
         params = params if params else {}

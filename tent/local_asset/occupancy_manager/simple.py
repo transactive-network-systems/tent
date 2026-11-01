@@ -5,10 +5,12 @@ from tent.utils.helpers import parse_time, parse_weekday
 
 from tent.utils.timer import Timer
 
+from .base import OccupancyManager
+
 _log = logging.getLogger(__name__)
 
 
-class SimpleOccupancyManager:
+class SimpleOccupancyManager(OccupancyManager):
     def __init__(self, schedule: dict):
         self.occupied = property(self.check_schedule)
         self.schedule = {}

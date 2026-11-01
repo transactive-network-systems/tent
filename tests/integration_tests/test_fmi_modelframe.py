@@ -43,7 +43,7 @@ def test_modelframe_aggregation_with_fmi_models():
         "models": [
             {
                 "subscribe_key": "devices/pv",
-                "model_type": "fmi",
+                "class_name": "FlexibilityModelFrameAdapter",
                 "model_config": {
                     "preset": "residential_pv",
                     "rated_kw": 5.0,
@@ -51,7 +51,7 @@ def test_modelframe_aggregation_with_fmi_models():
             },
             {
                 "subscribe_key": "devices/water_heater",
-                "model_type": "fmi_adapter.FlexibilityModel",
+                "class_name": "FlexibilityModelFrameAdapter",
                 "model_config": {
                     "preset": "water_heater_50gal",
                     "rated_kw": 4.5,

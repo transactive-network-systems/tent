@@ -4,10 +4,12 @@ from datetime import datetime
 
 from tent.utils.helpers import linspace
 
+from .base import Model
+
 _log = logging.getLogger(__name__)
 
 
-class Lighting(object):
+class Lighting(Model):
     def __init__(self, config, **kwargs):
         self.rated_power = config["rated_power"]
         self.max_set_point_offset = config.get('max_set_point_offset', 0.1)
