@@ -46,6 +46,11 @@ class DataManager:
                                            self.tables[key],
                                            **mapping_params)
 
+    def stop(self) -> None:
+        """Release what the manager holds before the node is torn down (a manager that publishes or buffers overrides
+        this to flush and stop its workers). The base manager holds nothing."""
+        return None
+
     def add_tables(self, definitions: list[dict]):
         for definition in definitions:
             key = definition['name']
