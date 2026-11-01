@@ -35,7 +35,7 @@ WEATHER_DATA = [
     {"Time": "2017-07-02 00:00:00", "GHI": 0, "DNI": 0, "DHI": 0, "Temperature": 22.8, "Pressure": 101.3, "Direction": 60, "Speed": 1.3},
 ]
 
-WEATHER_CSV_HEADER = "Time,GHI,DNI,DHI,Temperature,Pressure,Direction,Speed"
+WEATHER_CSV_HEADER = "Timestamp,GHI,DNI,DHI,Value,Pressure,Direction,Speed"  # TemperatureForecastModel reads Timestamp and Value
 
 
 def get_weather_csv_content():

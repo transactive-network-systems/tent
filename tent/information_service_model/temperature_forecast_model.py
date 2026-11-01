@@ -47,6 +47,7 @@ import csv
 import logging
 
 from datetime import timedelta
+from pathlib import Path
 from typing import Union
 from zoneinfo import ZoneInfo
 
@@ -62,6 +63,10 @@ class TemperatureForecastModel(InformationServiceModel):
     Hourly temperature forecast (degF) read from a CSV file (columns Timestamp, Value), the data source used in
     simulations. The constructor also accepts the keys a service-backed subclass needs (location, max_gap_time,
     temperature_point_name, tmy_fallback_path) so that such a subclass can fall back to the file when its service fails.
+
+    A configured file (weather_file_path, or tmy_fallback_path for a service-backed subclass) must exist and parse when
+    the model is configured; a path that does not resolve, a header without Timestamp and Value, or an unparsable row is
+    a configuration error. Relative paths are resolved against the process's working directory and archived resolved.
     """
 
     def __init__(self,
@@ -75,38 +80,26 @@ class TemperatureForecastModel(InformationServiceModel):
         kwargs['information_type'] = MeasurementType.Temperature
         kwargs['information_units'] = MeasurementUnit.degF
         super(TemperatureForecastModel, self).__init__(*args, **kwargs)
-        # Preserve None (don't cast None -> 'None') so we can test whether a file path was provided.
-        self.weather_file_path = str(weather_file_path) if weather_file_path is not None else None
-        self.weather_data = []
+        # Service settings, kept whether or not a file is configured (a service-backed subclass reads them).
+        self.location: list[dict] = [dict(location)] if location else []
+        self.max_gap_time: timedelta = (max_gap_time if isinstance(max_gap_time, timedelta)
+                                        else timedelta(seconds=float(max_gap_time)))
+        self.oat_point_name: str = str(temperature_point_name) if temperature_point_name else 'OutdoorAirTemperature'
+        self.weather_data: list[dict] = []
         self.last_modified = None
-
+        # The forecast file: weather_file_path when given, otherwise the fallback file of a service-backed subclass.
+        configured = weather_file_path if weather_file_path else tmy_fallback_path
+        self.weather_file_path: str | None = self._resolve_weather_file(configured) if configured else None
         if self.weather_file_path is not None:
-            # Only initialize weather data if the file actually exists. Protect against
-            # invalid or placeholder paths (e.g., the string 'None').
-            #_log.debug(f'@@@@@@@@@ TEMPERATURE_FORECAST_MODEL --- USING PATH: {self.weather_file_path}')
-            if os.path.exists(self.weather_file_path):
-                #_log.debug('@@@@@@@@ TEMPERATURE_FORECAST_MODEL --- THE PATH EXISTS, TOO!')
-                self.init_weather_data()
-            else:
-                #_log.debug('@@@@@@@@@@ TEMPERATURE_FORECAST_MODEL --- THE PATH DOES NOT EXIST.')
-                # If the provided path doesn't exist, treat as if no weather file was provided.
-                self.weather_file_path = None
-            self.location = None
-            self.max_gap_time = None
-            self.oat_point_name = None
-        else:
-            self.location = [dict(location)] if location else []
-            self.max_gap_time = max_gap_time if isinstance(max_gap_time, timedelta) else \
-                timedelta(seconds=float(max_gap_time))
-            self.oat_point_name = str(temperature_point_name) if temperature_point_name else "OutdoorAirTemperature"
-            if tmy_fallback_path:
-                self.weather_file_path = str(tmy_fallback_path)
-                # Only init if fallback exists
-                if os.path.exists(self.weather_file_path):
-                    self.init_weather_data()
-            # If no valid weather file was found, ensure attribute is None
-            if not self.weather_file_path:
-                self.weather_file_path = None
+            self.init_weather_data()
+
+    def _resolve_weather_file(self, configured) -> str:
+        path = Path(str(configured)).expanduser()
+        resolved = path.resolve()
+        if not resolved.is_file():
+            raise FileNotFoundError(f'{self.name}: weather file {str(configured)!r} (resolved to {resolved}) does not '
+                                    f'exist. Give the path of a CSV with columns Timestamp and Value.')
+        return str(resolved)
 
     def update_information(self, market):
         """
@@ -120,54 +113,51 @@ class TemperatureForecastModel(InformationServiceModel):
         self.get_forecast_file(market)
 
     def init_weather_data(self):
-        """
-        To init or re-init weather data from file.
-        :return:
-        """
-        # Get latest modified time
+        """Load (or reload, when the file has changed) the hourly records: Timestamp (any format parse_datetime
+        accepts; a naive time is in the node's zone) and Value (degF). Records are keyed to the hour."""
         cur_modified = os.path.getmtime(self.weather_file_path)
-
-        if self.last_modified is None or cur_modified != self.last_modified:
-            self.last_modified = cur_modified
-
-            # Clear weather_data for re-init
-            self.weather_data = []
-            try:
-                with open(self.weather_file_path) as f:
-                    reader = csv.DictReader(f)
-                    self.weather_data = [r for r in reader]
-                    for rec in self.weather_data:
-                        rec['Timestamp'] = parse_datetime(rec['Timestamp']).replace(minute=0, second=0, microsecond=0)
-                        if rec['Timestamp'].tzinfo is None:
-                            rec['Timestamp'] = rec['Timestamp'].replace(tzinfo=ZoneInfo(self.tn.tz))
-                        rec['Value'] = float(rec['Value'])
-            except Exception:
-                self.weather_data = []
-                _log.warning("WEATHER - problem parsing weather file!")
+        if self.last_modified is not None and cur_modified == self.last_modified:
+            return
+        records = []
+        with open(self.weather_file_path, newline='') as f:
+            reader = csv.DictReader(f)
+            header = reader.fieldnames or []
+            missing = [column for column in ('Timestamp', 'Value') if column not in header]
+            if missing:
+                raise ValueError(f'{self.name}: weather file {self.weather_file_path} has columns {header}; '
+                                 f'it needs {missing} as well.')
+            for line, row in enumerate(reader, start=2):
+                try:
+                    timestamp = parse_datetime(row['Timestamp']).replace(minute=0, second=0, microsecond=0)
+                    if timestamp.tzinfo is None:
+                        timestamp = timestamp.replace(tzinfo=ZoneInfo(self.tn.tz))
+                    records.append({'Timestamp': timestamp, 'Value': float(row['Value'])})
+                except (KeyError, TypeError, ValueError) as error:
+                    raise ValueError(f'{self.name}: weather file {self.weather_file_path} line {line} cannot be read: '
+                                     f'{error}') from error
+        self.weather_data = records
+        self.last_modified = cur_modified
 
     def get_forecast_file(self, mkt):
-        #_log.debug(f'IN GET_FORCAST_FILE FOR MARKET: {mkt.name}.')
+        """Predicted values for the market's intervals from the file, by the hour of each interval's start. A missing hour
+        is filled from the nearest hour present among the adjacent ones and the same hour on the adjacent days; when none
+        exists the interval cannot be forecast and a LookupError names it."""
         self.init_weather_data()
-        # Copy weather data to predictedValues
+        by_hour = {record['Timestamp']: record['Value'] for record in self.weather_data}
         for ti in mkt.time_intervals:
-            # Find item which has the same timestamp as ti.timeStamp
-            start_time = ti.start_time.replace(minute=0)
-            #_log.debug(f'LOOKING FOR TIMESTAMP ({type(start_time)}): {start_time}')
-            #_log.debug(f'THE FIRST POSSIBILITY ({type(self.weather_data[0]["Timestamp"])}) IS: {self.weather_data[0]["Timestamp"]}')
-            items = [x for x in self.weather_data if x['Timestamp'] == start_time]
-            if len(items) == 0:
-                trial_deltas = [-1, 1, -2, 2, -24, 24]
-                for delta in trial_deltas:
-                    items = [x for x in self.weather_data if x['Timestamp'] == (start_time - timedelta(hours=delta))]
-                    if len(items) > 0:
+            start_time = ti.start_time.replace(minute=0, second=0, microsecond=0)
+            value = by_hour.get(start_time)
+            if value is None:
+                for delta in (1, -1, 2, -2, 24, -24):  # the search order the file-backed forecast has always used
+                    value = by_hour.get(start_time + timedelta(hours=delta))
+                    if value is not None:
+                        _log.debug(f'{self.name}: no weather record at {start_time.isoformat()}; using the record '
+                                   f'{delta:+d} h away for interval {ti.name}.')
                         break
-
-                # None exist, raise exception
-                if len(items) == 0:
-                    raise Exception('No weather data for time: {}'.format(ti.start_time.isoformat()))
-
-            # Add temperature to predicted values
-            self.predicted_values.update(ti, items[0]['Value'])
+            if value is None:
+                raise LookupError(f'{self.name}: no weather data for interval {ti.name} (hour {start_time.isoformat()}) '
+                                  f'in {self.weather_file_path}.')
+            self.predicted_values.update(ti, value)
 
     @property
     def table_name(self):
@@ -197,7 +187,7 @@ class TemperatureForecastModel(InformationServiceModel):
                     {"name": "location", "type": "JSON"},
                     {"name": "max_gap_time", "type": "Interval"},
                     {"name": "temperature_point_name", "type": "String", "type_args": [255]},
-                    {"name": "weather_file_path", "type": "String", "type_args": [255]}
+                    {"name": "weather_file_path", "type": "Text"}
                 ]
             }
         ])

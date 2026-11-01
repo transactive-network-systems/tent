@@ -144,11 +144,14 @@ class MeterPoint(Component):
         return record
 
     def archive_reading(self, reading_value, reading_time):
+        """One row per reading. The key includes the time the row was recorded, so two readings that carry the same
+        timestamp (a repeated publication, a device with coarse timestamps) are both kept rather than colliding."""
         self.data_manager.archive_data({
             "table_name": "meter_reading",
             "data": {
                 "meter_id": self.id,
                 "reading_time": reading_time,
+                "record_time": Timer.now(),
                 "value": reading_value
             }
         })
@@ -183,6 +186,7 @@ class MeterPoint(Component):
                 "columns": [
                     {"name": "meter_id", "foreign_key": "meter_point.id", "kwargs": {"primary_key": True}},
                     {"name": "reading_time", "type": "DateTime", "kwargs": {"primary_key": True}},
+                    {"name": "record_time", "type": "DateTime", "kwargs": {"primary_key": True}},
                     {"name": "value", "type": "Float"}
                 ]
             }
