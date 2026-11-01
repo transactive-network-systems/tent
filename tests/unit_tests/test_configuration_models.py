@@ -115,13 +115,15 @@ def test_the_sample_configuration_validates_and_configures_a_node(tmp_path):
 # Keys of the deployed files that belong to the host application (the TransactiveNodeAgent), not to TENT: the agent
 # reads and removes them before the configuration reaches TENT (see the agent's README). Mirrored here so the deployed
 # files can be checked against TENT's models; TENT itself refuses them, by design.
-HOST_COMPONENT_KEYS = {'neighbors': {'sender'}}
+HOST_KEYS = {'': {'db_topic', 'subscribe_all_platforms', 'topics', 'slow_iteration_warning'}, 'neighbors': {'sender'}}
 
 
 def _without_host_keys(configs: dict) -> dict:
-    stripped = dict(configs)
-    for list_name, keys in HOST_COMPONENT_KEYS.items():
-        stripped[list_name] = [{k: v for k, v in entry.items() if k not in keys} for entry in configs.get(list_name, [])]
+    stripped = {k: v for k, v in configs.items() if k not in HOST_KEYS['']}
+    for list_name, keys in HOST_KEYS.items():
+        if list_name:
+            stripped[list_name] = [{k: v for k, v in entry.items() if k not in keys}
+                                   for entry in configs.get(list_name, [])]
     return stripped
 
 

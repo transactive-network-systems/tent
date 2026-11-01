@@ -1,11 +1,9 @@
 {
-  "db_topic": "tns",
   "description": "",
   "name": "PNNL_Campus",
   "simulation": true,
   "simulation_one_hour_in_seconds": 100,
   "simulation_start_time": "2017-07-01 00:00:00",
-  "subscribe_all_platforms": true,
   "tz": "UTC",
   "data_manager": {
     "class_name": "LocalDataManager",
