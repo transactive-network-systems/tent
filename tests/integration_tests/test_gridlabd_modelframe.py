@@ -23,6 +23,16 @@ from tent.utils.timer import Timer
 
 from tests.mock_tn import MockTN
 
+
+from tent.information_service_model.temperature_forecast_model import TemperatureForecastModel  # noqa: E402
+
+
+class ReadingsFedTemperatureForecast(TemperatureForecastModel):
+    """A forecast whose predicted_values the test fills from simulator readings: there is no file and nothing to update."""
+    def update_information(self, market):
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Thermostat RC coefficients from tent/local_asset/model_frame/config.json
 # (rated_power 13.68 kW, 24-element c1..c4 arrays)
@@ -129,8 +139,8 @@ def _build_node_config() -> dict:
         # ----------------------------------------------------------------
         "information_service_models": [
             {
-                "class_name": "TemperatureForecastModel",
-                "module_name": "tent.information_service_model.temperature_forecast_model",
+                "class_name": "ReadingsFedTemperatureForecast",
+                "module_name": "tests.integration_tests.test_gridlabd_modelframe",
                 "name": "TemperatureForecast",
                 "weather_file_path": None,
                 "temperature_point_name": "OutdoorAirTemperature",

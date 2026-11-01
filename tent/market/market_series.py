@@ -184,8 +184,7 @@ class MarketSeries(Component):
         )
         self.next_clearing_time += self.duration.market_clearing_interval
         self.newest_market = new_market
-        for neighbor in getattr(self.tn, 'neighbors', None) or []:
-            neighbor.on_market_spawned(new_market)
+        self.tn.on_market_spawned(new_market)
 
     @property
     def table_name(self):

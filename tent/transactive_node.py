@@ -235,6 +235,11 @@ class TransactiveNode(Archivable):
     def get_market_series_by_attribute(self, attribute, match, first_only=False):
         return self.get_objects_by_attribute(self.market_series, attribute, match, first_only)
 
+    def on_market_spawned(self, market) -> None:
+        """A series created a market: neighbors deliver any signal they held for it (see Neighbor.held_signals)."""
+        for neighbor in self.neighbors:
+            neighbor.on_market_spawned(market)
+
     def get_market_by_name(self, name):
         """The market with exactly this name, from any series. (Market names join the series name's words with
         underscores, so the series name itself cannot be used to narrow the search.)"""
