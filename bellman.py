@@ -7,7 +7,14 @@ May 2022
 """
 
 
-from cost_function import cost_function
+
+
+def cost_function(start_state, control, price, kwargs):
+    """Placeholder transition-cost function (the original cost_function module): a constant end state and cost. A
+    real cost function comes with the model-frame scheduler integration (planning/THERMAL_ZONE_AND_SCHEDULER_PLAN.md)."""
+    end_state = .5
+    transition_cost = 7
+    return end_state, transition_cost
 
 
 class Bellman():
