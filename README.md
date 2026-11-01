@@ -388,6 +388,23 @@ stateDiagram-v2
 
 ---
 
+## What the Host Application Must Provide
+
+TENT is a library: it computes markets, curves and signals, and it hands messages to a host (the TransactiveNodeAgent
+on VOLTTRON, or a test harness) through a small set of hooks (`issue_signal`, `register_subscription`, `publish`,
+the data manager). Three responsibilities stay with the host, by design, because they depend on the transport:
+
+- **Authentication and authorization of senders.** A transactive signal or an archive record reaches TENT exactly as
+  the host delivers it; TENT checks its format, its protocol version and that it names a market and a neighbor this
+  node knows, nothing more. The host must establish who sent a message (the bus identity and, across platforms, the
+  platform) and refuse messages for a neighbor that did not come from that neighbor's sender before calling
+  `Neighbor.receive_transactive_signal`. The same applies to a historian receiving archive records: which publisher may
+  write under which name is the host's decision. TENT neither carries nor stores sender identities.
+- **Transport of queries and answers** for counterparties that must be asked (a planned point-query neighbor): the
+  host maps a query key to a topic pair, an RPC or an HTTP call.
+- **Clock and scheduling.** The host runs the state machine (`_state_machine_iteration`) and decides how often; TENT
+  assumes aware datetimes and the shared simulation clock (`Timer`) it is configured with.
+
 ## Installation & Quickstart
 
 ### Prerequisites
