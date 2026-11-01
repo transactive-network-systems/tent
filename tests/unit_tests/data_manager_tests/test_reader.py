@@ -114,3 +114,16 @@ def test_curves_with_vertices(reader, archive):
     history = reader.curves(measurement_ids=[m.id], latest_only=False)
     assert [len(c['vertices']) for c in history] == [2, 3]
     assert reader.curves(owner_ids=[archive['market'].id], interval_ids=[ti.id])
+
+
+def test_reflect_only_a_subset_of_unknown_tables(archive):
+    with LocalDataManager.from_url(archive['url']).engine.begin() as conn:
+        conn.execute(text('CREATE TABLE IF NOT EXISTS agent_other (id INTEGER PRIMARY KEY)'))
+    reader = LocalDataManager.from_url(archive['url'], reflect_unknown=False)
+    assert 'agent_extra' not in reader.tables and 'agent_other' not in reader.tables
+    assert reader.reflect_unknown_tables(only=['agent_extra']) == ['agent_extra']
+    assert 'agent_extra' in reader.tables and 'agent_other' not in reader.tables
+    assert reader.execute(reader.select('agent_extra')) == [{'id': 1, 'note': 'hello'}]
+    assert reader.reflect_unknown_tables(only=['agent_extra']) == [], 'already reflected: nothing added'
+    with pytest.raises(Exception):
+        reader.reflect_unknown_tables(only=['no_such_table'])

@@ -62,10 +62,20 @@ class ArchiveReader:
         dm.read_only = True
         return dm
 
-    def reflect_unknown_tables(self) -> list[str]:
+    def reflect_unknown_tables(self, only: Iterable[str] | None = None) -> list[str]:
+        """
+        Reflect tables the database has but no registered definition describes (a historian's own tables, for example)
+        and make them readable through query_data. `only` restricts the reflection to those table names (a name that is
+        not in the database raises); by default every unknown table is reflected. Returns the names added.
+        """
         metadata = self.registry.metadata
         known = set(metadata.tables)
-        metadata.reflect(bind=self.engine, only=lambda name, _meta: name not in known)
+        if only is None:
+            metadata.reflect(bind=self.engine, only=lambda name, _meta: name not in known)
+        else:
+            wanted = [name for name in only if name not in known]
+            if wanted:
+                metadata.reflect(bind=self.engine, only=wanted)
         added = []
         for name, table in metadata.tables.items():
             if name in self.tables:
