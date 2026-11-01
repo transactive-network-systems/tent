@@ -6,8 +6,6 @@ refinement does not take effect and that a real-time market does not open at the
 """
 from datetime import datetime, timedelta, timezone
 
-import pytest
-
 from tent.enumerations import MarketState
 from tests.integration_tests.conftest import DEFAULT_PRICE, T0, deliver_neighbor_signals, prices, step_to
 
@@ -45,11 +43,6 @@ def test_each_series_spawns_its_own_ladder_of_markets_as_the_clock_advances(camp
            all(ti.duration == timedelta(hours=1) for ti in day_ahead.newest_market.time_intervals)
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    'refined_series configured by name is never resolved: MarketSeries.__init__ looks the name up through '
-    'tn.get_market_series_by_attribute, but TransactiveNode.configure_node assigns tn.market_series only after every '
-    'series has been built, so the lookup sees no series and refined_series stays None. The campus Real-Time_Auction '
-    'therefore never refines the Day-Ahead_Auction: market_to_be_refined is None on every real-time market.'))
 def test_a_real_time_market_refines_the_day_ahead_market_covering_its_delivery(campus, clock):
     day_ahead, real_time = campus.market_series
     assert real_time.refined_series is not None and real_time.refined_series.name == 'Day-Ahead_Auction'
@@ -57,17 +50,12 @@ def test_a_real_time_market_refines_the_day_ahead_market_covering_its_delivery(c
     da_market = day_ahead.markets[0]
     after_da_cleared = [m for m in real_time
                        if m.transition_times.delivery_lead > da_market.transition_times.delivery_lead]
-    assert len(after_da_cleared) == 3
+    assert [m.transition_times.delivery_lead.strftime('%H:%M') for m in after_da_cleared] == \
+           ['01:55', '02:10', '02:25', '02:40']
     for market in after_da_cleared:
         assert market.market_to_be_refined is not None and market.market_to_be_refined.name == da_market.name
 
 
-@pytest.mark.xfail(strict=True, reason=(
-    'A successor market is spawned, and runs check_marginal_prices, when its predecessor activates, which is before '
-    'the predecessor clears; the prices it copies for the shared intervals are the predecessor\'s opening (default) '
-    'prices. Nothing refreshes them later for an Auction (refresh_prices_from_prior_market is called only by '
-    'ConsensusMarket), so a real-time market opens at the default price in quarter-hours its predecessor just cleared '
-    'at other prices.'))
 def test_a_real_time_market_opens_at_the_prices_its_predecessor_cleared(campus, clock):
     _, real_time = campus.market_series
     first = real_time.newest_market

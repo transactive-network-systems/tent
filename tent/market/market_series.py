@@ -100,17 +100,45 @@ class MarketSeries(Component):
         self.price_model_spec: dict = {'class_name': 'HourlyAveragePriceModel', 'default_price': self.default_price,
                                        **(price_model or {})}
         self.price_model_class: Type[PriceModel] = get_class_from_spec(self.price_model_spec, PriceModel)
-        ref_series: MarketSeries = (self.tn.get_market_series_by_attribute('name', refined_series, first_only=True)
-                                    if isinstance(refined_series, str) else refined_series)
-        self.refined_series: Union[MarketSeries, None] = (
-            proxy(ref_series, safe_weak_proxy_callback(self, 'refined_series'))
-            if isinstance(ref_series, MarketSeries) else None)
+        # The series this one refines: given as a MarketSeries, or as its name, which is resolved against the node's
+        # series when first needed (see refined_series and resolve_references; a configured node builds its series one
+        # after another, so the named series may not exist yet).
+        self._refined_series_name: str | None = refined_series if isinstance(refined_series, str) else None
+        self._refined_series: Union[MarketSeries, None] = (
+            proxy(refined_series, safe_weak_proxy_callback(self, '_refined_series'))
+            if isinstance(refined_series, MarketSeries) else None)
 
-        # Instantiate the first market in the series.
         self.next_clearing_time: datetime = self.duration.get_first_clearing_time()
         # The series row must exist before its first market references it (foreign-key order on PostgreSQL).
         self.archive()
-        self.spawn(MarketState.Initial)
+        # Instantiate the first market in the series. Its market_to_be_refined needs the refined series, so when that
+        # is a name that cannot be resolved yet the first market waits for resolve_references().
+        if self._refined_series_name is None or self._resolve_refined_series():
+            self.spawn(MarketState.Initial)
+
+    @property
+    def refined_series(self) -> Union['MarketSeries', None]:
+        """The series whose markets this series' markets refine (None when not configured)."""
+        if self._refined_series is None and self._refined_series_name is not None:
+            self._resolve_refined_series()
+        return self._refined_series
+
+    def _resolve_refined_series(self) -> bool:
+        """Look the configured name up among the node's series; True when found (and kept as a weak proxy)."""
+        found = self.tn.get_market_series_by_attribute('name', self._refined_series_name, first_only=True)
+        if isinstance(found, MarketSeries):
+            self._refined_series = proxy(found, safe_weak_proxy_callback(self, '_refined_series'))
+            return True
+        return False
+
+    def resolve_references(self):
+        """Resolve the configured refined_series name now that every series of the node exists, and spawn the first
+        market if construction had to wait for that. A name that resolves to no series is a configuration error."""
+        if self._refined_series_name is not None and not self._resolve_refined_series():
+            raise ValueError(f'MarketSeries {self.name}: refined_series {self._refined_series_name!r} names no market '
+                             f'series of this node.')
+        if not self.markets:
+            self.spawn(MarketState.Initial)
 
     def __iter__(self):
         """Allow iteration over the series' markets."""
