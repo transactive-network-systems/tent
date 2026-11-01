@@ -88,6 +88,17 @@ LEGACY_NODE_KEYS = {'meterPoints': 'meter_points', 'informationServiceModels': '
 class TransactiveNode(Configurable, Archivable):
     """
     TransactiveNode is the local perspective of the computational agent among a network of such nodes.
+
+    The host (a VOLTTRON agent, a test harness) subclasses it and supplies transport (issue_signal,
+    register_subscription), the loop (state_machine_loop, which calls _state_machine_iteration until stopped) and two
+    hooks the iteration leaves to it:
+
+    - _sleep, the cooperative yield: the iteration calls it after each market so that a host which multiplexes the node
+      with its message handling on one thread can hand control to its hub, and so that an idle loop pauses rather than
+      spins.
+    - _run_market, the per-market wrap point: the iteration runs each market through it (events, then the yield), so a
+      host that wants to time, log or guard each market's step overrides it, calls super, and keeps the iteration body
+      in one place rather than copying it.
     """
 
     class Config(ConfigModel):
@@ -534,15 +545,20 @@ class TransactiveNode(Configurable, Archivable):
         pass
 
     def _state_machine_iteration(self):
-        """One complete iteration: give every meter point its poll (see tent.meter_point), then run every market's
-        events."""
+        """One complete iteration: give every meter point its poll (see tent.meter_point), then run every market of every
+        series, in series order, through _run_market, and drop each series' expired markets."""
         for meter_point in self.meter_points:
             meter_point.poll()
         for series in self.market_series:
             for market in series:
-                market.events()
-                self._sleep()
+                self._run_market(market)
             series.prune_expired()
+
+    def _run_market(self, market):
+        """One market's step of the iteration: its events, then the host's yield (_sleep). This is the host's wrap point:
+        a subclass that times or logs each market's step overrides it and calls super; nothing else belongs here."""
+        market.events()
+        self._sleep()
 
     @property
     def data_manager(self):
