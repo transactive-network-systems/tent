@@ -19,7 +19,12 @@ neighbor's ``active_vertices`` curve for each interval becomes orders (``Order.f
 order per entity and interval), revised only when the curve changes. Any caller may also ``submit_order`` a ready-made
 ``Order``. Each new or revised order is matched against the standing book, price first and then by the configured
 strategy; matched quantities become matched legs (one per counterparty and side, at the match price), unmatched
-remainders stand, and orders expire at their ``expire_by``. Every booked and superseded order is archived. Negotiation
+remainders stand, and orders expire at their ``expire_by``. Matching walks a ladder of the prices in play and a fill
+made at a finite rung is priced at that rung. The infinite rung is where market orders rest (they take any price): a
+fill made there is priced by the side that has a curve, the aggressive order's price for the matched quantity (a
+40 kW inelastic load against an offer rising from 0.04 at 0 kW to 0.08 at 100 kW trades at 0.056). Two market orders
+meeting have no price-forming participant; their fill keeps the infinite level and the orders are named in a warning
+once per interval. Every booked and superseded order is archived. Negotiation
 stays open for its whole window, so an order submitted late is still matched.
 
 Settlement: the book closes
@@ -37,7 +42,8 @@ At the market-lead time ``MatchingEngine.settle`` turns the matched legs into th
   (``MatchingEngine.average_match_prices``), for reporting. A settled price is the market's own and is not replaced by
   the prior market's price.
 - **Intervals with no match** keep their opening price and are left to their entities' curves at that price; the market
-  logs one line naming them.
+  logs one line naming them. An interval whose only matches are market orders against market orders has no discovered
+  price either: its matched quantities are scheduled at the opening price, and it is logged likewise.
 
 After settlement the market proceeds as any other: the price model is updated from the marginal prices and the assets
 are told to actuate on entering Delivery (unless the series has ``actuate_assets`` false).

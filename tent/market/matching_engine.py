@@ -112,6 +112,7 @@ class MatchingEngine(Market):
         self.matchList: list[Order] = []  # List of orders successfully matched
         self.order_expiry: timedelta | None = cfg.order_expiry
         self.quotes: dict[tuple, Quote] = {}
+        self._unpriced_fills_reported: set[str] = set()  # intervals where market orders met market orders (see _fill_price)
 
     @property
     def table_name(self):
@@ -636,6 +637,28 @@ class MatchingEngine(Market):
         order.status = OrderStatus.SUPERSEDED
         self.orderList = [x for x in self.orderList if x is not order]
 
+    def _fill_price(self, aggressive_order: Order, matched_quantity: float, level: float, fills: list) -> float:
+        """
+        The price a fill is made at. Fills happen at a level of the price ladder, and a finite level is the price. The
+        infinite level is where market orders rest (they take any price), and a fill made there is priced by the side
+        that has a curve: the aggressive order's price for the matched quantity (the infinite level is the first rung,
+        so nothing of it has matched before). When the aggressive order is a market order too, no participant forms a
+        price: the fill keeps the infinite level, which settlement treats as an unpriced match, and the orders are
+        named in a warning once per interval.
+        """
+        if math.isfinite(level):
+            return level
+        price = aggressive_order.price_from_vertices(matched_quantity)
+        if math.isfinite(price):
+            return price
+        interval_name = aggressive_order.interval.name
+        if interval_name not in self._unpriced_fills_reported:
+            self._unpriced_fills_reported.add(interval_name)
+            resting = sorted({self.get_order_by_id(an_id=so.curve.id).actor.name for so, _ in fills})
+            _log.warning(f'MARKET: {self.name}: in {interval_name} the market order of {aggressive_order.actor.name} is '
+                         f'filled by the market orders of {resting}; neither side names a price, so the match has none.')
+        return level
+
     def _apply_fills(self, aggressive_order: Order, ao: Vertex, fills: list, price: float):
         """
         Match the aggressive order against planned fills of standing orders at one price.
@@ -658,6 +681,7 @@ class MatchingEngine(Market):
             return aggressive_order  # nothing at this price can be taken
         matched_quantity = -sum(quantity for _, quantity in fills)
         unmatched_quantity = ao.quantity - matched_quantity
+        price = self._fill_price(aggressive_order, matched_quantity, price, fills)
         tentative = []
         for so, quantity in fills:
             standing_order: Order = self.get_order_by_id(an_id=so.curve.id)
