@@ -1,1 +1,2 @@
+from tent.market.price_models.base import PriceModel
 from tent.market.price_models.hourly_average_price_model import HourlyAveragePriceModel

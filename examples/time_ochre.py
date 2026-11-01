@@ -154,7 +154,7 @@ def _build_node_config() -> dict:
                     "models": [
                         {
                             "topic": "hvac",
-                            "model_type": "thermostat.Thermostat",
+                            "class_name": "Thermostat",
                             "model_config": {
                                 "rated_power": 13.68,
                                 "c1": _C1, "c2": _C2, "c3": _C3, "c4": _C4,
@@ -166,7 +166,7 @@ def _build_node_config() -> dict:
                     ],
                 },
                 "occupancy_manager": {
-                    "class_name": "OccupancyManager",
+                    "class_name": "SimpleOccupancyManager",
                     "module_name": "tent.local_asset.occupancy_manager.simple",
                     "schedule": {},
                 },

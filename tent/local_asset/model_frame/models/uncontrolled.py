@@ -1,10 +1,12 @@
 import datetime
 import logging
 
+from .base import Model
+
 _log = logging.getLogger(__name__)
 
 
-class UncontrolledLoad(object):
+class UncontrolledLoad(Model):
     def __init__(self, config, **kwargs):
         self.actuation_key = None
         self.load_schedule = config['uncontrolled_load_schedule']
@@ -24,6 +26,5 @@ class UncontrolledLoad(object):
     def set_point_range(interval_start_time: datetime):
         return None, None
 
-    @staticmethod
-    def update_data(self):
-        pass
+    def update_data(self, data, now):
+        pass  # an uncontrolled load is driven by its schedule, not by measurements

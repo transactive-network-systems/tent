@@ -44,6 +44,8 @@ import logging
 
 from tent.utils.helpers import linspace
 
+from .base import Model
+
 _log = logging.getLogger(__name__)
 
 
@@ -53,7 +55,7 @@ HSP = "HSP"
 TIN = "ZoneTemperature"
 
 
-class Thermostat(object):
+class Thermostat(Model):
     def __init__(self, config, **kwargs):
         self.name = "Thermostat"
         self.c1 = config["c1"]

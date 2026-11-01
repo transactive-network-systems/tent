@@ -95,6 +95,38 @@ TENT implements continuous double auctions where:
 
 </details>
 
+<details open>
+<summary><b>4. Configuration: naming classes</b></summary>
+<br>
+
+A node is built from a JSON configuration. Every configurable slot (data manager, meter points, information services,
+local assets, neighbors, market series and their market class and price model, model-frame models, occupancy and
+actuation managers) names its class with `class_name`; the other keys of the block are the constructor's keywords.
+`tent.registry` resolves the name:
+
+1. With a `module_name` in the block, that module is imported and the class taken from it. This is how classes TENT
+   does not ship are used; it works for shipped classes too.
+2. Without one, the name is looked up among the classes TENT ships, registered by name in `tent.registry.SHIPPED`
+   (for example `Neighbor`, `BulkSupplierDC`, `ModelFrameAsset`, `Thermostat`, `MarketSeries`, `Auction`,
+   `ConsensusMarket`, `MatchingEngine`, `HourlyAveragePriceModel`, `LocalDataManager`).
+3. Then among the `tent.components` entry points of installed packages. A package registers a class with
+   `[project.entry-points."tent.components"] MyAsset = "my_package.assets:MyAsset"` and configurations can then name
+   `MyAsset` without a `module_name`.
+
+No module path is guessed from a class name. Whatever path produced the class, it must be a subclass of the base the
+slot expects (`LocalAsset`, `Neighbor`, `Market`, `DataManager`, ...), or configuration fails with a `TypeError`. A
+market series names its market class with `market_class_name` (and `market_module_name` for one from elsewhere) and
+its price model in the `price_model` block; a model-frame asset names each model in `model_configs.models` by
+`class_name` with the model's own keys in `model_config`. The configuration dictionaries are only read, so the same
+ones can be given again to rebuild a node.
+
+Between nodes, transactive signals travel in the wire format defined by `TransactiveSignalMessage`
+(`tent/containers/transactive_signal_message.py`, protocol version 1.0): a Pydantic model that the sender serialises
+through and the receiver validates before anything is looked up. An inelastic vertex's infinite price is `null` on the
+wire; a message that does not fit is dropped with a logged reason.
+
+</details>
+
 ---
 
 ## Flexibility Modeling (`tent.flexibility`)
@@ -220,7 +252,6 @@ Here is an example configuring a multi-resource building asset in `tn.campus.jso
 ```json
 {
   "class_name": "ModelFrameAsset",
-  "module_name": "tent.local_asset.model_frame.model_frame_asset",
   "name": "CampusSolarArray",
   "maximum_power": 120.0,
   "minimum_power": 0.0,
@@ -229,7 +260,7 @@ Here is an example configuring a multi-resource building asset in `tn.campus.jso
     "models": [
       {
         "topic": "devices/campus_pv",
-        "model_type": "fmi",
+        "class_name": "FlexibilityModelFrameAdapter",
         "model_config": {
           "preset": "residential_pv",
           "resource_id": "campus_pv",

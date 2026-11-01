@@ -138,7 +138,7 @@ def hvac_asset(tn):
             "models": [
                 {
                     "subscribe_key": "hvac_device",
-                    "model_type": "fmi",
+                    "class_name": "FlexibilityModelFrameAdapter",
                     "model_config": {
                         "adapter": FakeHvac(),
                     },
@@ -160,7 +160,7 @@ def pv_asset(tn):
             "models": [
                 {
                     "subscribe_key": "pv_device",
-                    "model_type": "fmi",
+                    "class_name": "FlexibilityModelFrameAdapter",
                     "model_config": {
                         "adapter": FakePv(),
                     },
@@ -222,7 +222,7 @@ class TestModelFrameAssetWithFmi:
                 "models": [
                     {
                         "subscribe_key": "devices/pv",
-                        "model_type": "fmi",
+                        "class_name": "FlexibilityModelFrameAdapter",
                         "model_config": {
                             "preset": "residential_pv",
                             "rated_kw": 10.0,
@@ -256,7 +256,7 @@ class TestModelFrameAssetWithFmi:
                 "models": [
                     {
                         "subscribe_key": "devices/replay",
-                        "model_type": "fmi",
+                        "class_name": "FlexibilityModelFrameAdapter",
                         "model_config": {
                             "adapter": adapter,
                         },

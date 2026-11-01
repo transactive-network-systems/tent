@@ -8,7 +8,8 @@ from tent.base import Component
 from tent.containers import MarketDurations
 from tent.enumerations import MarketState, MarketTypes, Method
 from tent.market import Market
-from tent.utils.helpers import get_class_from_spec, safe_weak_proxy_callback, validate_bool
+from tent.market.price_models import PriceModel
+from tent.utils.helpers import get_class_from_spec, safe_weak_proxy_callback, spec_kwargs, validate_bool
 
 
 class MarketSeries(Component):
@@ -86,16 +87,12 @@ class MarketSeries(Component):
                                else Method(method) if isinstance(method, int)
                                else Method[method.title()])
         # Build price model spec if provided or fall back to simple default.
-        if price_model:
-            spec = {'default_price': self.default_price}
-            spec.update(price_model)
-            self.price_model_spec: dict | None = spec
-        else:
-            self.price_model_spec: dict | None = {
-                'class_name': 'HourlyAveragePriceModel',
-                'module_name': 'tent.market.price_models',
-                'default_price': self.default_price
-            }
+        # The price model configuration: class_name (HourlyAveragePriceModel unless the configuration says otherwise,
+        # module_name for a class TENT does not ship) and the constructor keywords, default_price among them unless the
+        # configuration overrides it. Resolved and constructed at each spawn until a market exists to copy from.
+        self.price_model_spec: dict = {'class_name': 'HourlyAveragePriceModel', 'default_price': self.default_price,
+                                       **(price_model or {})}
+        self.price_model_class: Type[PriceModel] = get_class_from_spec(self.price_model_spec, PriceModel)
         ref_series: MarketSeries = (self.tn.get_market_series_by_attribute('name', refined_series, first_only=True)
                                     if isinstance(refined_series, str) else refined_series)
         self.refined_series: Union[MarketSeries, None] = (
@@ -170,8 +167,7 @@ class MarketSeries(Component):
         if self.newest_market:
             price_model_obj = deepcopy(self.newest_market.price_model)
         else:
-            model_cls = get_class_from_spec(self.price_model_spec, 'HourlyAveragePriceModel', 'tent.market.price_models')
-            price_model_obj = model_cls(default_price=self.default_price)
+            price_model_obj = self.price_model_class(**spec_kwargs(self.price_model_spec))
         new_market = self.market_class(
             transactive_node=self.tn,
             market_series=self,

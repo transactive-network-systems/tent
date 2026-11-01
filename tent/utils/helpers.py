@@ -42,18 +42,16 @@ under Contract DE-AC05-76RL01830
 """
 
 
-import importlib
+import json
 import logging
-import re
 
 from datetime import datetime, time, timedelta, tzinfo
 from uuid import UUID
 from enum import Enum
 
-_log = logging.getLogger(__name__)
+from tent import registry
 
-first_cap_re = re.compile(r'(.)([A-Z][a-z]+)')
-all_cap_re = re.compile(r'([a-z\d])([A-Z])')
+_log = logging.getLogger(__name__)
 
 _DATETIME_FORMATS = ('%m/%d/%Y %H:%M', '%m/%d/%Y %H:%M:%S', '%Y-%m-%d %H:%M', '%Y/%m/%d %H:%M', '%Y/%m/%d %H:%M:%S')
 _TIME_FORMATS = ('%H:%M', '%H:%M:%S', '%I:%M %p', '%I %p')
@@ -144,11 +142,6 @@ def linspace(start: float, stop: float, num: int) -> list[float]:
     return [start + step * i for i in range(num)]
 
 
-def camel_to_snake(name):
-    s1 = first_cap_re.sub(r'\1_\2', name)
-    return all_cap_re.sub(r'\1_\2', s1).lower()
-
-
 def safe_weak_proxy_callback(obj: object, attribute: str):
     """ Safe Weak Proxy Callback
         Provides a callback function that will return a variable used by WeakRef Proxy to None if the reference dies."""
@@ -172,28 +165,40 @@ def validate_bool(value, name):
         raise ValueError(f'{name} must be bool, not {type(value)}')
     return bool(value)
 
-def get_class_from_spec(spec:dict, default_class_name: str = None, default_module_prefix: str = None,
-                        transactive_node=None):
-    class_name = spec.pop('class_name', default_class_name)
-    if not class_name:
-        raise ValueError(f'Cannot load class --- Spec is missing class name: {spec}')
-    # TODO: This could probably use logic that searches standard locations and a default user-extensions directory.
-    module_name = spec.pop('module_name', None)
-    if module_name is None:
-        if default_module_prefix is None:
-            raise ValueError(f'Cannot load class {class_name}: the spec has no module_name and no default module prefix'
-                             f' applies.')
-        module_name = '.'.join((default_module_prefix, camel_to_snake(class_name)))
-    module = importlib.import_module(module_name)
-    if transactive_node:
-        spec['transactive_node'] = transactive_node
-    return getattr(module, class_name)
+CLASS_SPEC_KEYS = frozenset({'class_name', 'module_name'})
+
+
+def get_class_from_spec(spec: dict, base: type) -> type:
+    """
+    The class a configuration dictionary names with `class_name` (and, for classes TENT does not ship, `module_name`),
+    checked to be a subclass of `base`. See tent.registry for the resolution order. The dictionary is only read: use
+    spec_kwargs to build the constructor keywords from it.
+    """
+    if not isinstance(spec, dict):
+        raise TypeError(f'A {base.__name__} configuration must be a dictionary, not {type(spec).__name__}: {spec!r}')
+    if 'class_name' not in spec:
+        raise ValueError(f'Cannot load a class for a {base.__name__} slot: the configuration has no class_name: {spec}')
+    return registry.resolve(spec['class_name'], base, spec.get('module_name'))
+
+
+def spec_kwargs(spec: dict, *also_without: str) -> dict:
+    """A copy of a configuration dictionary without the keys that name its class (and any further keys given), ready
+    to be passed as constructor keywords. The dictionary itself is left as it was."""
+    excluded = CLASS_SPEC_KEYS.union(also_without)
+    return {key: value for key, value in spec.items() if key not in excluded}
+
 
 def json_encoder(obj):
     """
     `default` hook for json.dumps covering the value types archive records and signals carry: datetimes and times as
     ISO 8601, timedeltas as seconds, UUIDs as their string form, enumerations by name. Anything else is an error, as
     json.dumps would report itself; returning obj.__dict__ (the former behaviour) silently produced wrong output.
+
+    Floats never reach a `default` hook, so this cannot keep non-finite numbers out of the output; json.dumps emits
+    them as the JavaScript literals Infinity and NaN, which are not JSON. TENT's one representation of an infinite
+    value on the wire is the transactive signal's `null` price (tent.containers.transactive_signal_message); nothing
+    else carries one. Use json_dumps, which refuses non-finite numbers, so a stray one fails loudly here rather than
+    at the receiver.
     """
     if isinstance(obj, (datetime, time)):
         return obj.isoformat()
@@ -204,6 +209,12 @@ def json_encoder(obj):
     if isinstance(obj, Enum):
         return obj.name
     raise TypeError(f'Object of type {type(obj).__name__} is not JSON serializable')
+
+def json_dumps(obj, **kwargs) -> str:
+    """json.dumps with TENT's encoder and standard JSON only: a NaN or infinite number raises ValueError instead of
+    being written as Infinity or NaN (see json_encoder)."""
+    return json.dumps(obj, default=json_encoder, allow_nan=False, **kwargs)
+
 
 def is_heavyloadhour(datetime_value):
     """True if time is within a HLH hour

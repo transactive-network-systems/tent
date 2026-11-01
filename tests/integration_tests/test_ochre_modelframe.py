@@ -183,7 +183,7 @@ def _build_node_config() -> dict:
                     "models": [
                         {
                             "subscribe_key": "hvac",
-                            "model_type": "thermostat.Thermostat",
+                            "class_name": "Thermostat",
                             "model_config": {
                                 "rated_power": 13.68,
                                 "c1": _C1,

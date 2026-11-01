@@ -52,8 +52,14 @@ from zoneinfo import ZoneInfo, available_timezones
 
 from tent.base import Archivable
 import tent.containers as containers
+from tent.data_manager import DataManager
+from tent.information_service_model import InformationServiceModel
+from tent.local_asset import LocalAsset
+from tent.market import Market
 from tent.market.market_series import MarketSeries
-from tent.utils.helpers import get_class_from_spec, validate_bool, parse_datetime
+from tent.meter_point import MeterPoint
+from tent.neighbor import Neighbor
+from tent.utils.helpers import get_class_from_spec, spec_kwargs, validate_bool, parse_datetime
 from tent.utils.timer import Timer
 
 _log = logging.getLogger(__name__)
@@ -172,42 +178,45 @@ class TransactiveNode(Archivable):
         # Configure TransactiveNode Component Classes
         _log.debug('IN _SETUP_COMPONENT_OBJECTS')
         try:
-            self.meter_points = self._configure_components(config.get('meter_points'), 'Meter Points')
+            self.meter_points = self._configure_components(config.get('meter_points'), MeterPoint)
             _log.debug('DONE WITH METER_POINTS')
             self.information_service_models = self._configure_components(config.get('information_service_models'),
-                                                                        'Information Service Models')
+                                                                        InformationServiceModel)
             _log.debug('DONE WITH ISM')
-            self.local_assets = self._configure_components(config.get('local_assets'), 'Local Assets')
+            self.local_assets = self._configure_components(config.get('local_assets'), LocalAsset)
             _log.debug('DONE WITH ASSETS')
-            self.neighbors = self._configure_components(config.get('neighbors'), 'Neighbors')
+            self.neighbors = self._configure_components(config.get('neighbors'), Neighbor)
             _log.debug('DONE WITH NEIGHBORS')
-            self.market_series = self._configure_components(config.get('market_series'), 'Market Series')
+            self.market_series = self._configure_components(config.get('market_series'), MarketSeries)
             # TODO: Organize them by market order?
             _log.debug('DONE WITH MARKETS')
         except ValueError as e:
             _log.error("ERROR PROCESSING CONFIGURATION {}".format(e))
             raise
 
-    def _configure_components(self, configs, component_type: str):
+    def _configure_components(self, configs, base: type):
         """Instantiates and configures each component object defined in a passed list of configurations.
-        It is up to the individual component to manage its own configuration from its __init__ method.
-        Returns list of instantiated and configured components
+        Each configuration names its class (see tent.registry) and must resolve to a subclass of `base`; its other
+        keys are the component's constructor keywords. The configurations are only read, so the same ones can be
+        given again to rebuild the node. Returns list of instantiated and configured components.
         """
         components = []
+        component_type = base.__name__
         _log.info(f'Configuring {component_type}')
         if not configs:
             _log.info(f'No {component_type} configurations were provided.')
             return components
         for config in configs:
             _log.info(f'Configuring {config.get("class_name")}: {config.get("name")}')
-            component_class = get_class_from_spec(config, default_module_prefix='tent', transactive_node=self)
+            component_class = get_class_from_spec(config, base)
             self.data_manager.add_tables(component_class.get_archive_definitions())
+            kwargs = spec_kwargs(config, 'market_class_name', 'market_module_name')
+            kwargs['transactive_node'] = self
             if issubclass(component_class, MarketSeries):
-                market_class = get_class_from_spec({'class_name': (config.pop('market_class_name', None)),
-                                                    'module_name': (config.pop('market_module_name', None))},
-                                                   default_module_prefix='tent', transactive_node=self)
-                config['market_class'] = market_class
-            component = component_class(**config)
+                market_class = self._market_class_from_series_config(config)
+                if market_class is not None:
+                    kwargs['market_class'] = market_class
+            component = component_class(**kwargs)
             if issubclass(component_class, MarketSeries):
                 self.data_manager.add_tables(component.market_class.get_archive_definitions())
             if not component.archived:  # MarketSeries archives itself before spawning its first market
@@ -218,12 +227,24 @@ class TransactiveNode(Archivable):
             raise ValueError(f'Configured {component_type} have duplicate names: {[d.name for d in components]}')
         return components
 
+    @staticmethod
+    def _market_class_from_series_config(config: dict) -> type[Market] | None:
+        """The Market subclass a market series configuration names with market_class_name (and market_module_name for
+        a class TENT does not ship), or None when it names none and the series' own default applies."""
+        if 'market_class_name' not in config:
+            if 'market_module_name' in config:
+                raise ValueError(f'Market series {config.get("name")!r} gives market_module_name without '
+                                 f'market_class_name; name the market class too.')
+            return None
+        return get_class_from_spec({'class_name': config['market_class_name'],
+                                    'module_name': config.get('market_module_name')}, Market)
+
     def _setup_data_manager(self, config):
         dm_configs = config.get('data_manager', {})
         # TODO: Make sure that we can run without a DataManager. This chokes if there is not one in the config.
         #  Alternately, should we have a NullDataManager that just passes when called?
-        dm_class =  get_class_from_spec(dm_configs, default_module_prefix='tent.data_manager', transactive_node=self)
-        self._data_manager = dm_class(self, **dm_configs)
+        dm_class = get_class_from_spec(dm_configs, DataManager)
+        self._data_manager = dm_class(self, **spec_kwargs(dm_configs))
         self.data_manager.add_tables(self.get_archive_definitions())
 
     def get_meters_by_attribute(self, attribute, match, first_only=False):
