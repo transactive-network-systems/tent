@@ -6,9 +6,6 @@ _log = logging.getLogger(__name__)
 
 
 class ExternalTargetActuationManager(ActuationManager):
-    def __init(self, **kwargs):
-        super(ExternalTargetActuationManager, self).__init__(**kwargs)
-
     def actuate(self, mkt):
         super(ExternalTargetActuationManager, self).actuate(mkt)
         if self.actuation_active:  # TODO: Add ability to determine future active schedule.

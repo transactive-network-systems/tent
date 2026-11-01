@@ -1053,8 +1053,8 @@ class Market(Component):
                 "inherits": "component",
                 "columns": [
                     {"name": "id", "foreign_key": "component.id", "kwargs": {"primary_key": True}},
-                    {"name": "prior_market_id", "foreign_key": "market.id", "nullable": True},
-                    {"name": "market_to_be_refined_id", "foreign_key": "market.id", "nullable": True},
+                    {"name": "prior_market_id", "foreign_key": "market.id", "kwargs": {"nullable": True}},
+                    {"name": "market_to_be_refined_id", "foreign_key": "market.id", "kwargs": {"nullable": True}},
                     {"name": "market_type", "enumeration": "MarketTypes"},
                     {"name": "active_start_time", "type": "DateTime"},
                     {"name": "negotiation_start_time", "type": "DateTime"},

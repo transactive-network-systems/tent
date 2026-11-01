@@ -26,8 +26,9 @@ class ActuationManager(metaclass=ABCMeta):
         self.control_interval = control_interval
         # self.outputs = outputs if outputs else []
         self.parent = parent if parent else LocalAsset(transactive_node)
-        # TODO: Does this really need to be a weak reference? Should probably be a proxy if it does.
-        self.occupancy_manager = proxy(occupancy_manager, safe_weak_proxy_callback(self, 'occupancy_manager'))
+        # Optional: without one, actuation is allowed whenever the manager is active (see actuate()).
+        self.occupancy_manager = (proxy(occupancy_manager, safe_weak_proxy_callback(self, 'occupancy_manager'))
+                                  if occupancy_manager is not None else None)
         self.tn = transactive_node
 
         self.actuation_active = False
@@ -50,11 +51,11 @@ class ActuationManager(metaclass=ABCMeta):
         _log.info(f'Actuating {self.parent.name} for market: {mkt.name} with actuator {self.__class__.__name__}'
                   f' from {start_time.strftime("%A, %B %d -- %H:%M:%S")}'
                   f' to {end_time.strftime("%A, %B %d -- %H:%M:%S")}')
-        if (self.occupancy_manager
-            and self.occupancy_manager.check_schedule(start_time)
-            and self.occupancy_manager.check_schedule(end_time)
-            and self.actuation_allowed
-        ):
+        # No occupancy manager means the asset counts as always occupied (ModelFrameAsset applies the same rule).
+        occupied = (self.occupancy_manager is None
+                    or (self.occupancy_manager.check_schedule(start_time)
+                        and self.occupancy_manager.check_schedule(end_time)))
+        if occupied and self.actuation_allowed:
             self.actuation_active = True
         else:
             if self.actuation_active:

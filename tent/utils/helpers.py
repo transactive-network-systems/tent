@@ -178,7 +178,12 @@ def get_class_from_spec(spec:dict, default_class_name: str = None, default_modul
     if not class_name:
         raise ValueError(f'Cannot load class --- Spec is missing class name: {spec}')
     # TODO: This could probably use logic that searches standard locations and a default user-extensions directory.
-    module_name = spec.pop('module_name', '.'.join((default_module_prefix, camel_to_snake(class_name))))
+    module_name = spec.pop('module_name', None)
+    if module_name is None:
+        if default_module_prefix is None:
+            raise ValueError(f'Cannot load class {class_name}: the spec has no module_name and no default module prefix'
+                             f' applies.')
+        module_name = '.'.join((default_module_prefix, camel_to_snake(class_name)))
     module = importlib.import_module(module_name)
     if transactive_node:
         spec['transactive_node'] = transactive_node
