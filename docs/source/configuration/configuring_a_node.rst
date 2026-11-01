@@ -89,24 +89,6 @@ Node settings
      -  
      - ISO 8601 real time at which simulated time equals simulation_start_time; shared by every agent of one simulation (the host sets it from its environment). Null means the time this node was created.
      -  
-   * - ``db_topic``
-     - string or null
-     - None
-     -  
-     - Root of the message-bus topics the agent publishes under.
-     -  
-   * - ``subscribe_all_platforms``
-     - boolean or null
-     - None
-     -  
-     - Whether the agent subscribes across platforms.
-     -  
-   * - ``topics``
-     - object or null
-     - None
-     -  
-     - Subscription key to message-bus topic, for the agent.
-     -  
 
 Data manager
 ------------
