@@ -253,17 +253,15 @@ class TestMultiAssetFmiCampus:
         wh_model = asset.models["devices/campus_water_heater"]
         pv_model = asset.models["devices/campus_pv"]
 
-        # Battery is dispatchable -> received dispatch responses
-        assert hasattr(battery_model, "dispatch_responses")
-        assert len(battery_model.dispatch_responses) >= len(market.time_intervals)
+        # Battery is dispatchable -> received one accepted dispatch per interval
+        assert len(battery_model.dispatch_responses) == len(market.time_intervals)
         for resp in battery_model.dispatch_responses:
             assert resp.accepted is True
 
-        # Water Heater is dispatchable -> received dispatch responses
-        assert hasattr(wh_model, "dispatch_responses")
-        assert len(wh_model.dispatch_responses) >= len(market.time_intervals)
+        # Water Heater is dispatchable -> received one accepted dispatch per interval
+        assert len(wh_model.dispatch_responses) == len(market.time_intervals)
         for resp in wh_model.dispatch_responses:
             assert resp.accepted is True
 
-        # PV is must-take (not dispatchable) -> does not receive commands
-        assert not hasattr(pv_model, "dispatch_responses")
+        # PV is must-take (not dispatchable) -> no dispatch reached it (the adapter records responses only on dispatch)
+        assert getattr(pv_model, "dispatch_responses", []) == []

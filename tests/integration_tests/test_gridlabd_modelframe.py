@@ -392,8 +392,7 @@ def tent_node():
     ):
         tn.configure_node(config)
 
-    if hasattr(tn, "data_manager") and tn.data_manager:
-        tn.data_manager.archive_data = Mock(return_value=None)
+    tn.data_manager.archive_data = Mock(return_value=None)
 
     assert tn.local_assets, "No local assets configured"
     assert tn.market_series, "No market series configured"
@@ -441,7 +440,6 @@ class TestGridLabDModelFrameAsset:
         assert 30 < tin < 120, f"TIN out of range: {tin}"
         assert 40 < csp < 100, f"CSP out of range: {csp}"
 
-        print(f"\n  GLD step → time={sim_time}  OAT={oat:.1f}°F  TIN={tin:.1f}°F  CSP={csp:.1f}°F")
 
     def test_tent_node_builds_correctly(self, tent_node):
         """TENT node configures without errors: asset, market, and neighbor present."""
@@ -451,8 +449,6 @@ class TestGridLabDModelFrameAsset:
         assert len(tn.neighbors) == 1
         assert tn.neighbors[0].name == "GridSupply"
         assert market is not None
-        print(f"\n  Market: {market.name}, intervals: {len(list(market.time_intervals))}")
-        print(f"  Asset: {asset.name}")
 
     def test_model_data_updates_thermostat_state(self, tent_node):
         """ModelFrameAsset.new_model_data() updates the Thermostat model's internal state."""
@@ -474,7 +470,6 @@ class TestGridLabDModelFrameAsset:
         assert abs(thermostat.oat - 60.0) < 1e-6, "OAT not updated"
         assert abs(thermostat.room_temp - 70.0) < 1e-6, "TIN not updated"
         assert not thermostat.error, "Thermostat update_data raised an error"
-        print(f"\n  Thermostat state after update: OAT={thermostat.oat}  TIN={thermostat.room_temp}")
 
     def test_asset_schedule_produces_vertices(self, tent_node):
         """
@@ -533,9 +528,6 @@ class TestGridLabDModelFrameAsset:
             for v in av.vertices:
                 assert v.quantity <= 0, f"Supply vertex from demand asset? qty={v.quantity}"
 
-            print(f"\n  {ti.name}: power={sp.value:.2f} kW  "
-                  f"v0=(${av.vertices[0].price:.4f},{av.vertices[0].quantity:.2f}kW)  "
-                  f"v1=(${av.vertices[1].price:.4f},{av.vertices[1].quantity:.2f}kW)")
 
     def test_full_closed_loop(self, gld_house, tent_node):
         """
@@ -624,12 +616,6 @@ class TestGridLabDModelFrameAsset:
             rc = gld.set_property(house, "cooling_setpoint", str(new_csp))
             assert rc == 0, f"Step {i}: set_property failed (rc={rc})"
 
-            print(
-                f"\n  Step {i+1}/{N_STEPS}: GLD t={sim_time}  "
-                f"OAT={oat_f:.1f}°F  TIN={tin_f:.1f}°F  "
-                f"cleared_price=${cleared_price:.5f}/kWh  "
-                f"→ new_CSP={new_csp:.1f}°F"
-            )
 
         # ── Verify setpoint write was accepted by GLD ─────────────────
         # Step one more time so GLD processes the last write.
@@ -647,9 +633,6 @@ class TestGridLabDModelFrameAsset:
             f"Price→setpoint mapping is not monotonically increasing: {list(zip(test_prices, test_sps))}"
         )
 
-        print(f"\n  ✅ Completed {N_STEPS} closed-loop iterations")
-        print(f"  Prices cleared: {[f'${p:.5f}' for p in prices_cleared]}")
-        print(f"  Setpoints written: {[f'{s:.1f}°F' for s in setpoints_written]}")
 
 
 if __name__ == "__main__":

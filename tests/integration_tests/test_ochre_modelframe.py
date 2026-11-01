@@ -411,8 +411,7 @@ def tent_node():
     ):
         tn.configure_node(config)
 
-    if hasattr(tn, "data_manager") and tn.data_manager:
-        tn.data_manager.archive_data = Mock(return_value=None)
+    tn.data_manager.archive_data = Mock(return_value=None)
 
     assert tn.local_assets, "No local assets configured"
     assert tn.market_series, "No market series configured"
@@ -457,7 +456,6 @@ class TestOchreModelFrameAsset:
         # Control signal was sent: setpoint should match what we wrote
         assert abs(csp - 22.0) < 0.1, f"OCHRE did not apply Setpoint=22.0; got {csp}"
 
-        print(f"\n  OCHRE step → OAT={oat:.2f}°C  TIN={tin:.2f}°C  CSP={csp:.2f}°C")
 
     def test_tent_node_builds_correctly(self, tent_node):
         """TENT node configures without errors: asset, market, and neighbor present."""
@@ -467,8 +465,6 @@ class TestOchreModelFrameAsset:
         assert len(tn.neighbors) == 1
         assert tn.neighbors[0].name == "GridSupply"
         assert market is not None
-        print(f"\n  Market: {market.name}, intervals: {len(list(market.time_intervals))}")
-        print(f"  Asset: {asset.name}")
 
     def test_model_data_updates_thermostat_state(self, tent_node):
         """ModelFrameAsset.new_model_data() updates the Thermostat model's internal state."""
@@ -490,7 +486,6 @@ class TestOchreModelFrameAsset:
         assert abs(thermostat.oat - 20.0) < 1e-6, "OAT not updated"
         assert abs(thermostat.room_temp - 22.0) < 1e-6, "TIN not updated"
         assert not thermostat.error, "Thermostat update_data raised an error"
-        print(f"\n  Thermostat state after update: OAT={thermostat.oat}  TIN={thermostat.room_temp}")
 
     def test_asset_schedule_produces_vertices(self, tent_node):
         """
@@ -547,9 +542,6 @@ class TestOchreModelFrameAsset:
             for v in av.vertices:
                 assert v.quantity <= 0, f"Supply vertex from demand asset? qty={v.quantity}"
 
-            print(f"\n  {ti.name}: power={sp.value:.2f} kW  "
-                  f"v0=(${av.vertices[0].price:.4f},{av.vertices[0].quantity:.2f}kW)  "
-                  f"v1=(${av.vertices[1].price:.4f},{av.vertices[1].quantity:.2f}kW)")
 
     def test_full_closed_loop(self, ochre_dwelling, tent_node):
         """
@@ -647,11 +639,6 @@ class TestOchreModelFrameAsset:
                 f"[{_MIN_CSP_C}, {_MAX_CSP_C}]"
             )
 
-            print(
-                f"\n  Step {i+1}/{N_STEPS}: "
-                f"OAT={oat_c:.2f}°C  TIN={tin_c:.2f}°C  CSP_reported={csp_c:.2f}°C  "
-                f"price=${cleared_price:.5f}/kWh  → new_CSP={csp_command:.2f}°C"
-            )
 
         # ── Verify price→setpoint mapping is monotone ─────────────────
         test_prices = [
@@ -665,9 +652,6 @@ class TestOchreModelFrameAsset:
             f"{list(zip(test_prices, test_sps))}"
         )
 
-        print(f"\n  ✅ Completed {N_STEPS} closed-loop iterations")
-        print(f"  Prices cleared: {[f'${p:.5f}' for p in prices_cleared]}")
-        print(f"  Setpoints commanded: {[f'{s:.2f}°C' for s in setpoints_written]}")
 
 
 if __name__ == "__main__":
