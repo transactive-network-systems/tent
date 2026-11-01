@@ -330,7 +330,7 @@ matching extra; the FMI tests skip when a simulator is absent.
   [Sphinx documentation](docs/source/flexibility/installation_and_setup.rst) for full setup instructions).
 * **Replay datasets**: no external simulator needed (built-in CSV time-series replay).
 
-The legacy plotting scripts under `scripts/` need the `scripts` extra; the Sphinx documentation needs the `docs` extra.
+The Sphinx documentation needs the `docs` extra.
 
 ---
 
