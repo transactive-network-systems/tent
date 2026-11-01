@@ -106,6 +106,7 @@ class LocalAsset(Entity):
         """
         # But give power scheduling priority for a LocalAsset
         self.schedule_power(market)
+        self.clamp_scheduled_powers(market)  # the configured limits bound whatever the scheduling model produced
 
         self.schedule_engagement(market)  # only applied to LocalAsset class
         self.assign_transition_costs(market)  # engagement / holding / disengagement costs per interval
@@ -116,6 +117,37 @@ class LocalAsset(Entity):
 
             # Have the objects estimate their available reserve margin.
             self.calculate_reserve_margin(market)
+
+    def clamp_scheduled_powers(self, market):
+        """
+        Hold every scheduled power of this market within [minimum_power, maximum_power]. The limits are the asset's
+        configured physical constraints; a scheduling model that extrapolates beyond them (a load regression predicting
+        generation in a hot hour) must not offer power the asset cannot deliver, so the vertices are built from the
+        clamped powers. Applies only when a range is configured (minimum_power < maximum_power; both default to 0.0).
+        One warning per asset and market reports how many intervals were clamped and the worst excursion.
+        """
+        if not self.minimum_power < self.maximum_power:
+            return
+        clamped, worst = 0, None  # worst: (excursion beyond the limit, scheduled, limit, interval name)
+        for time_interval in market.time_intervals:
+            scheduled = self.scheduled_powers.get_by_interval(time_interval)
+            if scheduled is None:
+                continue
+            power = scheduled.value
+            limit = (self.minimum_power if power < self.minimum_power
+                     else self.maximum_power if power > self.maximum_power else None)
+            if limit is None:
+                continue
+            clamped += 1
+            excursion = abs(power - limit)
+            if worst is None or excursion > worst[0]:
+                worst = (excursion, power, limit, time_interval.name)
+            self.scheduled_powers.update(time_interval, limit)
+        if clamped:
+            excursion, power, limit, name = worst
+            _log.warning(f'{self.name}: {clamped} of {len(market.time_intervals)} scheduled powers in market '
+                         f'{market.name} lay outside the configured limits [{self.minimum_power}, {self.maximum_power}] '
+                         f'kW and were clamped; the worst was {power:.1f} kW in {name}, held at {limit:.1f} kW.')
 
     def schedule_power(self, market):
         # Determine powers of an asset in active time intervals. NOTE that this method may be redefined by subclasses if

@@ -42,8 +42,9 @@ def clock():
 @pytest.fixture
 def campus(clock):
     tn = MockTN(name='PNNL_Campus')
-    tn.local_assets = [PredictedLoad(transactive_node=tn, name='InelasticBuildings', cost_parameters=[0.0, 0.0, 0.0],
-                                     maximum_power=0.0, minimum_power=-16400.0)]
+    # No configured power range: with one, LocalAsset.schedule would clamp the surplus away before it reached the curve
+    # (see test_scheduled_power_limits); this test is about the curve that is offered when a surplus does reach it.
+    tn.local_assets = [PredictedLoad(transactive_node=tn, name='InelasticBuildings', cost_parameters=[0.0, 0.0, 0.0])]
     supplier = Neighbor(transactive_node=tn, name='CoR', transactive=True, up_or_down='upstream',
                         default_vertices=[[0.046, 160.0, 0.0, True], [0.048, 1100.0, 20000.0, True]],
                         minimum_power=0.0, maximum_power=20000.0, loss_factor=0.03, demand_rate=0.0,
