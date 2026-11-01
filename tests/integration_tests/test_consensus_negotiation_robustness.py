@@ -23,7 +23,7 @@ from tent.utils.timer import Timer
 from tests.integration_tests.fixtures.sample_weather_data import write_weather_csv
 from tests.mock_tn import MockTN
 from tests.stubs import clock_at
-from tests.unit_tests.test_configuration_models import CONTAINER_CONFIGS
+from tests.unit_tests.test_configuration_models import CONTAINER_CONFIGS, _without_host_keys
 
 T0 = datetime(2017, 7, 1, 0, 0, tzinfo=timezone.utc)
 INF = float('inf')
@@ -149,7 +149,7 @@ def deployed_office_config() -> Path | None:
 def office_node(tmp_path, data_manager: dict | None):
     """The deployed small office (21 model-frame models, a transactive campus neighbor, two consensus series) with the
     host package's meter point and actuator replaced by shipped classes and a generated weather file."""
-    configs = json.load(open(deployed_office_config()))
+    configs = _without_host_keys(json.load(open(deployed_office_config())))  # the agent keeps its own keys
     configs.pop('meter_points')
     configs['neighbors'][0]['meter_points'] = None
     configs['local_assets'][0]['actuation_manager'] = {'class_name': 'NullActuationManager'}

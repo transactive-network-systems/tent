@@ -18,8 +18,9 @@ A node configuration is one JSON object whose keys are the fields of ``Transacti
 2. **Simulation settings**: ``simulation``, ``simulation_start_time`` (ISO 8601; without an offset it is in ``tz``),
    ``simulation_one_hour_in_seconds``, ``simulation_anchor_time`` (set by the host from its environment).
 
-3. **Host settings** read by the TransactiveNodeAgent, not by the node: ``db_topic``, ``subscribe_all_platforms``,
-   ``topics``.
+3. **Host settings** are not part of the node's configuration. A host application (the TransactiveNodeAgent's
+   ``db_topic``, ``subscribe_all_platforms``, ``topics``, a neighbor's ``sender``) reads and removes its own keys
+   before the configuration reaches the node; the node rejects any key it does not declare.
 
 4. **The archive** (``data_manager``): one block naming the data manager class and its settings
    (``LocalDataManager`` with ``db_params.url``, or ``NullDataManager``); without it nothing is archived.
