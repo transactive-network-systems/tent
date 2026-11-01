@@ -267,3 +267,15 @@ class TestModelFrameAssetWithFmi:
         asset.schedule_power(market)
         for ti in market.time_intervals:
             assert asset.scheduled_powers.get_by_interval(ti).value == pytest.approx(-2.0)
+
+
+def test_a_second_scheduling_pass_does_not_grow_the_curve(hvac_asset, market):  # audit T-17
+    hvac_asset.schedule(market)
+    first = {ti: len(hvac_asset.active_vertices.get_by_interval(ti)) for ti in market.time_intervals}
+    assert set(first.values()) == {2}, 'two vertices: minimum and maximum flexibility'
+    market.price_model.get = Mock(return_value=(0.06, 0.01))  # the price changes between passes
+    hvac_asset.schedule(market)
+    second = {ti: len(hvac_asset.active_vertices.get_by_interval(ti)) for ti in market.time_intervals}
+    assert second == first, 'the curve is replaced on each pass, not accumulated'
+    assert all(abs(v.price - 0.06) < 0.0101 for ti in market.time_intervals
+               for v in hvac_asset.active_vertices.get_by_interval(ti).vertices), 'and reflects the latest prices'

@@ -10,7 +10,7 @@ from tent.containers.measurement import Measurement
 from tent.containers.time_interval import TimeInterval
 from tent.containers.vertex import Vertex
 from tent.enumerations import MeasurementType, MeasurementUnit
-from tent.utils.helpers import safe_weak_proxy_callback
+from tent.utils.helpers import validate_bool, safe_weak_proxy_callback
 from tent.utils.timer import Timer
 
 _log = logging.getLogger(__name__)
@@ -171,7 +171,7 @@ class SDCurve(Archivable):
                 self.update(Vertex(price=(self.price_from_vertices(max_power)), cost=0, quantity=max_power),
                             archive=False)
         elif len(self.vertices) == 1:
-            self.vertices[0].price = float('inf')
+            self.replace_vertex(self.vertices[0], price=float('inf'))
         else:
             owner_name = getattr(getattr(self.measurement, 'source', None), 'name', 'unknown')
             _log.warning(f'Unexpected flexibility logic while bounding SDCurve in {owner_name}. '
@@ -197,10 +197,11 @@ class SDCurve(Archivable):
                 action=="delete_down": Irrational vertices are deleted if their powers are greater than that
                                        corresponding to the next higher price.
         """
-        # Work on a copy of the vertices. (Sentinel vertices at +/-inf used to be added here; they add no check, since
-        # they repeat the end quantities, and a lone inelastic vertex at an infinite price collided with the +inf
-        # sentinel and vanished from the result.)
-        v_temp = self.vertices.copy()
+        # Work on copies of the vertices, in price order: the fix-up actions change quantities, and a vertex inside a
+        # curve must not change (see replace_vertex). This curve is left as it is; the result is a new curve. (Sentinel
+        # vertices at +/-inf used to be added here; they add no check, since they repeat the end quantities, and a lone
+        # inelastic vertex at an infinite price collided with the +inf sentinel and vanished from the result.)
+        v_temp = [copy(vertex) for vertex in self.vertices]
         ivf = 0                                         # count of irrational vertices found
         irrational_vertices = []                        # list of irrational vertices to be deleted
 
@@ -221,11 +222,9 @@ class SDCurve(Archivable):
                     elif action == "delete_down":
                         irrational_vertices.append(lower)
 
-        v_temp.difference_update(irrational_vertices)   # Remove remaining irrational vertices from the SDCurve.
-        # TODO: Should this update the SDCurve or return a new one? (This seems to do both).
-        #  Perhaps make explicitly in-place, rename to "rationalize" and only return the irrational vertex count?
-        # Return rationalized curve (without the extra infinite vertices) and the nuber of irrational vertices found.
-        return SDCurve(self.measurement, self.interval, list(v_temp), archive=False), ivf
+        v_temp = [vertex for vertex in v_temp if not any(vertex is irrational for irrational in irrational_vertices)]
+        # Return the rationalised curve and the number of irrational vertices found.
+        return SDCurve(self.measurement, self.interval, v_temp, archive=False), ivf
 
     def prod_cost_from_vertices(self, power):
         # Infer production cost for a power from the
@@ -439,6 +438,24 @@ class SDCurve(Archivable):
         if archive and self.measurement is not None:
             self.archive()
         return result
+
+    def replace_vertex(self, vertex: Vertex, **changes) -> Vertex:
+        """
+        Replace one of this curve's vertices by a copy with the given attributes changed (price, quantity, cost,
+        continuity, uncertainty) and return the copy. Vertices are hashed and ordered by (price, quantity), so a vertex
+        inside the curve's SortedSet must never be modified in place: the set would keep it under a stale hash, so
+        membership tests and removals would miss it and the order could be wrong. Changing a vertex means replacing it.
+        A replacement equal in price and quantity to another vertex of the curve merges with it, as update() would.
+        """
+        unknown = set(changes) - {'price', 'quantity', 'cost', 'continuity', 'uncertainty'}
+        if unknown:
+            raise TypeError(f'replace_vertex: a vertex has no attribute(s) {sorted(unknown)}')
+        self.vertices.remove(vertex)  # KeyError when the vertex is not in this curve: that is a caller's error
+        replacement = copy(vertex)
+        for name, value in changes.items():
+            setattr(replacement, name, validate_bool(value, name) if name == 'continuity' else float(value))
+        self.vertices.add(replacement)
+        return replacement
 
     @property
     def data_manager(self):

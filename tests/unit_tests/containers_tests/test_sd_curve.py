@@ -173,3 +173,39 @@ def test_curve_copies_the_vertices_it_is_given(measurement, interval):  # audit 
 		v.quantity = v.quantity * 0.9  # a loss correction applied to this curve only
 	assert [v.quantity for v in given] == [10.0, 20.0]
 	assert [v.quantity for v in SDCurve._parse_vertices(given)] == [10.0, 20.0]
+
+
+def test_replace_vertex_keeps_the_sorted_set_consistent(measurement, interval):  # audit T-14
+	c = make_curve(measurement, interval, [Vertex(0.1, quantity=-10), Vertex(0.2, quantity=0), Vertex(0.3, quantity=10)])
+	original = c.vertices[2]
+	replacement = c.replace_vertex(original, price=0.05, quantity=9.5)
+	assert replacement is not original and (replacement.price, replacement.quantity) == (0.05, 9.5)
+	assert original not in c.vertices and replacement in c.vertices, 'membership follows the hash of the stored vertices'
+	assert [v.price for v in c.vertices] == [0.05, 0.1, 0.2], 'the replacement took its place in the order'
+	c.vertices -= SortedSet([replacement])  # the operation include_demand_charges relies on
+	assert len(c.vertices) == 2 and replacement not in c.vertices
+	with pytest.raises(KeyError):
+		c.replace_vertex(original, price=1.0)  # no longer in the curve
+	with pytest.raises(TypeError, match="no attribute"):
+		c.replace_vertex(c.vertices[0], colour='red')
+
+
+def test_in_place_mutation_is_what_replace_vertex_prevents(measurement, interval):  # audit T-14, the failure mode
+	c = make_curve(measurement, interval, [Vertex(0.1, quantity=-10), Vertex(0.3, quantity=10)])
+	stale = c.vertices[1]
+	stale.price = 0.05  # the pattern the library no longer uses
+	assert stale not in c.vertices, 'a mutated vertex is lost to membership tests: its hash is stale'
+	c.vertices -= SortedSet([stale])
+	assert len(c.vertices) == 2, 'and cannot be removed'
+
+
+def test_check_rationality_fix_up_leaves_this_curve_as_it_was(measurement, interval):  # audit T-14
+	c = make_curve(measurement, interval, [Vertex(0.1, quantity=5), Vertex(0.2, quantity=3), Vertex(0.3, quantity=8)])
+	before = [(v.price, v.quantity) for v in c.vertices]
+	fixed, count = c.check_rationality('fix_up')
+	assert count == 1
+	assert [(v.price, v.quantity) for v in c.vertices] == before, 'the original curve is not modified'
+	assert [(v.price, v.quantity) for v in fixed.vertices] == [(0.1, 5.0), (0.2, 5.0), (0.3, 8.0)]
+	assert all(v in fixed.vertices for v in fixed.vertices)
+	deleted, count = c.check_rationality('delete_up')
+	assert count == 1 and [(v.price, v.quantity) for v in deleted.vertices] == [(0.1, 5.0), (0.3, 8.0)]

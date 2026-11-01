@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 from unittest.mock import Mock
 
 from tent.market.market_series import MarketSeries
+from tent.enumerations import MarketState
 from tent.market import Market
 from tent.utils.timer import Timer
 from tests.mock_tn import MockTN
@@ -87,3 +88,23 @@ def test_price_model_spec_with_an_unknown_keyword_fails_at_construction():  # au
         MarketSeries(transactive_node=_node(), market_class=Market, name='Core',
                      price_model={'class_name': 'HourlyAveragePriceModel', 'module_name': 'tent.market.price_models',
                                   'forgetting_factr': 3})
+
+
+def test_markets_expiring_in_one_tick_are_pruned_after_the_iteration():  # audit T-19
+    tn = MockTN()
+    series = MarketSeries(transactive_node=tn, name='Core', market_class=Market, market_clearing_interval=60.0,
+                          interval_duration=60.0, duration_market_lead=10.0)
+    tn.market_series = [series]
+    series.spawn(); series.spawn()
+    first, second, newest = list(series.markets)
+    for market in (first, second):
+        market._market_state = MarketState.Expired
+        market._stateIsCompleted = False
+    tn.step()  # events() for every market, then prune_expired(); iterating the series must not be disturbed
+    assert list(series.markets) == [newest], 'both expired markets removed, the newest kept for the series chain'
+    assert len(first.time_intervals) == 0 and len(second.time_intervals) == 0, 'their intervals were destroyed'
+    assert first._stateIsCompleted and second._stateIsCompleted
+    newest._market_state = MarketState.Expired
+    newest._stateIsCompleted = False
+    tn.step()
+    assert list(series.markets) == [newest], 'the newest market is never pruned, even when expired'

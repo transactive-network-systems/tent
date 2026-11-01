@@ -369,7 +369,7 @@ class Neighbor(Entity):
                 # TODO: Should this block be added to check_rationality?
                 # Check for and correct treatment of a lone default vertex marginal price.
                 if received_sd_curve and len(received_sd_curve) == 1:
-                    received_sd_curve.vertices[0].price = float('inf')
+                    received_sd_curve.replace_vertex(received_sd_curve.vertices[0], price=float('inf'))
                 self.active_vertices.update(time_interval, received_sd_curve, archive=False, replace=True)
 
             # At this point, active vertices have been created, regardless whether the neighbor is transactive.
@@ -690,8 +690,9 @@ class Neighbor(Entity):
                          type(sd_curve), getattr(self, 'name', 'unknown'))
             return
 
-        # Get on with the business of reviewing and correcting the input vertices.
-        for vertex in sd_curve.vertices:
+        # Get on with the business of reviewing and correcting the input vertices. Each corrected vertex replaces the
+        # original in the curve (SDCurve.replace_vertex); the list copy keeps the iteration clear of those changes.
+        for vertex in list(sd_curve.vertices):
             # Losses apply to only imported, not exported, power in the current practice. Calculate the effective
             # received power and price.
             # Assumptions:
@@ -709,8 +710,8 @@ class Neighbor(Entity):
                 #            price and its stated power. If cost is taken as the product of supply neighbor's marginal
                 #            price and supply energy, this marginal price at the recipient location is equivalent to the
                 #            first variation of the cost with change in received power.
-                vertex.price = vertex.price / (1 - 2 * (vertex.quantity / self.maximum_power) * self.loss_factor)
-                vertex.quantity = power
+                price = vertex.price / (1 - 2 * (vertex.quantity / self.maximum_power) * self.loss_factor)
+                sd_curve.replace_vertex(vertex, price=price, quantity=power)
 
     def remove_marginal_losses(self, sd_curve :SDCurve):
         # Remove impacts of marginal losses from method include_marginal_losses(). This is usually done while preparing
@@ -722,7 +723,7 @@ class Neighbor(Entity):
                     #  This needs to be fixed. Then this guard should be removed.
                     #  Is this supposed to be minimum_power?
                     #  Are max & min power supposed to always be positive?
-        for vertex in sd_curve.vertices:
+        for vertex in list(sd_curve.vertices):
             if vertex.quantity < 0:
                 # ASSUMPTIONS:
                 # - self.maximumPower is the transport actual constraint power magnitude from the supply perspective.
@@ -749,8 +750,8 @@ class Neighbor(Entity):
                 #            price, less loss impacts. It uses the local import power instead of the estimated
                 #            neighbor's export power.
                 # vertex.marginalPrice = vertex.marginalPrice * (1 - 2 * (-power / self.maximumPower) * self.lossFactor)
-                vertex.price = vertex.price * (1 + 4 * self.loss_factor * vertex.quantity / self.maximum_power) ** 0.5
-                vertex.quantity = power
+                price = vertex.price * (1 + 4 * self.loss_factor * vertex.quantity / self.maximum_power) ** 0.5
+                sd_curve.replace_vertex(vertex, price=price, quantity=power)
 
     def include_demand_charges(self, sd_curve: SDCurve, threshold: float):
         # 200731DJH: This method acts on and modifies a set of vertices to include demand charges.
@@ -786,9 +787,9 @@ class Neighbor(Entity):
             lower_threshold_price = upper_threshold_price = sd_curve.price_from_vertices(threshold)
 
         # Add the demand rate to the marginal price of any active supply vertices that lie ABOVE the threshold.
-        for vertex in sd_curve.vertices:
+        for vertex in list(sd_curve.vertices):
             if vertex.quantity > threshold:
-                vertex.price += self.demand_rate
+                sd_curve.replace_vertex(vertex, price=vertex.price + self.demand_rate)
 
         # Create vertices at the threshold. The two criteria make sure that no redundant vertices are created.
         if sd_curve.min_quantity() < threshold <= sd_curve.max_quantity():
@@ -829,9 +830,9 @@ class Neighbor(Entity):
 
         # Subtract the demand rate from the marginal price of any active demand vertices that lie BELOW the threshold.
         #   Note: the threshold should normally be negative, meaning it is a demand level.
-        for vertex in sd_curve.vertices:
+        for vertex in list(sd_curve.vertices):
             if vertex.quantity < threshold:
-                vertex.price -= self.demand_rate
+                sd_curve.replace_vertex(vertex, price=vertex.price - self.demand_rate)
 
         # Create vertices at the threshold. The two criteria make sure that no redundant vertices are created.
         if sd_curve.min_quantity() <= threshold < sd_curve.max_quantity():

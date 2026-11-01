@@ -29,7 +29,7 @@ class Entity(Component, abc.ABC):
                                         default_vertices if default_vertices
                                             else [Vertex(price=float("inf"), cost=0.0, quantity=1.0)])
         if len(self.default_vertices) == 1:
-            self.default_vertices.vertices[0].price = float('inf')
+            self.default_vertices.replace_vertex(self.default_vertices.vertices[0], price=float('inf'))
 
         # [InformationService] See class InformationService
         self.information_services = WeakSet()

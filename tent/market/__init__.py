@@ -117,6 +117,7 @@ class Market(Component):
         self.total_dual_cost: float = 0.0  # [$]
         self.total_generation: Measurement = Measurement(self, MeasurementType.TotalGeneration, MeasurementUnit.kW)  # [avg.kW]
         self.total_production_cost: float = 0.0  # [$]
+        self._missing_curves_reported: set[tuple[str, str]] = set()  # (entity, interval) pairs sum_vertices warned about
 
         # Set up market
         self.check_marginal_prices()
@@ -881,21 +882,27 @@ class Market(Component):
         :param: object_to_exclude:
         :returns: vertices: list of Vertex objects in the given time interval.
         """
+        # Only entities with a curve in this interval take part. An entity that has not scheduled yet (or whose curve
+        # is empty) is left out with one warning per market and interval, rather than failing the state machine.
+        entities = []
+        for entity in self.tn.neighbors + self.tn.local_assets:
+            if object_to_exclude is not None and entity == object_to_exclude:
+                continue
+            sd_curve = entity.active_vertices.get_by_interval(time_interval)
+            if sd_curve is None or sd_curve.empty:
+                if (entity.name, time_interval.name) not in self._missing_curves_reported:
+                    self._missing_curves_reported.add((entity.name, time_interval.name))
+                    _log.warning(f'{self.name}: {entity.name} has no vertices in time interval {time_interval.name}; '
+                                 f'it is left out of the system curve.')
+                continue
+            entities.append((entity, sd_curve))
+
         # Build a list of marginal prices mps at which vertices will be created. For each neighbor and asset:
         #    - Where there is one vertex, assign infinite marginal price because quantity is constant.
         #    - Where there are multiple vertices. Use the marginal price values from the vertices themselves.
         marginal_price_list = SortedList()
-        for entity in self.tn.neighbors + self.tn.local_assets:
-            # Jump out of this iteration if neighbor model happens to be the "object to exclude"
-            if object_to_exclude is not None and entity == object_to_exclude:
-                continue
-
-            sd_curve = entity.active_vertices.get_by_interval(time_interval)
-
-            if not sd_curve.empty:
-                marginal_price_list.update([float("inf")] if len(sd_curve) == 1 else sd_curve.prices)  # [$/kWh]
-            else:
-                _log.warning(f'No vertices found for {entity.name} in time interval {time_interval.name}.')
+        for entity, sd_curve in entities:
+            marginal_price_list.update([float("inf")] if len(sd_curve) == 1 else sd_curve.prices)  # [$/kWh]
 
         # Keep only two (near) duplicates of any marginal price.
         #   Where there are two instances of a price, offset one by a small number so the SDCurve remains a function.
@@ -919,13 +926,9 @@ class Market(Component):
             # Create a vertex at the indexed marginal price value
             vertex = Vertex(mp, 0, 0)
 
-            # Include power and production costs from neighbor models. Index through the active neighbor models.
-            for entity in self.tn.neighbors + self.tn.local_assets:
-                if entity == object_to_exclude:
-                    continue
-
-                # Add the entity's production quantity & cost at this price and interval to those of the vertex.
-                entity_sd_curve = entity.active_vertices.get_by_interval(time_interval)
+            # Add every participating entity's production quantity and cost at this price and interval to the vertex.
+            # (The vertex is not in any curve yet, so it may still be modified.)
+            for entity, entity_sd_curve in entities:
                 entity_production = entity.production(mp, time_interval)  # [avg.kW]
                 vertex.cost += entity_sd_curve.prod_cost_from_vertices(entity_production)
                 vertex.quantity += entity_production  # [avg.kW]

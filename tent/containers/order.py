@@ -234,6 +234,16 @@ class Order(SDCurve):
 
         return matched_order, unmatched_order
 
+    def replace_vertex(self, vertex: Vertex, **changes) -> Vertex:
+        """The SDCurve operation on this order's list of vertices: the replacement takes the vertex's place in the list
+        (the list is not hashed, so the position is kept and sort_order decides the order)."""
+        index = next(i for i, candidate in enumerate(self.vertices) if candidate is vertex)
+        replacement = copy(vertex)
+        for name, value in changes.items():
+            setattr(replacement, name, float(value) if name != 'continuity' else bool(value))
+        self.vertices[index] = replacement
+        return replacement
+
     def sort_order(self) -> None:
         """
         Sorts the vertices of a supply or demand order. See class order.Vertex.
@@ -291,7 +301,7 @@ class Order(SDCurve):
         if all([x.quantity <= 0.0 for x in self.vertices]):
             if len(self.vertices) == 1:
                 if self.vertices[0].price != float('inf'):
-                    self.vertices[0].price = float('inf')
+                    self.replace_vertex(self.vertices[0], price=float('inf'))
                 if self.status == OrderStatus.NEW:
                     self.status = OrderStatus.NEW_REVISED
                 elif self.status == OrderStatus.STANDING_ORDER:
@@ -628,7 +638,7 @@ class Order(SDCurve):
         if all([x.quantity >= 0.0 for x in self.vertices]):
             if len(self.vertices) == 1:
                 if self.vertices[0].price != -float('inf'):
-                    self.vertices[0].price = -float('inf')
+                    self.replace_vertex(self.vertices[0], price=-float('inf'))
                     if self.status == OrderStatus.NEW:
                         self.status = OrderStatus.NEW_REVISED
                     elif self.status == OrderStatus.STANDING_ORDER:
