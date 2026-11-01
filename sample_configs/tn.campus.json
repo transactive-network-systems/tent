@@ -37,7 +37,7 @@
       "location": "",
       "temperature_point_name": "",
       "tmy_fallback_path": "",
-      "weather_file_path": "/home/dmr/Projects/tsp/tent/sample_configs/temperature_forecast_model/pasco_2017_dry_bulb_temperature.csv"
+      "weather_file_path": "sample_configs/temperature_forecast_model/pasco_2017_dry_bulb_temperature.csv"
     }
   ],
   "local_assets": [

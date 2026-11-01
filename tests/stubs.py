@@ -1,5 +1,6 @@
 """Stand-ins shared by tests that build a Market without a MarketSeries."""
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from uuid6 import uuid7
 
@@ -7,6 +8,7 @@ from tent.containers.market_time import MarketDurations
 from tent.enumerations.market_state import MarketState
 from tent.enumerations.method import Method
 from tent.market import Market
+from tent.utils.timer import Timer
 
 
 class SimpleMarketSeries:
@@ -49,3 +51,9 @@ def make_market(transactive_node, clearing_time: datetime | None = None, price_m
     market._stub_series = series  # Market keeps only a weak proxy to its series; hold it for the market's lifetime
     transactive_node.markets = [market]
     return market
+
+
+def clock_at(when: datetime, tz: str = 'UTC') -> None:
+    """Run the node clock from `when` at real-time rate. Unlike patching Timer.now to a constant, successive readings of
+    the clock differ, so archive rows keyed by record_time do not collide. The autouse fixture restores the clock."""
+    Timer.set(sim_one_hr_in_sec=3600, sim_start_time=when, simulation=True, tz=ZoneInfo(tz))
