@@ -42,3 +42,19 @@ def test_a_node_can_adopt_an_existing_run_identity():
     rebuilt = MockTN(node_id=first.id, created=first.real_time_created)
     assert rebuilt.id == first.id and rebuilt.real_time_created == first.real_time_created
     assert MockTN().id != first.id, 'without an identity to adopt a node is a new run'
+
+
+def test_simulation_start_time_keeps_an_explicit_offset():  # audit T-20
+    from datetime import datetime, timezone
+    from zoneinfo import ZoneInfo
+    tn = _configure({'tz': 'UTC', 'simulation': True, 'simulation_one_hour_in_seconds': 60,
+                     'simulation_start_time': '2017-07-01T00:00:00-07:00'})
+    assert tn.simulation_start_time == datetime(2017, 7, 1, 7, 0, tzinfo=timezone.utc)
+    assert tn.simulation_start_time.tzinfo == ZoneInfo('UTC'), 'stated in the node zone'
+    tn = _configure({'tz': 'America/Los_Angeles', 'simulation': True, 'simulation_one_hour_in_seconds': 60,
+                     'simulation_start_time': '2017-07-01T00:00:00'})
+    assert tn.simulation_start_time == datetime(2017, 7, 1, 0, 0, tzinfo=ZoneInfo('America/Los_Angeles')), \
+        'a start without an offset is in the node zone'
+    tn = _configure({'tz': 'UTC', 'simulation': True, 'simulation_one_hour_in_seconds': 60,
+                     'simulation_start_time': '2017-07-01T00:00:00', 'simulation_anchor_time': '2026-10-31T12:00:00-07:00'})
+    assert tn.simulation_anchor_time == datetime(2026, 10, 31, 19, 0, tzinfo=timezone.utc)

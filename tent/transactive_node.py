@@ -54,7 +54,7 @@ from tent.base import Archivable
 import tent.containers as containers
 from tent.data_manager.null_data_manager import NullDataManager
 from tent.market.market_series import MarketSeries
-from tent.utils.helpers import get_class_from_spec, validate_bool, parse_datetime
+from tent.utils.helpers import get_class_from_spec, parse_datetime, require_aware, validate_bool
 from tent.utils.timer import Timer
 
 _log = logging.getLogger(__name__)
@@ -149,8 +149,10 @@ class TransactiveNode(Archivable):
         # Simulation Configurations:
         self.simulation = validate_bool(config.get('simulation', self.simulation), 'simulation')
         if self.simulation:
-            self.simulation_start_time = parse_datetime(config.get('simulation_start_time', self.simulation_start_time)
-                                                        ).replace(tzinfo=ZoneInfo(self.tz))
+            # A start time without an offset is in the node's zone; one with an offset is converted to that zone.
+            start = parse_datetime(config.get('simulation_start_time', self.simulation_start_time))
+            self.simulation_start_time = require_aware(start, 'simulation_start_time',
+                                                       assume=ZoneInfo(self.tz)).astimezone(ZoneInfo(self.tz))
             self.simulation_one_hour_in_seconds = int(config.get('simulation_one_hour_in_seconds',
                                                                  self.simulation_one_hour_in_seconds))
         # The anchor is the real time at which simulated time equals simulation_start_time. Every agent in one simulation
@@ -159,8 +161,7 @@ class TransactiveNode(Archivable):
         # creation time is used.
         anchor = config.get('simulation_anchor_time')
         if anchor:
-            anchor = parse_datetime(anchor)
-            anchor = anchor.replace(tzinfo=ZoneInfo(self.tz)) if anchor.tzinfo is None else anchor
+            anchor = require_aware(parse_datetime(anchor), 'simulation_anchor_time', assume=ZoneInfo(self.tz))
         self.simulation_anchor_time = anchor or self.real_time_created
         Timer.set(sim_one_hr_in_sec=self.simulation_one_hour_in_seconds,
                   sim_start_time=self.simulation_start_time,

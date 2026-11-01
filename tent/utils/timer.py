@@ -62,8 +62,8 @@ class Timer(object):
         Calculate current time based on the amount of time has passed since this object is created
         :return:
         """
-        tz = tz if tz else cls.tz
-        now = datetime.now(timezone.utc).astimezone(tz)
+        tz = cls._as_tzinfo(tz) if tz is not None else cls.tz
+        now = datetime.now(timezone.utc)
         if cls.simulation:
             ratio = 3600 / cls.sim_one_hr_in_sec
             time_diff = now - cls.created_time
@@ -73,25 +73,34 @@ class Timer(object):
             except OverflowError:
                 _log.critical(f"Simulation time overflowed (year 10000+). Congrats, you made it.")
                 raise
+        return now.astimezone(tz)
 
-        return now
+    @staticmethod
+    def _as_tzinfo(tz) -> tzinfo:
+        if isinstance(tz, tzinfo):
+            return tz
+        if isinstance(tz, str):
+            return ZoneInfo(tz)
+        raise TypeError(f'tz must be a tzinfo or an IANA zone name, not {type(tz).__name__}')
 
     @classmethod
     def set(cls, sim_one_hr_in_sec=None, sim_start_time=None, simulation=False, tz=None, anchor: datetime = None):
         """
         Configure the clock. `anchor` is the real time at which simulation time equals sim_start_time (default: now).
         TransactiveNode passes its own creation time, so the archived transactive_node.created value is the exact anchor
-        from which any recorded simulation time can be converted back to real time.
+        from which any recorded simulation time can be converted back to real time. Parameters that are not given keep
+        their current values, so Timer.set(simulation=False) pauses the simulated clock without forgetting its settings.
         """
-        # TODO: This could guard against stopped simulation after restart
-        #  by tracking the current and simulation times while simulating and comparing on set.
-        #  Is this worthwhile? too much overhead? May need the agent to provide an asynchronous event system.
         if tz is not None:
-            cls.tz = tz if isinstance(tz, tzinfo) else ZoneInfo(tz) if isinstance(tz, str) else cls.tz
+            cls.tz = cls._as_tzinfo(tz)
         cls.created_time = (anchor if anchor is not None else datetime.now(timezone.utc)).astimezone(cls.tz)
-        cls.simulation = simulation
-        if simulation and (not sim_one_hr_in_sec or not sim_start_time):
+        if sim_one_hr_in_sec is not None:
+            if sim_one_hr_in_sec <= 0:
+                raise ValueError(f'sim_one_hr_in_sec must be positive; got {sim_one_hr_in_sec}')
+            cls.sim_one_hr_in_sec = sim_one_hr_in_sec
+        if sim_start_time is not None:
+            # A naive start is taken to be in the clock's zone, the documented convention for configured values.
+            cls.sim_start_time = require_aware(sim_start_time, 'sim_start_time', assume=cls.tz)
+        if simulation and (not cls.sim_one_hr_in_sec or cls.sim_start_time is None):
             raise ValueError("sim_one_hr_in_sec and sim_start_time must be provided when simulation is True")
-        cls.sim_one_hr_in_sec = sim_one_hr_in_sec
-        # A naive start is taken to be in the clock's zone, the documented convention for configured values.
-        cls.sim_start_time = require_aware(sim_start_time, 'sim_start_time', assume=cls.tz) if sim_start_time else None
+        cls.simulation = simulation

@@ -36,6 +36,19 @@ class MarketDurations:
     market_clearing_interval: timedelta
     delivery_anchor_time: time | None
 
+    def __post_init__(self):
+        # A zero clearing interval divides by zero in get_first_clearing_time and spawns markets endlessly; a zero
+        # interval or no intervals makes an empty market. MarketSeries reports the same checks under its own field names.
+        for name in ('active', 'negotiation', 'market_lead', 'delivery_lead', 'reconciliation'):
+            if getattr(self, name) < timedelta(0):
+                raise ValueError(f'MarketDurations.{name} must not be negative; got {getattr(self, name)}')
+        if self.market_interval <= timedelta(0):
+            raise ValueError(f'MarketDurations.market_interval must be positive; got {self.market_interval}')
+        if self.market_clearing_interval <= timedelta(0):
+            raise ValueError(f'MarketDurations.market_clearing_interval must be positive; got {self.market_clearing_interval}')
+        if self.intervals_to_clear < 1:
+            raise ValueError(f'MarketDurations.intervals_to_clear must be at least 1; got {self.intervals_to_clear}')
+
     @property
     def delivery(self) -> timedelta:
         return self.market_interval * self.intervals_to_clear
@@ -72,13 +85,19 @@ class MarketDurations:
         return MarketTimings(active_start, negotiation_start, market_lead_start, delivery_lead_start, delivery_start,
                              reconciliation_start, expiration_start)
 
-    def get_first_clearing_time(self):
-        # 240221DJH: TODO: Ensure that this base method begins delivery on major temporal transitions.
+    def get_first_clearing_time(self) -> datetime:
+        """
+        The clearing time of a series' first market. Delivery cannot begin before the market has run through its active,
+        negotiation, market-lead and delivery-lead periods (the run gap), so the earliest delivery is now plus that gap.
+        With a delivery anchor, delivery is the first time at or after that which is the anchor time of day plus a whole
+        number of clearing intervals, so the series' markets stay aligned to the anchor (midnight, noon, ...).
+        """
         now = Timer.now()
         run_gap = self.delivery_lead + self.market_lead + self.negotiation + self.active
+        earliest_delivery = now + run_gap
         if not self.delivery_anchor_time:
-            delivery_time = now + run_gap
+            delivery_time = earliest_delivery
         else:
-            delivery_anchor_today = datetime.combine(now.date(), self.delivery_anchor_time, now.tzinfo)
-            delivery_time = now + ((delivery_anchor_today - now - run_gap) % self.market_clearing_interval)
+            anchor_today = datetime.combine(now.date(), self.delivery_anchor_time, now.tzinfo)
+            delivery_time = earliest_delivery + ((anchor_today - earliest_delivery) % self.market_clearing_interval)
         return delivery_time - self.delivery_lead
