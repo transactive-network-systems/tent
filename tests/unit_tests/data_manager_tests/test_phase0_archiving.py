@@ -167,10 +167,13 @@ def test_bad_and_duplicate_records_are_quarantined_without_losing_the_batch(conf
     dm = configured.data_manager
     rows = dm.query_data('market_state_change')
     template = dict(rows[0])
-    good = {'table_name': 'market_state_change', 'data': {**template, 'record_time': template['record_time'] + timedelta(seconds=1)}}
-    unparsable = {'table_name': 'market_state_change', 'data': {**template, 'record_time': 'not a time'}}
+    # A state change is keyed by market and state, so new states are new rows and the template itself is a duplicate.
+    good = {'table_name': 'market_state_change', 'data': {**template, 'state': MarketState.Expired,
+                                                          'record_time': template['record_time'] + timedelta(seconds=1)}}
+    unparsable = {'table_name': 'market_state_change', 'data': {**template, 'state': MarketState.Reconcile, 'record_time': 'not a time'}}
     duplicate = {'table_name': 'market_state_change', 'data': dict(template)}
-    also_good = {'table_name': 'market_state_change', 'data': {**template, 'record_time': template['record_time'] + timedelta(seconds=2)}}
+    also_good = {'table_name': 'market_state_change', 'data': {**template, 'state': MarketState.Delivery,
+                                                               'record_time': template['record_time'] + timedelta(seconds=2)}}
     dm.archive_data([unparsable, good, duplicate, also_good])
     after = dm.query_data('market_state_change')
     assert len(after) == len(rows) + 2, 'both valid rows are written; the unparsable and duplicate ones are quarantined'
@@ -184,7 +187,8 @@ def test_unknown_table_is_skipped_and_other_records_written(configured):
     template = dict(rows[0])
     dm.archive_data([{'table_name': 'no_such_table', 'data': {'id': 1}},
                      {'table_name': 'market_state_change',
-                      'data': {**template, 'record_time': template['record_time'] + timedelta(seconds=1)}}])
+                      'data': {**template, 'state': MarketState.Expired,
+                               'record_time': template['record_time'] + timedelta(seconds=1)}}])
     assert len(dm.query_data('market_state_change')) == len(rows) + 1
 
 
@@ -199,3 +203,16 @@ def test_queue_before_archive_ready_is_unbounded_and_warns_once(caplog):  # audi
     assert len(ldm.archival_queue) == 5, 'nothing is dropped'
     assert [r['data']['i'] for r in ldm.archival_queue] == [0, 1, 2, 3, 4]
     assert sum('archive is not ready' in r.message for r in caplog.records) == 1
+
+
+def test_two_transitions_in_one_clock_tick_are_both_archived(configured):
+    """Active to Negotiation happens within one events() call when the negotiation duration is zero, so both changes
+    carry the same record time; both must be kept (the state change is keyed by market and state)."""
+    from unittest.mock import patch
+    market = configured.market_series[0].newest_market
+    moment = market.transition_times.active
+    with patch.object(Timer, 'now', return_value=moment):
+        market.market_state = MarketState.Active
+        market.market_state = MarketState.Negotiation
+    states = {r['state'] for r in configured.data_manager.query_data('market_state_change', {'market_id': market.id})}
+    assert {MarketState.Active, MarketState.Negotiation} <= states

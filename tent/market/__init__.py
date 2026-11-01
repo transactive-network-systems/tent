@@ -1074,10 +1074,13 @@ class Market(Component):
             },
             {
                 "name": "market_state_change",
+                # A market enters each state once (states are never re-entered), so the key is market and state; two
+                # transitions within one clock tick (Active to Negotiation when the negotiation duration is zero) would
+                # otherwise share a record time and the second would be refused.
                 "columns": [
                     {"name": "market_id", "foreign_key": "market.id", "kwargs": {"primary_key": True}},
-                    {"name": "record_time", "type": "DateTime", "kwargs": {"primary_key": True}},
-                    {"name": "state", "enumeration": "MarketState"}
+                    {"name": "state", "enumeration": "MarketState", "kwargs": {"primary_key": True}},
+                    {"name": "record_time", "type": "DateTime"}
                 ]
             }
         ])
