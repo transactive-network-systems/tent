@@ -168,7 +168,6 @@ class Entity(Component, abc.ABC):
         # TODO: If there are two markets operating simultaneously, won't the second assignment clobber the first?
         self.total_dual_cost = self.dual_costs.total(market)
 
-        _log.debug(f"{self.name} dual costs are: {self.dual_costs.log_report}")
 
     def _get_production_costs(self, time_interval):
         """ Get production costs from vertices or a formula, if none are available.
@@ -195,7 +194,6 @@ class Entity(Component, abc.ABC):
             # TODO: If there are two markets operating simultaneously, won't the second assignment clobber the first?
         self.total_production_cost = self.production_costs.total(market)  # [$]
 
-        _log.debug(f"{self.name} asset model production costs are: {self.production_costs.log_report}")
 
     def market_power(self, market, time_interval: TimeInterval) -> float:
         """

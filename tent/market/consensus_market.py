@@ -44,6 +44,7 @@ under Contract DE-AC05-76RL01830
 import logging
 
 from tent.config import ConfigModel, Setting
+from tent.containers.archiving import deferred_archiving
 from tent.containers.measurement import Measurement
 from tent.enumerations import MarketTypes, MeasurementType, MeasurementUnit
 from tent.market import Market
@@ -138,73 +139,100 @@ class ConsensusMarket(Market):
         Solve the local balancing sub-problem with the information currently held: every entity schedules against the
         current prices, the system curve is summed and a new price found per interval, powers are rescheduled at the new
         prices, and costs are updated. The interpolated price is exact for piece-wise linear curves, so the duality gap
-        closes in one pass; the loop only matters for assets whose curves depend on price.
+        closes in one pass; the loop only matters for assets whose curves depend on price, and it stops as soon as an
+        iteration leaves every price where it was, since the next iteration would then repeat it. Everything the pass
+        reschedules is archived once, at the end (deferred_archiving), not once per iteration.
         Sets self.converged and returns it.
         """
         self.converged = False
         self.duality_gap = None
-        for k in range(1, self.max_balance_iterations + 1):
-            self.balance_iterations = k
-            # Every asset and neighbor refreshes its active vertices (neighbors from their last received signal) and
-            # schedules against the current marginal prices.
-            self.schedule()
-            # Sum the system curve and solve for the marginal price. balance() sets converged False and returns on
-            # failure (e.g. there is no supply at all), in which case there is nothing more to do this tick.
-            self.balance()
-            prices = [self.marginal_prices.get_by_interval(ti) for ti in self.time_intervals]
-            if any(p is None or p.value is None for p in prices):
-                _log.warning(f'{self.name}: no marginal price could be found in at least one interval.')
-                return False
-            # Reschedule powers at the cleared prices, then measure the duality gap and the power balance.
-            for entity in self._entities():
-                entity.schedule_power(self)
-            self.update_costs()
-            self.update_supply_demand()
-            if self.total_production_cost == 0:
-                # Nothing costs anything: balance is judged on net power alone.
-                self.duality_gap = max((abs(self.net_powers.get_by_interval(ti).value) for ti in self.time_intervals),
-                                       default=0.0)
-                gap_ok = self.duality_gap <= self.series.duality_gap_threshold
+        with deferred_archiving():
+            previous = self._price_vector()
+            for k in range(1, self.max_balance_iterations + 1):
+                self.balance_iterations = k
+                # Every asset and neighbor refreshes its active vertices (neighbors from their last received signal) and
+                # schedules against the current marginal prices.
+                self.schedule()
+                # Sum the system curve and solve for the marginal price. balance() sets converged False and returns on
+                # failure (e.g. there is no supply at all), in which case there is nothing more to do this tick.
+                self.balance()
+                prices = [self.marginal_prices.get_by_interval(ti) for ti in self.time_intervals]
+                if any(p is None or p.value is None for p in prices):
+                    _log.warning(f'{self.name}: no marginal price could be found in at least one interval.')
+                    self._mark_signals_seen()
+                    return False
+                # Reschedule powers at the cleared prices, then measure the duality gap and the power balance.
+                for entity in self._entities():
+                    entity.schedule_power(self)
+                self.update_costs()
+                self.update_supply_demand()
+                if self.total_production_cost == 0:
+                    # Nothing costs anything: balance is judged on net power alone.
+                    self.duality_gap = max((abs(self.net_powers.get_by_interval(ti).value) for ti in self.time_intervals),
+                                           default=0.0)
+                    gap_ok = self.duality_gap <= self.series.duality_gap_threshold
+                else:
+                    self.duality_gap = (self.total_production_cost - self.total_dual_cost) / self.total_production_cost
+                    gap_ok = abs(self.duality_gap) <= self.series.duality_gap_threshold
+                _log.debug(f'{self.name} balance iteration {k}: production {self.total_production_cost:.4f}, '
+                           f'dual {self.total_dual_cost:.4f}, gap {self.duality_gap:.5f}')
+                if gap_ok and self.is_power_balanced():
+                    self.converged = True
+                    break
+                current = self._price_vector()
+                if current == previous:
+                    # The curves were rebuilt at these very prices and gave them back: another iteration would be the same.
+                    # Say what is off: the gap, and the power balance when the gap was fine or the prices never moved.
+                    if not gap_ok:
+                        _log.warning(f'{self.name}: local balance cannot improve, the prices did not move in iteration '
+                                     f'{k} and the duality gap {self.duality_gap:.5f} exceeds '
+                                     f'{self.series.duality_gap_threshold}; not converged.')
+                    self.is_power_balanced()
+                    break
+                previous = current
             else:
-                self.duality_gap = (self.total_production_cost - self.total_dual_cost) / self.total_production_cost
-                gap_ok = abs(self.duality_gap) <= self.series.duality_gap_threshold
-            _log.debug(f'{self.name} balance iteration {k}: production {self.total_production_cost:.4f}, '
-                       f'dual {self.total_dual_cost:.4f}, gap {self.duality_gap:.5f}')
-            if gap_ok and self.is_power_balanced():
-                self.converged = True
-                break
-        else:
-            _log.warning(f'{self.name}: local balance did not close the duality gap in {self.max_balance_iterations} '
-                         f'iterations (gap {self.duality_gap}); proceeding with the last prices.')
-            # Prices that leave the powers balanced are usable; an unbalanced schedule is not a solution.
-            self.converged = self.is_power_balanced()
+                _log.warning(f'{self.name}: local balance did not close the duality gap in {self.max_balance_iterations} '
+                             f'iterations (gap {self.duality_gap}); proceeding with the last prices.')
+                # Prices that leave the powers balanced are usable; an unbalanced schedule is not a solution.
+                self.converged = self.is_power_balanced()
         self._mark_signals_seen()
         return self.converged
+
+    def _price_vector(self) -> tuple:
+        """The marginal price of every interval, for telling whether an iteration moved anything."""
+        return tuple(None if (mp := self.marginal_prices.get_by_interval(ti)) is None else mp.value
+                     for ti in self.time_intervals)
 
     def is_power_balanced(self) -> bool:
         """
         True when the scheduled powers add up to zero in every interval, within the series' duality_gap_threshold as a
         fraction of the larger of the interval's total generation and total demand. A price that closes the duality gap
         is not a solution if the powers behind it do not balance (an interval balance() could not bracket keeps its old
-        price; a supplier scheduled short of the load), so this check gates convergence and with it consensus.
+        price; a supplier scheduled short of the load), so this check gates convergence and with it consensus. One
+        warning per call names the worst interval and how many are off.
         """
         threshold = self.series.duality_gap_threshold
-        balanced = True
+        missing, off = [], []
         for time_interval in self.time_intervals:
             net = self.net_powers.get_by_interval(time_interval)
             generation = self.total_generation.get_by_interval(time_interval)
             demand = self.total_demand.get_by_interval(time_interval)
             if net is None or generation is None or demand is None:
-                _log.warning(f'MARKET: {self.name} has no scheduled powers to balance in {time_interval.name}.')
-                balanced = False
+                missing.append(time_interval.name)
                 continue
             scale = max(abs(generation.value), abs(demand.value), 1.0)
             if abs(net.value) > threshold * scale:
-                _log.warning(f'MARKET: {self.name} is not balanced in {time_interval.name}: net power {net.value:.4g} kW '
-                             f'against {generation.value:.4g} kW generation and {demand.value:.4g} kW demand at '
-                             f'{self.marginal_prices.get_by_interval(time_interval).value:.6g} $/kWh; not converged.')
-                balanced = False
-        return balanced
+                off.append((abs(net.value) / scale, time_interval, net.value, generation.value, demand.value))
+        if missing:
+            _log.warning(f'MARKET: {self.name} has no scheduled powers to balance in {len(missing)} interval(s), '
+                         f'first {missing[0]}.')
+        if off:
+            _, time_interval, net, generation, demand = max(off, key=lambda item: item[0])
+            _log.warning(f'MARKET: {self.name} is not balanced in {len(off)} of {len(self.time_intervals)} intervals; '
+                         f'worst {time_interval.name}: net power {net:.4g} kW against {generation:.4g} kW generation '
+                         f'and {demand:.4g} kW demand at '
+                         f'{self.marginal_prices.get_by_interval(time_interval).value:.6g} $/kWh; not converged.')
+        return not missing and not off
 
     def exchange_signals(self) -> bool:
         """
@@ -253,20 +281,22 @@ class ConsensusMarket(Market):
             neighbor.reset_coordination(self)
         if self.balance_locally():
             self.negotiation_passes += 1
-            # Open the negotiation: every transactive neighbor hears this node's position.
-            for neighbor in self.transactive_neighbors:
-                neighbor.prep_transactive_signal(self)
-                neighbor.send_transactive_signal(self, include_schedule=True)
+        # Open the negotiation: every transactive neighbor hears this node's position, whether or not the local problem
+        # balanced. A node whose local balance cannot close (its only supply is a neighbor's default curve, say) still
+        # has a residual curve to offer, and without it neither side can move.
+        for neighbor in self.transactive_neighbors:
+            neighbor.prep_transactive_signal(self)
+            neighbor.send_transactive_signal(self, include_schedule=True)
         self.record_consensus()
 
     def while_in_negotiation(self):
         rebalanced = False
         if self._new_signals() or not self.converged:
-            if not self.balance_locally():
-                self.record_consensus()
-                return  # No price yet (e.g. no supply offered). Wait for signals or the negotiation deadline.
-            self.negotiation_passes += 1
+            # Rebalance whether or not it closes: the exchange below goes ahead either way, so a node whose local balance
+            # cannot close still tells its neighbors its residual curve (and a revised one whenever it changed).
             rebalanced = True
+            if self.balance_locally():
+                self.negotiation_passes += 1
         settled = all(n.is_converged(self) and not n.is_signal_due(self) for n in self.transactive_neighbors)
         if rebalanced or not settled:
             self.exchange_signals()

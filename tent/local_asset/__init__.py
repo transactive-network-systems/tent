@@ -191,7 +191,6 @@ class LocalAsset(Entity):
         # 210803DJH: Auctions use this flag, so it should probably be set after every successful scheduling of power.
         self.schedule_calculated = True
 
-        _log.debug(f"{self.name} asset scheduled_powers: {self.scheduled_powers.log_report}")
 
     def schedule_engagement(self, market):
         # To assign engagement, or commitment, which is relevant to some local assets (supports future capabilities).
@@ -304,7 +303,6 @@ class LocalAsset(Entity):
                                         Vertex(float("inf"), 0.0, scheduled_power.value, True),
                                         archive=False, replace=True)
 
-        _log.debug(f"{self.name} asset model active vertices are: {self.active_vertices.log_report}")
 
     def update_costs(self, market):
         """
