@@ -51,7 +51,7 @@ from typing import Union
 from zoneinfo import ZoneInfo
 
 from tent.information_service_model import InformationServiceModel
-from tent.enumerations import MeasurementType
+from tent.enumerations import MeasurementType, MeasurementUnit
 from tent.utils.helpers import parse_datetime
 
 _log = logging.getLogger(__name__)
@@ -71,8 +71,10 @@ class TemperatureForecastModel(InformationServiceModel):
                  tmy_fallback_path: str = '',
                  weather_file_path: str = None,
                  *args, **kwargs):
+        # This service is a temperature forecast whatever the configuration says: consumers select it by type.
+        kwargs['information_type'] = MeasurementType.Temperature
+        kwargs['information_units'] = MeasurementUnit.degF
         super(TemperatureForecastModel, self).__init__(*args, **kwargs)
-        self.informationType = MeasurementType.Temperature
         # Preserve None (don't cast None -> 'None') so we can test whether a file path was provided.
         self.weather_file_path = str(weather_file_path) if weather_file_path is not None else None
         self.weather_data = []

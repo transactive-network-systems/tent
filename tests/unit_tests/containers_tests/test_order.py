@@ -65,46 +65,6 @@ def patch_sdc_curve(monkeypatch):
 	monkeypatch.setattr(SDCurve, "__init__", original)
 
 
-@pytest.fixture(autouse=True)
-def patch_vertex_and_copy(monkeypatch):
-	"""Allow legacy keyword args (curve_id, timestamp) used by Order when constructing Vertex, and patch
-	Order.__copy__ to set internal series attr directly instead of read-only property."""
-	orig_v_init = Vertex.__init__
-
-	def patched_v_init(self, price, cost=0.0, quantity=0.0, continuity=True, uncertainty=0.0, curve=None, **legacy):
-		# Ignore legacy kwargs like curve_id, timestamp
-		return orig_v_init(self, price, cost, quantity, continuity, uncertainty, curve)
-
-	monkeypatch.setattr(Vertex, "__init__", patched_v_init)
-
-	orig_copy = Order.__copy__
-
-	def patched_copy(self):
-		copiedOrder = Order(market=self.market,
-							interval=self.interval,
-							actor=self.actor,
-							expire_by=self.expire_by,
-							parent_order_id=self.id,
-							vertices=None,
-							supply_or_demand=self.supply_or_demand)
-		self.child_order_ids.append(copiedOrder.id)
-		copiedOrder.time_stamp = self.time_stamp
-		copiedOrder.status = self.status
-		copiedOrder.child_order_ids = []
-		# set internal mangled attribute instead of read-only property
-		setattr(copiedOrder, "_Order__marketSeries__", self.market_series)
-		copiedOrder.vertices = []
-		copiedOrder.buyer = self.buyer
-		copiedOrder.seller = self.seller
-		for pp in self.vertices:
-			copiedOrder.vertices.append(_shallow_copy(pp))
-		return copiedOrder
-
-	monkeypatch.setattr(Order, "__copy__", patched_copy)
-	yield
-	monkeypatch.setattr(Order, "__copy__", orig_copy)
-
-
 @pytest.fixture
 def market():
 	return DummyMarket()
@@ -293,7 +253,9 @@ def test_match_supply_limit_order_assigns_counterparty(market, interval, actor):
 	matched, unmatched = order.match(quantity=4.0, match_price=15.0, counter_party=counter)
 	assert matched is not None
 	assert matched.status == OrderStatus.MATCHED
-	assert order.status == OrderStatus.SUPERSEDED
+	# match() computes the legs only; the engine supersedes the order when it commits, so a tentative match can be dropped.
+	assert order.status == OrderStatus.NEW
+	assert matched.root_order_id == order.id and unmatched.root_order_id == order.id
 	assert matched.seller == actor and matched.buyer == counter
 	# remainder (unmatched) should have each vertex quantity reduced by 4
 	if unmatched:  # may be None if all zeroed

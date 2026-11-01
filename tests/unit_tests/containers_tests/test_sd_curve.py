@@ -161,3 +161,15 @@ def test_aggregate_curves_filters_inf(measurement, interval):
 	c2 = make_curve(measurement, interval, [Vertex(10, quantity=2)])
 	prices = SDCurve.aggregate_curves([c1, c2])
 	assert 10 in prices and float('inf') not in prices
+
+
+def test_curve_copies_the_vertices_it_is_given(measurement, interval):  # audit T-07
+	# (The simplified __init__ patched in above bypasses _parse_vertices, so the parser is exercised directly.)
+	given = [Vertex(price=0.1, quantity=10.0), Vertex(price=0.2, quantity=20.0)]
+	parsed = SDCurve._parse_vertices(given)
+	assert all(mine is not theirs for mine in parsed for theirs in given)
+	assert [(v.price, v.quantity) for v in parsed] == [(0.1, 10.0), (0.2, 20.0)]
+	for v in parsed:
+		v.quantity = v.quantity * 0.9  # a loss correction applied to this curve only
+	assert [v.quantity for v in given] == [10.0, 20.0]
+	assert [v.quantity for v in SDCurve._parse_vertices(given)] == [10.0, 20.0]

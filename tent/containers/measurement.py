@@ -122,6 +122,40 @@ class MeasurementValue(Archivable):
     def __ge__(self, other):
         return self.value >= self._get_numeric_value(other)
 
+    # The rest of the numeric protocol, so a MeasurementValue can stand in for its value wherever arithmetic needs it.
+    def __float__(self):
+        return float(self.value)
+
+    def __int__(self):
+        return int(self.value)
+
+    def __neg__(self):
+        return -self.value
+
+    def __pos__(self):
+        return +self.value
+
+    def __abs__(self):
+        return abs(self.value)
+
+    def __pow__(self, other):
+        return self.value ** self._get_numeric_value(other)
+
+    def __rpow__(self, other):
+        return self._get_numeric_value(other) ** self.value
+
+    def __rtruediv__(self, other):
+        return self._get_numeric_value(other) / self.value
+
+    def __rfloordiv__(self, other):
+        return self._get_numeric_value(other) // self.value
+
+    def __round__(self, ndigits=None):
+        return round(self.value, ndigits)
+
+    def __hash__(self):
+        return id(self)
+
 
     @property
     def data_manager(self):

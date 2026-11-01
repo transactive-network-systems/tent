@@ -277,3 +277,16 @@ def test_copy_creates_independent_values():
 
     # Copy still has prior value for t1
     assert m_copy.get_by_interval(t1).value == 2.0
+
+def test_measurementvalue_numeric_protocol(monkeypatch):  # audit T-08
+    monkeypatch.setattr(mod.Archivable, "get_record", lambda self: {})
+    m = Measurement(source=DummySource())
+    ti = DummyInterval("I1", datetime(2024, 1, 1, 0, 0, 0), timedelta(minutes=5))
+    mv = MeasurementValue(m, ti, 4.0)
+    assert float(mv) == 4.0 and int(mv) == 4
+    assert -mv == -4.0 and +mv == 4.0 and abs(MeasurementValue(m, ti, -4.0)) == 4.0
+    assert mv ** 2 == 16.0 and 2 ** mv == 16.0
+    assert 1 / mv == 0.25 and 9 // mv == 2
+    assert round(MeasurementValue(m, ti, 4.5678), 2) == 4.57
+    assert hash(mv) == hash(mv) and len({mv, mv}) == 1, 'hashable by identity: the value is mutable'
+    assert sum([mv, mv]) == 8.0 and max(mv, 3.0) is mv

@@ -73,9 +73,9 @@ class SimpleBuilding(LocalAsset):
 
     def update_vertices(self, market):
         for time_interval in market.time_intervals:
-            if time_interval.start_time.hour in [0, 1, 2, 3, 4, 17, 18, 19, 20, 21, 22, 23]:
-                self.active_vertices.update(time_interval, self.off_peak_vertex)
-            elif time_interval.start_time.hour in [5, 6, 7, 8, 9, 10, 11, 12, 13, 14]:
-                self.active_vertices.update(time_interval, [self.on_peak_vertex0, self.on_peak_vertex1])
+            # On-peak flexibility from 05:00 through 16:59, off-peak otherwise (hours 15 and 16 were previously undefined
+            # and raised).
+            if 5 <= time_interval.start_time.hour <= 16:
+                self.active_vertices.update(time_interval, [self.on_peak_vertex0, self.on_peak_vertex1], replace=True)
             else:
-                raise RuntimeError('Undefined hour of day.')
+                self.active_vertices.update(time_interval, self.off_peak_vertex, replace=True)

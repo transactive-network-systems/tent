@@ -4,6 +4,7 @@ from datetime import datetime, time, timedelta, timezone
 from uuid import UUID
 
 from sqlalchemy import create_engine, select, Interval
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.schema import sort_tables
 from sqlalchemy.orm import Session
 from sqlalchemy.sql.sqltypes import DateTime, Uuid, Boolean, Float, Time
@@ -44,8 +45,11 @@ class LocalDataManager(ArchiveReader, DataManager):
         #_log.info(f'@@@@@@@ Archiving data: {records}')
         if not self.archive_ready:
             self.archival_queue.extend(records)
+            if (len(self.archival_queue) > self.archival_buffer_length) and not self._queue_warned:
+                self._queue_warned = True
+                _log.warning(f'{len(self.archival_queue)} archive records are queued and the archive is not ready; '
+                             f'nothing is dropped, but check that init_archive() is reached.')
             return
-
         # Drain the queue oldest-first (self-references such as market.prior_market_id point backwards in time), then
         # insert table by table in foreign-key dependency order. The ORM only orders INSERTs across mappers when
         # relationships are declared, and these imperative mappings declare none, so the order is made explicit here.
@@ -53,13 +57,20 @@ class LocalDataManager(ArchiveReader, DataManager):
         while self.archival_queue:
             pending.append(self.archival_queue.popleft())
         pending.extend(records)
+        # Normalise every record before touching the database, so a bad record is quarantined by itself (logged with its
+        # table and key) and cannot take the whole batch down with it.
         by_table: dict[str, list] = {}
         for rec in pending:
-            by_table.setdefault(rec['table_name'], []).append(rec)
-        unknown = [name for name in by_table if name not in self.orm]
-        for name in unknown:
-            _log.warning(f'Attempted to archive data to non-existent table: {name}')
-            by_table.pop(name)
+            table_name = rec.get('table_name')
+            if table_name not in self.orm:
+                _log.warning(f'Attempted to archive data to non-existent table: {table_name}')
+                continue
+            try:
+                row = self._normalize_data(table_name, rec['data'])
+            except Exception as error:  # a record TENT built wrongly; the rest of the batch must still be written
+                _log.error(f'Quarantined an archive record for {table_name} ({rec.get("data", {}).get("id")!r}): {error}')
+                continue
+            by_table.setdefault(table_name, []).append(row)
         if not by_table:
             return
         # Records name their leaf table, and joined inheritance writes the ancestor rows (component, entity, ...) as
@@ -70,16 +81,32 @@ class LocalDataManager(ArchiveReader, DataManager):
             chain = self.table_chain(name) if name in self.definitions else [name]
             return (min(position.get(t, len(position)) for t in chain), position.get(name, len(position)))
         order = sorted(by_table, key=rank)
-        with Session(self.engine) as session:
-            for table_name in order:
-                table_orm = self.orm[table_name]
-                for rec in by_table[table_name]:
+        ordered_rows = [(table_name, row) for table_name in order for row in by_table[table_name]]
+        try:
+            with Session(self.engine) as session:
+                for table_name, row in ordered_rows:
                     # The archive is append-only: rows are inserted, never updated. Archivables whose state evolves
                     # (SDCurve, Order, MeasurementValue) carry record_time in their primary key.
-                    session.add(table_orm(**self._normalize_data(table_name, rec['data'])))
-                session.flush()
-            # TODO: Error handling, if this fails we should end up with everything still in the archival_queue.
-            session.commit()
+                    session.add(self.orm[table_name](**row))
+                session.commit()
+        except IntegrityError as error:
+            # One row violates a constraint (a duplicate key, a dangling reference). Write the batch row by row inside
+            # savepoints so every valid row is kept and only the offenders are quarantined.
+            _log.warning(f'Archive batch rejected ({error.orig}); writing row by row.')
+            with Session(self.engine) as session:
+                for table_name, row in ordered_rows:
+                    try:
+                        with session.begin_nested():
+                            session.add(self.orm[table_name](**row))
+                            session.flush()
+                    except IntegrityError as row_error:
+                        _log.error(f'Quarantined an archive row for {table_name} ({row.get("id")!r}): {row_error.orig}')
+                session.commit()
+        except SQLAlchemyError as error:
+            # The database itself is unavailable or broken: keep every record for the next attempt and say so.
+            self.archival_queue.extendleft(reversed(pending))
+            _log.error(f'Archive write failed; {len(pending)} records re-queued: {error}')
+            raise
 
     def upsert_data(self, table_name: str, data: Mapping, match_columns: Sequence[str]) -> dict:
         """Insert a row or update the row identified by match_columns."""

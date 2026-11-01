@@ -138,7 +138,10 @@ class SDCurve(Archivable):
         if not vertices:
             return []
         if all([isinstance(vertex, Vertex) for vertex in vertices]):
-            return vertices
+            # Copy: a curve owns its vertices. Sharing Vertex objects between curves (an entity's default vertices and
+            # its active vertices, a received signal and the neighbor's active curve) let in-place corrections such as
+            # losses and demand charges compound across intervals and markets.
+            return [copy(vertex) for vertex in vertices]
         elif all([isinstance(vertex, list) for vertex in vertices]):
             # Filter out empty lists
             return [Vertex(*[float(i) for i in vertex]) for vertex in vertices if vertex]

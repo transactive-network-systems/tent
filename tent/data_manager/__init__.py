@@ -17,7 +17,10 @@ class DataManager:
 
         # State Variables:
         self.archive_ready = False
-        self.archival_queue = deque(maxlen=archival_buffer_length)
+        # Unbounded: a bounded deque silently dropped the oldest records. The length is a warning threshold instead.
+        self.archival_queue = deque()
+        self.archival_buffer_length = int(archival_buffer_length)
+        self._queue_warned = False
         self.definitions: dict[str, dict] = {}
         self.orm: dict = {}
         self.registry = registry()

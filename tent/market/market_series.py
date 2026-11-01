@@ -96,10 +96,10 @@ class MarketSeries(Component):
                 'module_name': 'tent.market.price_models',
                 'default_price': self.default_price
             }
-        ref_series: MarketSeries = (self.tn.get_market_series_by_attribute('name', refined_series)
-                      if isinstance(refined_series, str) else refined_series)
+        ref_series: MarketSeries = (self.tn.get_market_series_by_attribute('name', refined_series, first_only=True)
+                                    if isinstance(refined_series, str) else refined_series)
         self.refined_series: Union[MarketSeries, None] = (
-            proxy(ref_series, safe_weak_proxy_callback(self, 'refined_market_series'))
+            proxy(ref_series, safe_weak_proxy_callback(self, 'refined_series'))
             if isinstance(ref_series, MarketSeries) else None)
 
         # Instantiate the first market in the series.
@@ -147,8 +147,11 @@ class MarketSeries(Component):
 
     def get_refined_market(self, clearing_time: datetime) -> Market:
         """Returns the market in the refined series with the last clearing time equal to or before "clearing_time"."""
-        return (self.refined_series.markets[self.refined_series.markets.bisect(clearing_time) - 1]
-                if self.refined_series else None)
+        if not self.refined_series or not self.refined_series.markets:
+            return None
+        # markets is a SortedKeyList keyed by delivery-lead (clearing) time: find the last market cleared at or before.
+        index = self.refined_series.markets.bisect_key_right(clearing_time)
+        return self.refined_series.markets[index - 1] if index > 0 else None
 
     def spawn(self, initial_market_state: MarketState | None = None):
         """

@@ -198,6 +198,24 @@ class MatchingEngine(Market):
         self.orderList = [x for x in self.orderList if not any(x is o for o in standing)]
         self._archive_orders(standing)
 
+    def _expire_orders(self) -> None:
+        """
+        Retire the standing orders whose expire_by has passed: status EXPIRED, archived, out of the book. The quotes they
+        descend from are forgotten too, so an entity whose curve is still active is quoted afresh on this pass. Matched
+        legs are transactions and are untouched.
+        """
+        now = Timer.now()
+        expired = [x for x in self.orderList if x.expire_by <= now]
+        if not expired:
+            return
+        for order in expired:
+            order.status = OrderStatus.EXPIRED
+        self.orderList = [x for x in self.orderList if not any(x is o for o in expired)]
+        self._archive_orders(expired)
+        roots = {o.root_order_id for o in expired}
+        self.quotes = {key: quote for key, quote in self.quotes.items()
+                       if not any(o.id in roots for o in quote.orders)}
+
     def _archive_orders(self, orders) -> None:
         for order in orders:
             if order is not None and order.measurement is not None:
@@ -313,109 +331,20 @@ class MatchingEngine(Market):
 
             #  CASE: ao quantity >= total limit so quantity
             elif abs(ao.quantity) >= abs(total_limit_order_quantity):
-
-                #  CASE: ao quantity is not continuous
-                if not ao.continuity:
-                    continue
-
-                #  CASE: ao quantity is continuous
-                elif ao.continuity:
-
-                    # Initialize the matched and unmatched ao quantities.
-                    matched_quantity = 0.0
-                    unmatched_quantity = ao.quantity
-
-                    #  Index through so limit order quantities
-                    for so in limit_orders:
-
-                        # Find the standing order for this limit order Vertex.
-                        so_order: Order = self.get_order_by_id(an_id=so.curve.id)
-
-                        # Create and matched and unmatched orders for so quantity at indexed price.
-                        matched_order, unmatched_order = so_order.match(
-                            quantity=so.quantity,
-                            match_price=price,
-                            counter_party=new_order.actor
-                        )
-
-                        # If a match transaction completed save the matched so order and revise the standing order.
-                        if matched_order:
-                            self.matchList.append(matched_order)
-                            self.orderList = [x for x in self.orderList if x != so_order]
-
-                        # Revise standing so order. (there should be no remainder of so quantity)
-                        if unmatched_order and unmatched_order.order_or_none():
-                            self.orderList.append(unmatched_order)
-
-                        # Create match order for matched ao quantity (order identifies buyer and seller)
-                        matched_order, unmatched_order = new_order.match(
-                            quantity=-so.quantity,
-                            match_price=price,
-                            counter_party=so_order.actor
-                        )
-
-                        if matched_order and matched_order.order_or_none():
-                            self.matchList.append(matched_order)
-
-                        # Update total matched, transacted ao quantity and unmatched ao quantity remainder
-                        matched_quantity = matched_quantity - so.quantity
-                        unmatched_quantity = unmatched_quantity + so.quantity
-
-                    # Revise ao order using total transacted and remainder ao quantities
-                    matched_order, unmatched_order = new_order.match(
-                        quantity=matched_quantity,
-                        match_price=price,
-                        counter_party=None
-                    )
-
-                    if unmatched_order and unmatched_order.order_or_none():
-                        self.orderList = [x for x in self.orderList if x != new_order]
-                        new_order = copy(new_order)
-                        new_order.vertices = unmatched_order.vertices
-                    else:
-                        new_order = None
-
-                else:
-                    raise RuntimeError("Logic should not have reached this place in the code.")
+                # Every standing limit order at this price can be taken in full. _apply_fills commits nothing if the
+                # aggressive order is all-or-nothing here and would be left with a remainder.
+                new_order = self._apply_fills(new_order, ao, [(so, so.quantity) for so in limit_orders], price)
 
             #  CASE: ao quantity < total limit so quantity
             elif abs(ao.quantity) < abs(total_limit_order_quantity):
-
-                # Index through list of matching priorities
-                for mp in self.matching_strategy:
-
-                    # CASE: Matching priority is by proportion
-                    if mp == MatchingStrategy.PROPORTIONAL_VOLUME:
-                        pass
-                        #  Continue to next matching priority (I't not clear how to make this work. Create warning.)
-
-                    #  CASE: Matching priority is age
-                    elif mp == MatchingStrategy.ORDER_AGE:
-                        # Sort active so limit order quantities by age.
-                        limit_orders.sort(key=lambda x: (x.curve.time_stamp, x.continuity, -abs(x.quantity)))
-
-                        # Insert <Code Logic Block A>
-                        new_order = self.limit_order_code_block(
-                            aggressive_order=new_order,
-                            list_of_orders=limit_orders,
-                            price=price
-                        )
-
-                    #  CASE: Matching priority is volume (the default priority)
-                    elif mp == MatchingStrategy.ORDER_VOLUME:
-
-                        # Sort active so limit order quantities by volume
-                        limit_orders.sort(key=lambda x: (-abs(x.quantity), x.continuity, x.curve.time_stamp))
-
-                        # Insert <Code Logic Block A>
-                        new_order = self.limit_order_code_block(
-                            aggressive_order=new_order,
-                            list_of_orders=limit_orders,
-                            price=price
-                        )
-
-                    else:
-                        raise RuntimeError("Logic should not have reached this line.")
+                # The standing limit orders at this price can more than fill the aggressive order: the matching strategy
+                # decides which of them (and how much of each) are taken.
+                limit_orders.sort(key=self._priority_key())
+                if self.matching_strategy and self.matching_strategy[0] is MatchingStrategy.PROPORTIONAL_VOLUME:
+                    fills = self._proportional_fills(ao.quantity, limit_orders)
+                else:
+                    fills = self._sequential_fills(ao.quantity, limit_orders)
+                new_order = self._apply_fills(new_order, ao, fills, price)
 
             else:
                 raise RuntimeError("Code logic should not have reached this line.")
@@ -449,6 +378,7 @@ class MatchingEngine(Market):
         Negotiation stays open for its whole window so that orders submitted later are still matched; the state is
         marked complete at the market-lead time.
         """
+        self._expire_orders()
         self.quote_entities()
         new_orders = [x for x in self.orderList if x.status in (OrderStatus.NEW, OrderStatus.NEW_REVISED)]
         for new_order in new_orders:
@@ -531,133 +461,124 @@ class MatchingEngine(Market):
         else:
             return [x for x in self.matchList if x.actor == an_actor]
 
-    def limit_order_code_block(self, aggressive_order: Order, list_of_orders: list, price: float):
+    # ------------------------------------------------------------------------------------------- fill planning
+    def _priority_key(self):
         """
-        This is a block of code that is used during the comparison of aggressive order quantity with standing limit
-        order quantities at a price.
+        Sort key for the standing-order vertices competing at one price. The configured strategies rank them in order
+        (ORDER_AGE: oldest first; ORDER_VOLUME and PROPORTIONAL_VOLUME: largest first; NONE: no ranking); all-or-nothing
+        vertices then sort before partially fillable ones of equal rank, so whole fills are taken from orders that
+        cannot accept a partial one and the partial fill falls on an order that can; the unused ranking breaks any
+        remaining ties.
+        """
+        by_age = lambda so: so.curve.time_stamp
+        by_volume = lambda so: -abs(so.quantity)
+        ranks = []
+        for strategy in self.matching_strategy:
+            if strategy is MatchingStrategy.ORDER_AGE:
+                ranks.append(by_age)
+            elif strategy in (MatchingStrategy.ORDER_VOLUME, MatchingStrategy.PROPORTIONAL_VOLUME):
+                ranks.append(by_volume)
+            elif strategy is not MatchingStrategy.NONE:
+                raise ValueError(f'Unrecognised matching strategy: {strategy!r}')
+        ranks.append(lambda so: so.continuity)
+        ranks.extend(rank for rank in (by_volume, by_age) if rank not in ranks)
+        return lambda so: tuple(rank(so) for rank in ranks)
+
+    @staticmethod
+    def _sequential_fills(needed: float, standing: list) -> list:
+        """
+        Plan fills by walking the standing-order vertices in priority order: each is taken in full while it fits in what
+        is still needed, and the first partially fillable one that does not fit is taken for the remainder. Returns
+        [(vertex, quantity)] with quantities signed as the standing side (opposite to needed).
+        """
+        fills, remainder = [], needed
+        for so in standing:
+            if remainder == 0.0:
+                break
+            if abs(remainder) < abs(so.quantity):
+                if so.continuity:
+                    fills.append((so, -remainder))
+                    remainder = 0.0
+            else:
+                fills.append((so, so.quantity))
+                remainder += so.quantity
+        return fills
+
+    @staticmethod
+    def _proportional_fills(needed: float, standing: list) -> list:
+        """
+        Plan fills for PROPORTIONAL_VOLUME: while the partially fillable vertices together cannot cover what is still
+        needed, whole vertices are taken in priority (largest first) order; as soon as they can, the remainder is split
+        among them in proportion to their quantities at this price. Returns [(vertex, quantity)] as _sequential_fills.
+        """
+        fills, remainder, pending = [], needed, list(standing)
+        while pending and remainder != 0.0:
+            partial = [so for so in pending if so.continuity]
+            partial_total = sum(so.quantity for so in partial)
+            if partial and abs(remainder) <= abs(partial_total):
+                allocated = 0.0
+                for so in partial[:-1]:
+                    share = -remainder * so.quantity / partial_total
+                    fills.append((so, share))
+                    allocated += share
+                fills.append((partial[-1], -remainder - allocated))  # the last share absorbs any rounding residual
+                remainder = 0.0
+                break
+            so = pending.pop(0)
+            if abs(so.quantity) <= abs(remainder):
+                fills.append((so, so.quantity))
+                remainder += so.quantity
+            # Otherwise the vertex is all-or-nothing and larger than the remainder, so it cannot be used (a partially
+            # fillable vertex that large would have made partial_total sufficient).
+        return fills
+
+    def _supersede(self, order: Order) -> None:
+        """Retire an order whose matched and remainder legs are booked (or which was replaced): it leaves the book."""
+        order.status = OrderStatus.SUPERSEDED
+        self.orderList = [x for x in self.orderList if x is not order]
+
+    def _apply_fills(self, aggressive_order: Order, ao: Vertex, fills: list, price: float):
+        """
+        Match the aggressive order against planned fills of standing orders at one price.
 
         Parameters:
-            aggressive_order: (Order) The current form of the order that is being matched. This order may be revised at
-                              each inflection price as successful match transactions are made.
-            list_of_orders: (list) of standing limit orders at this price.
-            price: (float) [$/kWh_e] The price at which matches are currently being made. This price is a member of
-                           a set of Vertex inflection points among all aggressive and standing orders.
+            aggressive_order: (Order) The order being matched, in its current (possibly already partly matched) form.
+            ao: (Vertex) The aggressive order's quantity and continuity at this price.
+            fills: (list) of (standing-order Vertex at this price, quantity to take from it), from a fill planner.
+            price: (float) [$/kWh] The price at which these matches are made.
 
-        Returns: None
+        Returns: (Order or None) The aggressive order's remainder to carry to later prices, the unchanged aggressive
+                 order if nothing could be committed, or None when it is fully matched.
 
-        Notes:
-        - This block was made into a function to improve code readability. Additionally, it would have been written out
-          at least twice otherwise, so it is less vulnerable to corruption as a functional code block.
+        The standing-order legs are computed first without touching the book. If the aggressive order would be left
+        with a remainder it cannot accept (it is all-or-nothing at this price), nothing is committed and the book is
+        unchanged. Otherwise every filled standing order is superseded by its matched and remainder legs, the
+        aggressive order is superseded by its matched legs (one per counterparty), and its remainder is returned.
         """
-        # #### Begin Code Logic Block A #### ***********************************************************
-
-        # Initialize matched and unmatched ao quantity for this price
-        matched_quantity: float = 0.0
-        ao = aggressive_order.get_quantity_from_price(test_price=price)
-        unmatched_quantity: float = ao.quantity
-
-        # Initialize lists of matched and unmatched order remainders.
-        tentative_new_matches = []
-        tentative_revised_orders = []
-
-        # Index through sorted so quantities
-        for so in list_of_orders:
-
-            # CASE: There is no unmatched quantity remaining
-            if unmatched_quantity == 0.0:
-                break
-
-            # Retrieve the standing order from this Vertex.
-            standing_order: Order = self.get_order_by_id(
-                an_id=so.curve.id
-            )
-
-            # CASE: ao remainder quantity < so quantity
-            if abs(unmatched_quantity) < abs(so.quantity):
-
-                # CASE: so quantity is not continuous
-                if not so.continuity:
-                    continue
-
-                # CASE: so quantity is continuous
-                elif so.continuity:
-
-                    matched_order, unmatched_order = standing_order.match(
-                        quantity=-unmatched_quantity,
-                        match_price=price,
-                        counter_party=aggressive_order.actor
-                    )
-
-                    # Record the tentative so and ao matches
-                    if matched_order and matched_order.order_or_none():
-                        tentative_new_matches.append(matched_order)
-
-                    if unmatched_order and unmatched_order.order_or_none():
-                        tentative_revised_orders.append(unmatched_order)
-
-                    # Update matched quantity and quantity remainder (there should be no remainder)
-                    matched_quantity = matched_quantity + unmatched_quantity
-                    unmatched_quantity = 0.0
-
-            # CASE: ao remainder quantity >= so quantity
-            elif abs(unmatched_quantity) >= abs(so.quantity):
-
-                matched_order, unmatched_order = standing_order.match(
-                    quantity=so.quantity,
-                    match_price=price,
-                    counter_party=aggressive_order.actor
-                )
-
-                # Record the tentative so and ao matches
-                if matched_order and matched_order.order_or_none():
-                    tentative_new_matches.append(matched_order)
-
-                if unmatched_order and unmatched_order.order_or_none():
-                    tentative_revised_orders.append(unmatched_order)
-
-                # Update matched quantity and unmatched remainder quantity
-                matched_quantity = matched_quantity - so.quantity
-                unmatched_quantity = unmatched_quantity + so.quantity
-
-        # CASE: There is an unmatched ao remainder and ao continuity is false
+        if not fills:
+            return aggressive_order  # nothing at this price can be taken
+        matched_quantity = -sum(quantity for _, quantity in fills)
+        unmatched_quantity = ao.quantity - matched_quantity
+        tentative = []
+        for so, quantity in fills:
+            standing_order: Order = self.get_order_by_id(an_id=so.curve.id)
+            children_before = len(standing_order.child_order_ids)
+            matched_order, unmatched_order = standing_order.match(quantity=quantity, match_price=price,
+                                                                  counter_party=aggressive_order.actor)
+            tentative.append((standing_order, children_before, quantity, matched_order, unmatched_order))
         if unmatched_quantity != 0.0 and not ao.continuity:
+            for standing_order, children_before, _, _, _ in tentative:
+                del standing_order.child_order_ids[children_before:]  # these legs are never booked
             return aggressive_order
-
-        # CASE: There is either no unmatched remainder, or ao continuity is true
-        elif unmatched_quantity == 0.0 or ao.continuity:
-
-            # Index through the tentative new matches
-            for tnm in tentative_new_matches:
-                #  Create and record match order for matched so quantity
-                self.matchList.append(tnm)
-
-                #  Create and record order for matched ao quantity
-                matched_order, unmatched_order = aggressive_order.match(
-                    quantity=-tnm.vertices[-1].quantity,
-                    match_price=price,
-                    counter_party=tnm.actor
-                )
-
+        for standing_order, _, quantity, matched_order, unmatched_order in tentative:
+            self._supersede(standing_order)
+            if matched_order and matched_order.order_or_none():
                 self.matchList.append(matched_order)
-
-            # Index through the tentative revised orders
-            for tro in tentative_revised_orders:
-                self.orderList.append(tro)
-                self.orderList = [x for x in self.orderList if x.id != tro.parent_order_id]
-
-            #  Create and record match order for matched so quantity
-            # if matched_quantity != 0.0:
-            matched_order, unmatched_order = aggressive_order.match(
-                quantity=matched_quantity,
-                match_price=price,
-                counter_party=None
-            )
-
-            #  Revise new order for unmatched quantity
+                aggressive_leg, _ = aggressive_order.match(quantity=-quantity, match_price=price,
+                                                           counter_party=standing_order.actor)
+                self.matchList.append(aggressive_leg)
             if unmatched_order and unmatched_order.order_or_none():
-                aggressive_order = copy(aggressive_order)
-                aggressive_order.vertices = unmatched_order.vertices
-            else:
-                aggressive_order = None
-
-            return aggressive_order
+                self.orderList.append(unmatched_order)
+        remainder = aggressive_order.remainder(matched_quantity) if matched_quantity != 0.0 else None
+        self._supersede(aggressive_order)
+        return remainder if remainder and remainder.order_or_none() else None

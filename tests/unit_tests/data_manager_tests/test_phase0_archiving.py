@@ -162,3 +162,41 @@ def test_shared_simulation_anchor(tmp_path):
     assert t_second - first.simulation_start_time > timedelta(hours=1), 'joined the simulation in progress'
     row = first.data_manager.query_data('transactive_node')[0]
     assert row['simulation_anchor_time'] == anchor and row['created'] != anchor
+
+
+def test_bad_and_duplicate_records_are_quarantined_without_losing_the_batch(configured, caplog):  # audit T-01
+    dm = configured.data_manager
+    rows = dm.query_data('market_state_change')
+    template = dict(rows[0])
+    good = {'table_name': 'market_state_change', 'data': {**template, 'record_time': template['record_time'] + timedelta(seconds=1)}}
+    unparsable = {'table_name': 'market_state_change', 'data': {**template, 'record_time': 'not a time'}}
+    duplicate = {'table_name': 'market_state_change', 'data': dict(template)}
+    also_good = {'table_name': 'market_state_change', 'data': {**template, 'record_time': template['record_time'] + timedelta(seconds=2)}}
+    dm.archive_data([unparsable, good, duplicate, also_good])
+    after = dm.query_data('market_state_change')
+    assert len(after) == len(rows) + 2, 'both valid rows are written; the unparsable and duplicate ones are quarantined'
+    quarantined = [r.message for r in caplog.records if 'Quarantined' in r.message]
+    assert len(quarantined) == 2 and all('market_state_change' in m for m in quarantined)
+
+
+def test_unknown_table_is_skipped_and_other_records_written(configured):
+    dm = configured.data_manager
+    rows = dm.query_data('market_state_change')
+    template = dict(rows[0])
+    dm.archive_data([{'table_name': 'no_such_table', 'data': {'id': 1}},
+                     {'table_name': 'market_state_change',
+                      'data': {**template, 'record_time': template['record_time'] + timedelta(seconds=1)}}])
+    assert len(dm.query_data('market_state_change')) == len(rows) + 1
+
+
+def test_queue_before_archive_ready_is_unbounded_and_warns_once(caplog):  # audit T-INC-03
+    from tent.data_manager import DataManager
+    from tent.data_manager.local_data_manager import LocalDataManager
+    ldm = LocalDataManager.__new__(LocalDataManager)  # no database: only the pre-init_archive queueing is exercised
+    DataManager.__init__(ldm, parent=None, archival_buffer_length=3)
+    ldm.read_only = False
+    for i in range(5):
+        ldm.archive_data({'table_name': 't', 'data': {'i': i}})
+    assert len(ldm.archival_queue) == 5, 'nothing is dropped'
+    assert [r['data']['i'] for r in ldm.archival_queue] == [0, 1, 2, 3, 4]
+    assert sum('archive is not ready' in r.message for r in caplog.records) == 1

@@ -47,7 +47,7 @@ from datetime import datetime, timezone
 from itertools import chain
 from sortedcontainers import SortedList
 from typing import Any, Callable
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, available_timezones
 
 from tent.base import Archivable
 import tent.containers as containers
@@ -76,8 +76,7 @@ class TransactiveNode(Archivable):
         self.simulation_one_hour_in_seconds = 3600
         self.simulation_anchor_time: datetime | None = None  # real time at which simulated time equals its start
         self.status = status                                    # future: will be enumeration
-        now = datetime.now(timezone.utc).astimezone()
-        self.tz = now.tzinfo.tzname(now)
+        self.tz = 'UTC'  # IANA zone name; configured per node. (The host's abbreviation, e.g. PDT, is not a zone.)
 
         self._data_manager = None
 
@@ -137,6 +136,8 @@ class TransactiveNode(Archivable):
         self.organization_id = updated_configs.get('organization_id', self.organization_id)
         self.status = updated_configs.get('status', self.status)
         self.tz = updated_configs.get('tz', self.tz)
+        if self.tz not in available_timezones():
+            raise ValueError(f'tz must be an IANA zone name such as "America/Los_Angeles" or "UTC"; got {self.tz!r}')
         return updated_configs
 
     def _setup_timer(self, config):

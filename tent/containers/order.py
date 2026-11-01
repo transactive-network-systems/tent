@@ -60,6 +60,7 @@ class Order(SDCurve):
             raise TypeError("A Neighbor or LocalAsset object must own every bid or offer.")
         self.status: OrderStatus = OrderStatus.NEW
         self.parent_order_id = parent_order_id if parent_order_id else None
+        self.root_order_id = self.id  # the order this lineage descends from; copies carry their parent's root.
         self.child_order_ids: list = []
         self.__expireBy__: datetime = expire_by if expire_by is not None else Timer.now() + OFFER_DURATION
         self.supply_or_demand: SupplyOrDemand = supply_or_demand
@@ -125,6 +126,24 @@ class Order(SDCurve):
             self.status = OrderStatus.REVISED_MATCHED
         return None
 
+    def remainder(self, quantity: float):
+        """
+        The part of this order left after transacting the given quantity: a revised copy with every vertex quantity
+        reduced by it, or None if nothing is left. The quantity carries the sign of this order's side (> 0 for supply,
+        < 0 for demand). This order itself is unchanged.
+        """
+        points = [Vertex(price=pp.price, quantity=pp.quantity - quantity, continuity=pp.continuity, curve=self)
+                  for pp in list(self.vertices)]
+        unmatched_order: Order or None = copy(self)
+        unmatched_order.vertices = points
+        unmatched_order.mark_as_revised()
+        unmatched_order.assign_buyer_or_seller()
+        if self.supply_or_demand == SupplyOrDemand.SUPPLY:
+            return unmatched_order.check_supply_order()
+        elif self.supply_or_demand == SupplyOrDemand.DEMAND:
+            return unmatched_order.check_demand_order()
+        return None
+
     def match(self, quantity: float, match_price: float, counter_party: Neighbor or LocalAsset or None = None):
         """
         Creates Order objects for the matched and remainder unmatched quantities of the original Order object after
@@ -141,7 +160,9 @@ class Order(SDCurve):
 
         Notes:
         - The caller is responsible to place any returned matched or unmatched orders into the appropriate order lists
-          of books.
+          of books, and to supersede this order (see MatchingEngine._supersede) once the match is committed. This
+          method only computes and records the parentage of the two copies; it changes neither this order's status nor
+          the book.
         - The quantity property sign must be > 0 for a supply order object and < 0 for a demand order object.
         - This method name unfortunately mirrors one used by MatchingEngine market. This may be a source of confusion.
         - The matched and unmatched Order objects now originate from copies of self. The copy method is overridden to
@@ -160,34 +181,8 @@ class Order(SDCurve):
 
         # Translate the order quantity and create a new draft order object for the remainder quantity. (The draft
         # order will be corrected later.)
-        points = []
-        for pp in list(self.vertices):
-            remainder = pp.quantity - quantity
-            points.append(
-                Vertex(
-                    price=pp.price,
-                    quantity=remainder,
-                    continuity=pp.continuity,
-                    curve=self
-                )
-            )
+        unmatched_order: Order or None = self.remainder(quantity)
 
-        unmatched_order: Order or None = copy(self)
-        unmatched_order.vertices = points
-        # The remainder is a revision of the order it came from: a standing order's remainder is a revised standing
-        # order and stays matchable in the book; an aggressive order's remainder is re-booked by the engine.
-        unmatched_order.mark_as_revised()
-        unmatched_order.assign_buyer_or_seller()
-
-        if self.supply_or_demand == SupplyOrDemand.SUPPLY:
-            unmatched_order = unmatched_order.check_supply_order()
-        elif self.supply_or_demand == SupplyOrDemand.DEMAND:
-            unmatched_order = unmatched_order.check_demand_order()
-        else:
-            unmatched_order = None
-
-        # [The match is a market order] (I.e., it must be represented by one Vertex having infinite magnitude.)
-        # Create a matched order object based on quantity and match price.
         if abs(match_price) == float('inf'):
             matched_order: Order = copy(self)
             matched_order.vertices = [
@@ -226,10 +221,8 @@ class Order(SDCurve):
         # else:
         #     matched_order = None
 
-        self.status = OrderStatus.SUPERSEDED
-
-        if (matched_order or unmatched_order) and any([x == self for x in self.market.orderList]):
-            self.market.orderList = [x for x in self.market.orderList if x != self]
+        # This order is not altered here: the MatchingEngine supersedes it (status, removal from the book) only when it
+        # commits the match, so that a match computed tentatively can be abandoned without losing the standing order.
 
         if matched_order and matched_order.order_or_none():
             if matched_order.buyer == self.actor:
@@ -743,6 +736,7 @@ class Order(SDCurve):
                             )
         self.child_order_ids.append(copiedOrder.id)  # This identifies the copy as a child of the copied Order.
         copiedOrder.time_stamp = self.time_stamp
+        copiedOrder.root_order_id = self.root_order_id
         copiedOrder.status = self.status
         copiedOrder.child_order_ids = []
         copiedOrder.description = self.description

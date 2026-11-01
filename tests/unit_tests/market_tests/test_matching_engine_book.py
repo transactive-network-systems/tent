@@ -11,6 +11,7 @@ from the matching algorithm and checked as exact multisets rather than the legac
 from collections import Counter
 from copy import copy
 from datetime import timedelta
+from unittest.mock import patch
 
 import pytest
 from uuid6 import uuid7
@@ -20,7 +21,7 @@ from tent.containers.vertex import Vertex
 from tent.enumerations import MarketState, OrderStatus, SupplyOrDemand, VTypes
 from tent.local_asset import LocalAsset
 from tent.market.market_series import MarketSeries
-from tent.market.matching_engine import MatchingEngine, MatchingStrategy, Role
+from tent.market.matching_engine import MatchingEngine, MatchingStrategy, Quote, Role
 from tent.neighbor import Neighbor
 from tent.utils.timer import Timer
 from tests.mock_tn import MockTN
@@ -541,3 +542,133 @@ def test_series_spawns_matching_engines_with_the_same_configuration(engine):
             == engine.transition_times.delivery - engine.transition_times.delivery_lead), 'same delivery lead'
     assert spawned.time_intervals[0].duration == engine.time_intervals[0].duration
     assert series.newest_market is spawned and engine in series.markets
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# All-or-nothing aggressive orders: nothing is committed unless the order fills completely (audit T-06)
+# ---------------------------------------------------------------------------------------------------------------------
+
+def test_unfillable_all_or_nothing_order_leaves_the_book_intact(engine, neighbor, asset):
+    """50 kW partially fillable + 20 kW all-or-nothing supply cannot fill a 60 kW all-or-nothing demand: the 50 kW order
+    must still be standing afterwards (it used to be superseded by a tentative match that was then abandoned)."""
+    big = limit_order(engine, neighbor, 0.1, 50.0)
+    small = limit_order(engine, neighbor, 0.1, 20.0, continuous=False)
+    engine.orderList = [big, small]
+    new_order = limit_order(engine, asset, 0.1, -60.0, continuous=False, status=OrderStatus.NEW)
+    engine.match(new_order)
+    assert engine.matchList == []
+    assert [o for o in engine.orderList if o is big] and [o for o in engine.orderList if o is small]
+    assert big.status is OrderStatus.STANDING_ORDER and small.status is OrderStatus.STANDING_ORDER
+    assert big.child_order_ids == [] and small.child_order_ids == [], 'abandoned legs leave no lineage behind'
+    assert new_order.status is OrderStatus.STANDING_ORDER and any(o is new_order for o in engine.orderList)
+    rows = engine.tn.data_manager.by_table('order')
+    assert {r['id'] for r in rows} == {new_order.id}, 'only the resting aggressive order was archived'
+    # The book is still live: a partially fillable 60 kW demand now takes the 50 and rests its remaining 10.
+    engine.match(limit_order(engine, asset, 0.1, -60.0, status=OrderStatus.NEW))
+    assert_balanced_matches(engine, 2, Counter({50.0: 2}))
+    assert Counter(o.vertices[-1].quantity for o in engine.orderList) == Counter({20.0: 1, -60.0: 1, -10.0: 1})
+
+
+def test_all_or_nothing_order_fills_when_the_book_covers_it_exactly(engine, neighbor, asset):
+    engine.orderList = [limit_order(engine, neighbor, 0.1, 50.0), limit_order(engine, neighbor, 0.1, 10.0)]
+    engine.match(limit_order(engine, asset, 0.1, -60.0, continuous=False, status=OrderStatus.NEW))
+    assert_balanced_matches(engine, 4, Counter({50.0: 2, 10.0: 2}))
+    assert engine.orderList == []
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# PROPORTIONAL_VOLUME (audit T-INC-05)
+# ---------------------------------------------------------------------------------------------------------------------
+
+def _leg_for(engine, parent):
+    return next(m for m in engine.matchList if m.parent_order_id == parent.id).vertices[-1].quantity
+
+
+def test_proportional_volume_splits_the_fill_among_partially_fillable_orders(engine, neighbor, asset):
+    a = limit_order(engine, neighbor, 0.1, 40.0)
+    b = limit_order(engine, neighbor, 0.1, 30.0)
+    c = limit_order(engine, neighbor, 0.1, 50.0, continuous=False)
+    engine.orderList = [a, b, c]
+    engine.matching_strategy = [MatchingStrategy.PROPORTIONAL_VOLUME]
+    engine.match(limit_order(engine, asset, 0.1, -35.0, status=OrderStatus.NEW))
+    # The partially fillable 70 kW covers the 35 kW asked: a and b are filled pro rata (4:3); c is not touched.
+    assert_balanced_matches(engine, 4, Counter({20.0: 2, 15.0: 2}))
+    assert _leg_for(engine, a) == 20.0 and _leg_for(engine, b) == 15.0
+    assert any(o is c for o in engine.orderList) and c.status is OrderStatus.STANDING_ORDER
+    remainders = {o.parent_order_id: o.vertices[-1].quantity for o in engine.orderList if o is not c}
+    assert remainders == {a.id: 20.0, b.id: 15.0}
+    assert all(o.status is OrderStatus.REVISED_STANDING_ORDER for o in engine.orderList if o is not c)
+
+
+def test_proportional_volume_takes_whole_orders_until_the_partial_set_covers_the_rest(engine, neighbor, asset):
+    a = limit_order(engine, neighbor, 0.1, 40.0)
+    b = limit_order(engine, neighbor, 0.1, 30.0)
+    c = limit_order(engine, neighbor, 0.1, 100.0, continuous=False)
+    d = limit_order(engine, neighbor, 0.1, 60.0, continuous=False)
+    engine.orderList = [a, b, c, d]
+    engine.matching_strategy = [MatchingStrategy.PROPORTIONAL_VOLUME]
+    engine.match(limit_order(engine, asset, 0.1, -150.0, status=OrderStatus.NEW))
+    # 70 kW partially fillable < 150: the largest order (100, all-or-nothing) is taken whole; 70 >= the remaining 50,
+    # so a and b split it 4:3. d (60 > 50, all-or-nothing) is skipped and stays.
+    assert _leg_for(engine, c) == 100.0
+    assert _leg_for(engine, a) == pytest.approx(50.0 * 40.0 / 70.0)
+    assert _leg_for(engine, b) == pytest.approx(50.0 * 30.0 / 70.0)
+    assert sum(v.quantity for m in engine.matchList for v in m.vertices) == pytest.approx(0.0)
+    assert len(engine.matchList) == 6
+    assert any(o is d for o in engine.orderList) and d.status is OrderStatus.STANDING_ORDER
+    assert sum(o.vertices[-1].quantity for o in engine.orderList) == pytest.approx(60.0 + 20.0)
+
+
+def test_proportional_volume_with_no_partially_fillable_orders_falls_back_to_whole_fills(engine, neighbor, asset):
+    engine.orderList = [limit_order(engine, neighbor, 0.1, 40.0, continuous=False),
+                        limit_order(engine, neighbor, 0.1, 30.0, continuous=False)]
+    engine.matching_strategy = [MatchingStrategy.PROPORTIONAL_VOLUME]
+    engine.match(limit_order(engine, asset, 0.1, -50.0, status=OrderStatus.NEW))
+    assert_balanced_matches(engine, 2, Counter({40.0: 2}))
+    assert Counter(o.vertices[-1].quantity for o in engine.orderList) == Counter({30.0: 1, -10.0: 1})
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# Order expiry (audit T-INC-04)
+# ---------------------------------------------------------------------------------------------------------------------
+
+def test_expired_standing_orders_leave_the_book_and_their_quote(engine, neighbor, asset):
+    now = Timer.now()
+    stale = Order(engine, engine.time_intervals[0], neighbor, expire_by=now - ONE_MINUTE,
+                  vertices=[Vertex(price=-INF, quantity=100.0)], supply_or_demand=SupplyOrDemand.SUPPLY)
+    stale.status = OrderStatus.STANDING_ORDER
+    fresh = market_order(engine, neighbor, 50.0)
+    engine.orderList = [stale, fresh]
+    engine.quotes = {'stale': Quote(version=1, orders=[stale]), 'fresh': Quote(version=1, orders=[fresh])}
+    engine.while_in_negotiation()
+    assert stale.status is OrderStatus.EXPIRED and not any(o is stale for o in engine.orderList)
+    assert [o for o in engine.orderList] == [fresh] and fresh.status is OrderStatus.STANDING_ORDER
+    assert set(engine.quotes) == {'fresh'}
+    rows = engine.tn.data_manager.by_table('order')
+    assert [r['status'] for r in rows if r['id'] == stale.id] == [OrderStatus.EXPIRED]
+
+
+def test_expired_remainder_expires_its_quote_lineage_and_the_curve_is_requoted(engine, neighbor, asset):
+    """A quoted order's remainder (a copy) expires with its quote; the entity's still-active curve is quoted again with
+    a fresh expiry. Matched legs stay where they are."""
+    engine.order_expiry = timedelta(minutes=10)
+    ti = engine.time_intervals[0]
+    asset.active_vertices.update(ti, [Vertex(price=0.1, quantity=0.0), Vertex(price=0.1, quantity=100.0)])
+    t0 = Timer.now()
+    with patch.object(Timer, 'now', return_value=t0):
+        engine.while_in_negotiation()
+        quoted = engine.orderList[0]
+        assert quoted.expire_by == t0 + timedelta(minutes=10)
+        engine.submit_order(market_order(engine, neighbor, -30.0, status=OrderStatus.NEW))
+        engine.while_in_negotiation()
+    remainder = next(o for o in engine.orderList if o.actor is asset)
+    assert remainder.root_order_id == quoted.id and remainder.vertices[-1].quantity == 70.0
+    assert len(engine.matchList) == 2
+    with patch.object(Timer, 'now', return_value=t0 + timedelta(minutes=11)):
+        engine.while_in_negotiation()
+    assert remainder.status is OrderStatus.EXPIRED
+    assert len(engine.matchList) == 2, 'matched legs are transactions and do not expire'
+    requoted = [o for o in engine.orderList if o.actor is asset]
+    assert len(requoted) == 1 and requoted[0].root_order_id != quoted.id
+    assert requoted[0].vertices[-1].quantity == 100.0 and requoted[0].expire_by == t0 + timedelta(minutes=21)
+    assert engine.quotes[(asset.id, ti.id)].orders == requoted

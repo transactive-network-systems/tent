@@ -79,7 +79,7 @@ class Market(Component):
         market_name = '_'.join((*market_series.name.split(' '), transition_times.delivery_lead.isoformat(timespec='seconds')))
         super(Market, self).__init__(market_series.description, market_name, transactive_node)
 
-        self.series: MarketSeries = proxy(market_series, safe_weak_proxy_callback(self, 'market_series'))
+        self.series: MarketSeries = proxy(market_series, safe_weak_proxy_callback(self, 'series'))
         self.transition_times: MarketTimings = transition_times
 
         #### References to other markets: ####
