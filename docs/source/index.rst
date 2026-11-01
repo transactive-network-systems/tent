@@ -48,6 +48,7 @@ TENT empowers autonomous agents—representing commercial buildings, municipal g
    design/identify_components
    design/build_component_configurations
    design/configuration_models
+   configuration/configuring_a_node
    design/deploy_tn_agents
    design/consensus_market
 

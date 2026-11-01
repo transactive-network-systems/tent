@@ -128,7 +128,9 @@ class TransactiveSignal(SDMeasurement):
     def _mark_balance_point(self, ti: TimeInterval, quantity: float) -> None:
         """Mark the vertex at quantity on the interval's curve as its balance point: a lone vertex is inelastic and is
         the balance point whatever the quantity; a vertex already at the quantity (within interpolation noise) is
-        reused rather than duplicated; otherwise a vertex is interpolated on the curve and added."""
+        reused rather than duplicated; a quantity a hair beyond either end of the curve (SDCurve.END_VERTEX_TOLERANCE,
+        the rounding between a scheduled power and the curve it was read from) is that end vertex; otherwise a vertex
+        is interpolated on the curve and added."""
         sd_curve: SDCurve = self.get_by_interval(ti)
         if sd_curve.empty:
             # A signal never holds an empty curve (prep_transactive_signal refuses one); reaching this is a bug.
@@ -139,6 +141,12 @@ class TransactiveSignal(SDMeasurement):
         tolerance = 1e-6 * max(1.0, abs(quantity))
         existing = vertices[0] if len(vertices) == 1 else next(
             (v for v in vertices if abs(v.quantity - quantity) <= tolerance), None)
+        if existing is None:
+            lowest, highest = min(vertices, key=lambda v: v.quantity), max(vertices, key=lambda v: v.quantity)
+            if quantity < lowest.quantity and sd_curve.is_at_end_vertex(quantity, lowest):
+                existing = lowest
+            elif quantity > highest.quantity and sd_curve.is_at_end_vertex(quantity, highest):
+                existing = highest
         if existing is not None:
             self.__balance_vertices[ti] = existing
             return
