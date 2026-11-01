@@ -184,7 +184,10 @@ table (`version`, `fingerprint`, `application`, `application_version`, `created`
 creates it. Opening an existing database written with another version raises `ArchiveSchemaMismatch` naming both
 versions; nothing is migrated, the database is recreated or read with a TENT of its own version.
 `open_archive(url).schema_version` reports the version of an archive (`None` for a database without the table, meaning
-version 1). `archive_schema_fingerprint()` is a SHA-256 of the canonical JSON of the shipped definitions and
+version 1). Archive rows carry infinities (an inelastic vertex's price) and NaN (a degenerate curve's cost); written
+straight to a database they are the Float column's infinity, except that SQLite has no NaN and keeps NULL; sent over a
+JSON wire (the VOLTTRON agent to the historian) they travel as the library's `{"$float": "inf" | "-inf" | "nan"}` token
+and the receiving data manager decodes them. `archive_schema_fingerprint()` is a SHA-256 of the canonical JSON of the shipped definitions and
 enumerations; the test `tests/unit_tests/data_manager_tests/test_archive_schema.py` records the fingerprint of each
 version and fails when a definition changes without a bump.
 

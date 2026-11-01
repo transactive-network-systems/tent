@@ -195,10 +195,12 @@ def json_encoder(obj):
     json.dumps would report itself; returning obj.__dict__ (the former behaviour) silently produced wrong output.
 
     Floats never reach a `default` hook, so this cannot keep non-finite numbers out of the output; json.dumps emits
-    them as the JavaScript literals Infinity and NaN, which are not JSON. TENT's one representation of an infinite
-    value on the wire is the transactive signal's `null` price (tent.containers.transactive_signal_message); nothing
-    else carries one. Use json_dumps, which refuses non-finite numbers, so a stray one fails loudly here rather than
-    at the receiver.
+    them as the JavaScript literals Infinity and NaN, which are not JSON. On the wire an infinite value has two
+    representations, each at its boundary: the transactive signal's `null` price
+    (tent.containers.transactive_signal_message), and in archive records the library's {"$float": "inf" | "-inf" |
+    "nan"} token (archivable.encoding), which the publishing data manager applies before the record reaches json_dumps
+    and the receiving data manager decodes. Nothing else carries one. Use json_dumps, which refuses non-finite
+    numbers, so a stray one fails loudly here rather than at the receiver.
     """
     if isinstance(obj, (datetime, time)):
         return obj.isoformat()
