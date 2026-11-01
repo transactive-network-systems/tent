@@ -20,9 +20,13 @@ _log = logging.getLogger(__name__)
 class LocalDataManager(ArchiveReader, DataManager):
     def __init__(self, parent, db_params: dict, *args, **kwargs):
         super(LocalDataManager, self).__init__(parent, *args, **kwargs)
-        # TODO: Should this just be checking for a db_type of local? Is this the same code for postgres or others?
-        self.db_params = db_params if db_params else {}
-        database_url = self.db_params.get('url', 'sqlite:///tent_db.sqlite')
+        self.db_params = dict(db_params) if db_params else {}
+        # The archive location is always configured: a default relative to the process's working directory put the
+        # archive wherever the agent happened to be started, and a rebuilt container discarded it.
+        database_url = self.db_params.get('url')
+        if not database_url:
+            raise ValueError('LocalDataManager needs db_params["url"], a SQLAlchemy URL such as '
+                             '"sqlite:////home/user/db/node.sqlite" or "postgresql://user:password@host/db".')
         self.engine = create_engine(database_url)
 
     def init_archive(self):
@@ -173,9 +177,6 @@ class LocalDataManager(ArchiveReader, DataManager):
 
     def _normalize_data(self, table_name: str, data: Mapping) -> dict:
         orm = self._get_orm(table_name)
-
-        if orm is None:
-            return dict(data)
         return {
             key: self._normalize_value(getattr(orm, key), value)
             for key, value in data.items()
@@ -186,10 +187,13 @@ class LocalDataManager(ArchiveReader, DataManager):
         if value is None:
             return None
         if isinstance(column.type, Boolean):
+            if isinstance(value, bool):
+                return value
             if value in ['T', 'True', 't', 'true', 'TRUE', '1', '1.0', 1, 1.0, 'y', 'Y', 'yes', 'Yes', 'YES']:
                 return True
-            elif value in ['F', 'False', 'FALSE', 'f', 'false', '0', '0.0', 0, 0.0, 'no', 'No', 'NO']:
+            if value in ['F', 'False', 'FALSE', 'f', 'false', '0', '0.0', 0, 0.0, 'no', 'No', 'NO']:
                 return False
+            raise ValueError(f'{column.name}: {value!r} is not a recognised Boolean value.')
         if isinstance(column.type, Float) and isinstance(value, bool):
             # Boolean-valued measurements (convergence flags, engagement schedules) share measurement_value.value; the
             # measurement header's unit says they are booleans. PostgreSQL will not coerce bool to double precision.

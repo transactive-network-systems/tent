@@ -145,9 +145,8 @@ def _build_node_config() -> dict:
         # Data manager (stub — no DB writes in tests)
         # ----------------------------------------------------------------
         "data_manager": {
-            "class_name": "LocalDataManager",
-            "module_name": "tent.data_manager.local_data_manager",
-            "db_params": {},
+            "class_name": "NullDataManager",
+            "module_name": "tent.data_manager.null_data_manager"
         },
         # ----------------------------------------------------------------
         # Information service: temperature forecast (CSV path is None;

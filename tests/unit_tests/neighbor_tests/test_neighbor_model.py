@@ -1576,18 +1576,15 @@ def test_include_marginal_losses():
     expected_power = 10 * (1 - (10/test_neighbor.maximum_power) * test_neighbor.loss_factor)
     expected_price = 0.1 / (1 - 2 * (10/test_neighbor.maximum_power) * test_neighbor.loss_factor)
     
-    # Check supply vertices (indices 2, 5, 8 have quantity=10)
-    assert new_vertices[2].quantity == pytest.approx(expected_power), 'Power was not as expected for vertex 2'
-    assert new_vertices[5].quantity == pytest.approx(expected_power), 'Power was not as expected for vertex 5'
-    assert new_vertices[8].quantity == pytest.approx(expected_power), 'Power was not as expected for vertex 8'
-    assert new_vertices[2].price == pytest.approx(-expected_price), 'Price was not as expected for vertex 2'
-    assert new_vertices[5].price == pytest.approx(0), 'Price was not as expected for vertex 5'
-    assert new_vertices[8].price == pytest.approx(expected_price), 'Price was not as expected for vertex 8'
-    
-    # Check demand vertices (indices 0, 3, 6 have quantity=-10) - should be unchanged
-    assert new_vertices[0].quantity == -10, 'Demand vertex should be unchanged'
-    assert new_vertices[3].quantity == -10, 'Demand vertex should be unchanged'
-    assert new_vertices[6].quantity == -10, 'Demand vertex should be unchanged'
+    # The curve is ordered by (price, quantity), and the corrected supply vertices take their new places in that order
+    # (a corrected vertex replaces the original; see SDCurve.replace_vertex), so the vertices are found by role.
+    supply = [v for v in new_vertices if v.quantity > 0]
+    demand = [v for v in new_vertices if v.quantity < 0]
+    assert [v.quantity for v in supply] == pytest.approx([expected_power] * 3), 'Supply powers were not as expected'
+    assert [v.price for v in supply] == pytest.approx([-expected_price, 0, expected_price]), 'Supply prices were not as expected'
+    assert [v.quantity for v in demand] == [-10, -10, -10], 'Demand vertices should be unchanged'
+    assert [v.price for v in demand] == [-0.1, 0, 0.1], 'Demand vertices should be unchanged'
+    assert all(v in sd_curve.vertices for v in new_vertices), 'every vertex is found under its own hash'
 
     # TEST 2
     test_neighbor = Neighbor(transactive_node=tn, cost_parameters=[])
@@ -1802,21 +1799,15 @@ def test_remove_marginal_losses():
                      (1 - (1 - 4 * (10/test_neighbor.maximum_power) * test_neighbor.loss_factor) ** 0.5)
     expected_price = 0.1 * (1 - 2 * (-expected_power / test_neighbor.maximum_power) * test_neighbor.loss_factor)
     
-    # Check that only demand vertices (quantity<0) were modified
-    # Vertices at indices 0, 3, 6 are demand vertices (original quantity=-10)
-    assert new_vertices[0].quantity == pytest.approx(expected_power), f'Power was not as expected for vertex 0'
-    assert new_vertices[3].quantity == pytest.approx(expected_power), f'Power was not as expected for vertex 3'
-    assert new_vertices[6].quantity == pytest.approx(expected_power), f'Power was not as expected for vertex 6'
-    
-    assert new_vertices[0].price == pytest.approx(-expected_price), f'Price was not as expected for vertex 0'
-    assert new_vertices[3].price == pytest.approx(0), f'Price was not as expected for vertex 3'
-    assert new_vertices[6].price == pytest.approx(expected_price), f'Price was not as expected for vertex 6'
-    
-    # Check that supply and neutral vertices were NOT modified
-    assert new_vertices[1].quantity == 0 and new_vertices[1].price == -0.1, 'Vertex 1 should be unchanged'
-    assert new_vertices[2].quantity == 10 and new_vertices[2].price == -.1, 'Vertex 2 should be unchanged'
-    assert new_vertices[4].quantity == 0 and new_vertices[4].price == 0, 'Vertex 4 should be unchanged'
-    assert new_vertices[5].quantity == 10 and new_vertices[5].price == 0, 'Vertex 5 should be unchanged'
+    # Only demand vertices (quantity < 0) are modified; each corrected vertex replaces the original and takes its place
+    # in the curve's (price, quantity) order, so the vertices are found by role rather than by index.
+    demand = [v for v in new_vertices if v.quantity < 0]
+    others = [v for v in new_vertices if v.quantity >= 0]
+    assert [v.quantity for v in demand] == pytest.approx([expected_power] * 3), 'Demand powers were not as expected'
+    assert [v.price for v in demand] == pytest.approx([-expected_price, 0, expected_price]), 'Demand prices were not as expected'
+    assert sorted((v.price, v.quantity) for v in others) == [(-0.1, 0), (-0.1, 10), (0, 0), (0, 10), (0.1, 0), (0.1, 10)], \
+        'Supply and neutral vertices should be unchanged'
+    assert all(v in sd_curve.vertices for v in new_vertices), 'every vertex is found under its own hash'
     assert new_vertices[7].quantity == 0 and new_vertices[7].price == 0.1, 'Vertex 7 should be unchanged'
     assert new_vertices[8].quantity == 10 and new_vertices[8].price == 0.1, 'Vertex 8 should be unchanged'
 

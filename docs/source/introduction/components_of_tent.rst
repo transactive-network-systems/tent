@@ -33,3 +33,5 @@ Provides environmental context and forecasts (e.g., outdoor air temperature, wea
 7. Data Manager (``tent.data_manager``)
 ---------------------------------------
 Handles relational database persistence (via SQLAlchemy) for market clearing prices, orders, asset schedules, and physical telemetry.
+``LocalDataManager`` writes to the database named by ``db_params.url`` (a SQLAlchemy URL, required). ``NullDataManager``
+accepts every record and keeps none; it is used when a node's configuration has no ``data_manager`` block and by tests.

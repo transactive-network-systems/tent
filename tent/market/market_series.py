@@ -61,6 +61,10 @@ class MarketSeries(Component):
             raise TypeError(f'MarketSeries {name}: {sorted(reserved)} are set by the series when it spawns markets '
                             f'and cannot be configured as market keywords.')
         self.market_kwargs: dict = dict(market_kwargs)
+        self._validate_timings(name, duration_active=duration_active, duration_negotiation=duration_negotiation,
+                               duration_market_lead=duration_market_lead, duration_delivery_lead=duration_delivery_lead,
+                               duration_reconciliation=duration_reconciliation, interval_duration=interval_duration,
+                               intervals_to_clear=intervals_to_clear, market_clearing_interval=market_clearing_interval)
         self.duration: MarketDurations = MarketDurations.new(duration_active, duration_negotiation,
                                                              duration_market_lead, duration_delivery_lead,
                                                              duration_reconciliation, interval_duration,
@@ -86,10 +90,13 @@ class MarketSeries(Component):
         self.method: Method = (method if isinstance(method, Method)
                                else Method(method) if isinstance(method, int)
                                else Method[method.title()])
-        # Build price model spec if provided or fall back to simple default.
         # The price model configuration: class_name (HourlyAveragePriceModel unless the configuration says otherwise,
         # module_name for a class TENT does not ship) and the constructor keywords, default_price among them unless the
-        # configuration overrides it. Resolved and constructed at each spawn until a market exists to copy from.
+        # configuration overrides it. The configured dict is not modified. Resolved once; constructed at each spawn
+        # until a market exists to copy from.
+        if price_model is not None and not isinstance(price_model, dict):
+            raise TypeError(f'MarketSeries {name}: price_model must be a dict naming the class and its keywords, '
+                            f'not {type(price_model).__name__}')
         self.price_model_spec: dict = {'class_name': 'HourlyAveragePriceModel', 'default_price': self.default_price,
                                        **(price_model or {})}
         self.price_model_class: Type[PriceModel] = get_class_from_spec(self.price_model_spec, PriceModel)
@@ -124,6 +131,31 @@ class MarketSeries(Component):
                    if m is not newest and m.market_state == MarketState.Expired]
         for market in expired:
             self.markets.discard(market)
+
+    def _build_price_model(self):
+        """The first market's price model from the spec; every keyword in the spec other than the class and module names
+        reaches the model's constructor, so a misspelt or unsupported keyword fails here rather than being ignored."""
+        try:
+            return self.price_model_class(**spec_kwargs(self.price_model_spec))
+        except TypeError as error:
+            raise TypeError(f'MarketSeries {self.name}: price_model {self.price_model_class.__name__} rejected its '
+                            f'keywords {sorted(spec_kwargs(self.price_model_spec))}: {error}') from error
+
+    @staticmethod
+    def _validate_timings(name: str, **timings):
+        """Refuse timings that cannot make a working series, naming the configuration field."""
+        def seconds(value):
+            return value.total_seconds() if isinstance(value, timedelta) else float(value)
+        for field in ('duration_active', 'duration_negotiation', 'duration_market_lead', 'duration_delivery_lead',
+                      'duration_reconciliation'):
+            if seconds(timings[field]) < 0:
+                raise ValueError(f'MarketSeries {name}: {field} must not be negative; got {timings[field]!r}')
+        for field in ('interval_duration', 'market_clearing_interval'):
+            if seconds(timings[field]) <= 0:
+                raise ValueError(f'MarketSeries {name}: {field} must be positive; got {timings[field]!r}')
+        if int(timings['intervals_to_clear']) < 1:
+            raise ValueError(f'MarketSeries {name}: intervals_to_clear must be at least 1; '
+                             f'got {timings["intervals_to_clear"]!r}')
 
     @property
     def intervals_to_clear(self):
@@ -167,7 +199,7 @@ class MarketSeries(Component):
         if self.newest_market:
             price_model_obj = deepcopy(self.newest_market.price_model)
         else:
-            price_model_obj = self.price_model_class(**spec_kwargs(self.price_model_spec))
+            price_model_obj = self._build_price_model()
         new_market = self.market_class(
             transactive_node=self.tn,
             market_series=self,

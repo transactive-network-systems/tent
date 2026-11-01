@@ -28,7 +28,15 @@ class DataManager:
 
     def add_table(self, key: str, definitions: list[dict]):
         definition = next(filter(lambda d: d['name'] == key, definitions))
-        if key not in self.tables:
+        if key in self.tables:
+            # Every component class registers the tables it shares with its ancestors (component, entity, ...), so the
+            # same definition arrives many times. A different definition under a known name would silently archive
+            # into the first table registered; it is refused instead.
+            differences = self.definition_differences(self.definitions[key], definition)
+            if differences:
+                raise ValueError(f'Table {key!r} is already registered with a different definition: '
+                                 f'{"; ".join(differences)}')
+        else:
             self.definitions[key] = definition
             table = self._parse_table_definition(definition)
             self.tables[key] = table
@@ -45,6 +53,26 @@ class DataManager:
             self.registry.map_imperatively(self.orm[key],
                                            self.tables[key],
                                            **mapping_params)
+
+    @staticmethod
+    def definition_differences(existing: dict, proposed: dict) -> list[str]:
+        """Human-readable differences between two table definitions of the same name; empty when they agree. Column
+        order is not part of a definition (columns are compared by name); everything else is."""
+        differences = []
+        def by_name(definition):
+            return {column['name']: column for column in definition.get('columns', [])}
+        existing_columns, proposed_columns = by_name(existing), by_name(proposed)
+        for name in sorted(set(existing_columns) - set(proposed_columns)):
+            differences.append(f'column {name!r} is missing from the new definition')
+        for name in sorted(set(proposed_columns) - set(existing_columns)):
+            differences.append(f'column {name!r} is new')
+        for name in sorted(set(existing_columns) & set(proposed_columns)):
+            if existing_columns[name] != proposed_columns[name]:
+                differences.append(f'column {name!r} differs: {existing_columns[name]} versus {proposed_columns[name]}')
+        for field in sorted((set(existing) | set(proposed)) - {'columns', 'name'}):
+            if existing.get(field) != proposed.get(field):
+                differences.append(f'{field!r} differs: {existing.get(field)!r} versus {proposed.get(field)!r}')
+        return differences
 
     def stop(self) -> None:
         """Release what the manager holds before the node is torn down (a manager that publishes or buffers overrides
@@ -77,8 +105,10 @@ class DataManager:
         enumeration = column_def.get('enumeration')
         if enumeration:
             enum_obj = getattr(tent.enumerations, enumeration, None)
-            if enum_obj is not None:
-                args.append(Enum(enum_obj, create_type=True))
+            if enum_obj is None:
+                raise ValueError(f'Unknown enumeration {enumeration!r} in definition of column {column_def["name"]!r}; '
+                                 f'it must be a member of tent.enumerations.')
+            args.append(Enum(enum_obj, create_type=True))
 
         # Handle foreign key reference:
         foreign_key = column_def.get('foreign_key')

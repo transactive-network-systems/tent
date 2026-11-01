@@ -7,6 +7,7 @@ from tent.local_asset import LocalAsset
 from tent.market.auction import Auction
 from tent.market.market_series import MarketSeries
 from tests.mock_tn import MockTN
+from tent.utils.timer import Timer
 
 
 @pytest.fixture
@@ -53,3 +54,39 @@ def test_transition_cost_is_added_to_production_cost(asset_and_market):
     t0 = list(market.time_intervals)[0]
     # A consuming asset has no production cost of its own, so the production cost is the transition cost alone.
     assert asset._get_production_costs(t0) == pytest.approx(2.0)
+
+
+def test_engagement_state_carries_over_from_the_prior_market_when_markets_overlap():  # audit T-39
+    """Rolling markets: three one-hour-step markets of three hours each. The predecessor of a market's first interval is
+    resolved through the prior market in the series, so the state of the most recently cleared market is used, not the
+    oldest interval that happens to share the start time."""
+    Timer.simulation = False
+    tn = MockTN()
+    asset = LocalAsset(transactive_node=tn, name='Chiller', cost_parameters=[0.0, 0.0, 0.0], default_power=-50.0,
+                       engagement_costs=[1.0, 2.0, 3.0])
+    tn.local_assets, tn.neighbors = [asset], []
+    series = MarketSeries(transactive_node=tn, name='Rolling', market_class=Auction,
+                          initial_market_state=MarketState.Negotiation, duration_negotiation=600.0,
+                          interval_duration=3600.0, intervals_to_clear=3, market_clearing_interval=3600.0)
+    tn.market_series = [series]
+    series.spawn(); series.spawn()
+    m1, m2, m3 = list(series.markets)
+    assert m3.prior_market_in_series == m2 and m2.prior_market_in_series == m1
+    for ti in m1.time_intervals:                       # off throughout the first market
+        asset.engagement_schedule.update(ti, False)
+    for ti in m2.time_intervals:                       # on throughout the second
+        asset.engagement_schedule.update(ti, True)
+    for ti in m3.time_intervals:                       # and the third
+        asset.engagement_schedule.update(ti, True)
+    asset.assign_transition_costs(m1)
+    asset.assign_transition_costs(m2)
+    asset.assign_transition_costs(m3)
+    cost = lambda market: [asset.transition_costs.get_by_interval(ti).value for ti in market.time_intervals]
+    assert cost(m1) == [2.0, 2.0, 2.0], 'the true first market has no predecessor: unchanged'
+    assert cost(m2) == [3.0, 2.0, 2.0], 'switched on at the first interval of the second market: engagement cost once'
+    assert cost(m3) == [2.0, 2.0, 2.0], 'still on: the prior market (not the first) says it was already engaged'
+    t1 = m2.time_intervals[0].start_time
+    assert asset.engagement_schedule.get_by_start_time(t1, market=m1).value is False
+    assert asset.engagement_schedule.get_by_start_time(t1, market=m2).value is True
+    assert asset.engagement_schedule.get_by_start_time(t1).value is True, 'without a market, the newest interval wins'
+    assert asset.engagement_schedule.get_by_start_time(t1, market=m3) is None, 'the third market does not cover t1'

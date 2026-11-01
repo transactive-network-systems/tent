@@ -325,3 +325,51 @@ def test_neighbor_numeric_parameter_conversion():
 
 if __name__ == '__main__':
     pytest.main([__file__])
+
+def test_loss_and_demand_charge_corrections_replace_vertices_in_the_curve():  # audit T-14
+    """Losses move every supply vertex; the demand-charge step then has to find and remove the vertices on the threshold.
+    With in-place changes the SortedSet kept stale hashes, so those removals missed and the threshold vertices piled up."""
+    from tent.containers.sd_curve import SDCurve
+    from tent.containers.vertex import Vertex
+    neighbor = Neighbor(transactive_node=MockTransactiveNode(), name='Supplier', **get_default_neighbor_params())
+    neighbor.maximum_power = 100.0
+    neighbor.loss_factor = 0.01
+    neighbor.demand_rate = 5.0
+    curve = SDCurve(measurement=None, interval=None,
+                    vertices=[Vertex(price=0.1, quantity=0), Vertex(price=0.2, quantity=50), Vertex(price=0.3, quantity=100)])
+    neighbor.include_marginal_losses(curve)
+    corrected = [(v.price, v.quantity) for v in curve.vertices]
+    assert corrected[1][1] == pytest.approx(50 * (1 - 0.01 * 0.5)) and corrected[2][1] == pytest.approx(99.0)
+    assert all(v in curve.vertices for v in list(curve.vertices)), 'every stored vertex is found under its own hash'
+    threshold = corrected[1][1]  # a vertex lies exactly on the threshold
+    neighbor.include_demand_charges(curve, threshold=threshold)
+    on_threshold = [v for v in curve.vertices if v.quantity == pytest.approx(threshold)]
+    assert len(on_threshold) == 2, 'the vertex on the threshold is removed and replaced by the pair at the step'
+    assert sorted(v.price for v in on_threshold) == pytest.approx([corrected[1][0], corrected[1][0] + 5.0])
+    assert [v.price for v in curve.vertices if v.quantity > threshold] == pytest.approx([corrected[2][0] + 5.0])
+    assert len(curve.vertices) == 4
+
+
+class TestHeavyLoadHours:  # audit T-30
+    def supplier(self, **kwargs):
+        return BulkSupplierDC(transactive_node=MockTransactiveNode(), name='BPA', **get_default_neighbor_params(), **kwargs)
+
+    def test_hours_weekdays_and_configured_holidays(self):
+        supplier = self.supplier(holidays=['2026-07-03', '2026-12-25'])
+        friday = datetime(2026, 7, 10, 12, 0)
+        assert supplier.is_heavy_load_hour(friday) is True
+        assert supplier.is_heavy_load_hour(friday.replace(hour=5)) is False and supplier.is_heavy_load_hour(friday.replace(hour=22)) is False
+        assert supplier.is_heavy_load_hour(friday.replace(hour=6)) is True and supplier.is_heavy_load_hour(friday.replace(hour=21)) is True
+        assert supplier.is_heavy_load_hour(datetime(2026, 7, 12, 12, 0)) is False, 'Sunday'
+        assert supplier.is_heavy_load_hour(datetime(2026, 7, 11, 12, 0)) is True, 'Saturday counts'
+        assert supplier.is_heavy_load_hour(datetime(2026, 7, 3, 12, 0)) is False, 'a configured holiday'
+        assert supplier.is_heavy_load_hour(datetime(2026, 12, 25, 12, 0)) is False
+
+    def test_without_holidays_every_non_sunday_day_counts(self):
+        assert self.supplier().is_heavy_load_hour(datetime(2026, 12, 25, 12, 0)) is True
+
+    def test_bad_inputs_are_errors(self):
+        with pytest.raises(ValueError, match='holidays must be ISO dates'):
+            self.supplier(holidays=['Christmas'])
+        with pytest.raises(TypeError, match='needs a datetime'):
+            self.supplier().is_heavy_load_hour('2026-07-10T12:00')

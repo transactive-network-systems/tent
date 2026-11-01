@@ -139,7 +139,8 @@ class ModelFrameAsset(LocalAsset, ModelFrame):
                              f' Using default ({power_flexibility}) for power flexibility.')
 
             price_flexibility = self._get_price_flexibility(time_interval, market)
-            self.active_vertices.update(time_interval, self._create_vertices(power_flexibility, price_flexibility))
+            self.active_vertices.update(time_interval, self._create_vertices(power_flexibility, price_flexibility),
+                                        replace=True)
 
     def actuate(self, mkt: Market):
         if getattr(self, "actuation_manager", None) is not None:

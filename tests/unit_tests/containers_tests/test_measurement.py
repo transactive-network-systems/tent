@@ -10,6 +10,7 @@ import pytest
 import tent.containers.measurement as mod
 from tent.containers.measurement import Measurement, MeasurementValue
 from tent.enumerations import MeasurementType, MeasurementUnit
+from tent.utils.timer import Timer
 
 
 class DummySource:

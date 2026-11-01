@@ -3,6 +3,7 @@ import threading
 import time
 from typing import Callable
 
+from tent.data_manager.null_data_manager import NullDataManager
 from tent.transactive_node import TransactiveNode
 
 _log = logging.getLogger(__name__)
@@ -39,8 +40,9 @@ class MockTN(TransactiveNode):
         self._lock = threading.Lock()
         # Slice-assignable list of markets used by Market.events() when removing expired markets
         self.markets: list = []
-        # Mock data_manager to avoid archiving errors in tests
-        self._data_manager = type('MockDataManager', (), {'archive_data': lambda self, records: None})()
+        # Components built directly in tests archive through the node before configure_node runs; configure_node
+        # replaces this with the configured manager (or another NullDataManager when the config has none).
+        self._data_manager = NullDataManager(self)
 
     def register_recipient(self, recipient: str, callback: Callable):
         """Register a callback function to receive signals sent to a recipient."""

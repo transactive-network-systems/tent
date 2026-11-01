@@ -152,7 +152,7 @@ def test_get_class_from_spec_errors():
 # --- the node ---------------------------------------------------------------------------------------------------------
 
 NODE_CONFIG = {
-    'data_manager': {'class_name': 'LocalDataManager', 'db_params': {}},
+    'data_manager': {'class_name': 'LocalDataManager', 'db_params': {'url': 'sqlite://'}},
     'neighbors': [{'class_name': 'Neighbor', 'name': 'grid', 'transactive': False, 'cost_parameters': [0.0, 0.1, 0.0],
                    'default_vertices': [[0.1, 0.0, -100.0, True], [0.1, 0.0, 100.0, True]],
                    'maximum_power': 100.0, 'minimum_power': -100.0}],

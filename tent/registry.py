@@ -28,6 +28,7 @@ ENTRY_POINT_GROUP = 'tent.components'
 SHIPPED: dict[str, str] = {
     # Data managers
     'LocalDataManager': 'tent.data_manager.local_data_manager:LocalDataManager',
+    'NullDataManager': 'tent.data_manager.null_data_manager:NullDataManager',
     # Market series, markets and price models
     'MarketSeries': 'tent.market.market_series:MarketSeries',
     'Market': 'tent.market:Market',

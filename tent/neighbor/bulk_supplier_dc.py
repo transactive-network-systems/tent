@@ -43,26 +43,41 @@ under Contract DE-AC05-76RL01830
 
 import logging
 
+from datetime import date, datetime
+from typing import Iterable
+
 from tent.containers import SDCurve, Vertex
 from tent.enumerations import MarketState, MeasurementType
 from tent.neighbor import Neighbor
 from tent.utils.const import bpa_demand_rate, bpa_energy_rate
-from tent.utils.helpers import is_heavyloadhour
 
 _log = logging.getLogger(__name__)
 
 
 class BulkSupplierDC(Neighbor):
-    # BulkSupplier Neighbor subclass - Represents non-transactive neighbor, including demand charges
-    #
-    # Created to represent large, non-transactive electricity supplier BPA in its relationship to a municipality.
-    # - Introduces new properties to keep track of peak demand.
-    # - Calls on a new function to determine hour type (HLH or LLH).
-    # - Mines tables to determine monthly electricity and demand rates in HLH and LLH hour types.
+    """
+    A non-transactive bulk electricity supplier (modelled on BPA's relationship to a municipality) whose energy and
+    demand rates depend on the month and on whether an hour is a heavy-load hour (HLH). HLH are 06:00 to 21:59 on every
+    day but Sundays and the configured holidays; `holidays` is a list of ISO dates (the NERC holidays of the simulated
+    years, for example "2018-01-01"). Without it no day is a holiday.
+    """
 
-    def __init__(self, *args, **kwargs):
+    HEAVY_LOAD_HOURS = range(6, 22)
+
+    def __init__(self, *args, holidays: Iterable[str] = (), **kwargs):
         super(BulkSupplierDC, self).__init__(*args, **kwargs)
         self.transactive = False
+        try:
+            self.holidays: frozenset[date] = frozenset(date.fromisoformat(str(day)) for day in holidays)
+        except ValueError as error:
+            raise ValueError(f'BulkSupplierDC {self.name}: holidays must be ISO dates (YYYY-MM-DD); {error}') from error
+
+    def is_heavy_load_hour(self, moment: datetime) -> bool:
+        """True in a heavy-load hour: 06:00 to 21:59, not a Sunday, not a configured holiday."""
+        if not isinstance(moment, datetime):
+            raise TypeError(f'is_heavy_load_hour needs a datetime, not {type(moment).__name__}')
+        return (moment.hour in self.HEAVY_LOAD_HOURS and moment.weekday() != 6
+                and moment.date() not in self.holidays)
 
     def update_vertices(self, market):
         # Creates active vertices for a non-transactive neighbor, including demand charges.
@@ -109,7 +124,7 @@ class BulkSupplierDC(Neighbor):
             # tables.
             month_number = time_interval.start_time.month
 
-            if is_heavyloadhour(time_interval.start_time):
+            if self.is_heavy_load_hour(time_interval.start_time):
                 price = bpa_energy_rate[month_number - 1][0]  # HLH energy rate [$/kWh]
             else:
                 price = bpa_energy_rate[month_number - 1][1]  # bpa_energy_rate(month_number, 2)
@@ -135,7 +150,7 @@ class BulkSupplierDC(Neighbor):
             self.demand_rate = bpa_demand_rate[month_number - 1][0]
 
             # Demand Charges only apply to HLH hours.
-            if is_heavyloadhour(time_interval.start_time) and self.demand_rate != 0:
+            if self.is_heavy_load_hour(time_interval.start_time) and self.demand_rate != 0:
                 self.include_demand_charges(sd_curve=sd_curve, threshold=active_threshold)
                 active_threshold = self._get_new_threshold(sd_curve, active_threshold, market, time_interval)
 

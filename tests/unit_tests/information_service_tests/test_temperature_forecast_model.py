@@ -62,7 +62,7 @@ def test_an_interval_outside_the_file_is_an_error(weather_file):
     tn = MockTN()
     market = make_market(tn, datetime(2017, 8, 1, tzinfo=timezone.utc))
     forecaster = model(tn, weather_file)
-    with pytest.raises(Exception, match='No weather data for time'):
+    with pytest.raises(LookupError, match='no weather data for interval'):
         forecaster.update_information(market)
 
 
@@ -77,12 +77,9 @@ def test_a_changed_file_is_reread_on_the_next_update(weather_file):
     assert [forecaster.predicted_values.get_by_interval(ti).value for ti in market.time_intervals] == [99.0, 99.0]
 
 
-def test_a_file_that_does_not_exist_leaves_the_model_without_a_source(tmp_path):
-    tn = MockTN()
-    forecaster = model(tn, tmp_path / 'absent.csv')
-    assert forecaster.weather_file_path is None
-    with pytest.raises(RuntimeError, match='no weather file'):
-        forecaster.update_information(make_market(tn))
+def test_a_file_that_does_not_exist_is_a_configuration_error(tmp_path):
+    with pytest.raises(FileNotFoundError, match='does not exist'):
+        model(MockTN(), tmp_path / 'absent.csv')
 
 
 def test_the_tmy_fallback_path_is_the_file_for_a_service_backed_model(weather_file):
@@ -94,13 +91,8 @@ def test_the_tmy_fallback_path_is_the_file_for_a_service_backed_model(weather_fi
     assert forecaster.max_gap_time == timedelta(hours=2) and forecaster.oat_point_name == 'OAT'
 
 
-@pytest.mark.xfail(strict=True, reason='TemperatureForecastModel.init_weather_data swallows a parse error, logs a warning '
-                                       'and continues with no data, so a malformed weather file surfaces only when a '
-                                       'market asks for a forecast. A file that cannot be parsed is a configuration '
-                                       'error and should fail at construction. Found in WP-7; the fix is in '
-                                       'information_service_model (not this work package).')
 def test_a_malformed_file_is_rejected_at_construction(tmp_path):
     path = tmp_path / 'bad.csv'
     path.write_text('Time,Temperature\n2017-07-01 00:00:00,70\n')  # the legacy fixture's columns
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError, match='Timestamp'):
         model(MockTN(), path)

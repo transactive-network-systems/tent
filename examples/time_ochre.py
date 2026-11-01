@@ -126,9 +126,8 @@ def _build_node_config() -> dict:
     return {
         "tz": "UTC",
         "data_manager": {
-            "class_name": "LocalDataManager",
-            "module_name": "tent.data_manager.local_data_manager",
-            "db_params": {},
+            "class_name": "NullDataManager",
+            "module_name": "tent.data_manager.null_data_manager"
         },
         "information_service_models": [
             {

@@ -420,9 +420,8 @@ def test_spawn_markets():
     config = {
         "tz": "UTC",
         "data_manager": {
-            "class_name": "LocalDataManager",
-            "module_name": "tent.data_manager.local_data_manager",
-            "db_params": {}
+            "class_name": "NullDataManager",
+            "module_name": "tent.data_manager.null_data_manager"
         },
         "market_series": [
             {
