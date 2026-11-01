@@ -43,7 +43,7 @@ under Contract DE-AC05-76RL01830
 
 import logging
 
-from tent.config import ConfigModel, Setting
+from tent.config import ConfigModel
 from tent.enumerations import Direction, MarketTypes
 from tent.market import Market
 
@@ -59,33 +59,16 @@ class Auction(Market):
     MARKET_TYPE = MarketTypes.auction
     BALANCE_POINT = 'predicted_price'  # a bid's record 0: the residual curve at the predicted price (see Market)
 
-    class Config(Market.Config):
-        actuate_assets: bool = Setting(
-            True, description='Whether this auction tells the local assets to actuate when it enters Delivery. False for '
-                              'a series whose delivery periods are refined by another series (a day-ahead auction '
-                              'corrected by a real-time one), so that only the refining market actuates.')
+    Config = Market.Config  # an auction adds no settings of its own (actuate_assets is every market's)
 
     def __init__(self, *args, config: ConfigModel | None = None, **kwargs):
         runtime, settings = self.split_keywords(kwargs)
         cfg = self._configure(config, settings)
-        # Recorded by get_record(), so it must exist before Market.__init__ archives the market row.
-        self.actuate_assets: bool = cfg.actuate_assets
         super(Auction, self).__init__(*args, config=cfg, **runtime)
-
-    def _actuate_assets(self):
-        if not self.actuate_assets:
-            _log.debug(f'MARKET: {self.name} does not actuate assets (actuate_assets is false for this series).')
-            return
-        super(Auction, self)._actuate_assets()
 
     @property
     def table_name(self):
         return 'auction'
-
-    def get_record(self) -> dict:
-        record = super(Auction, self).get_record()
-        record.update({'actuate_assets': self.actuate_assets})
-        return record
 
     @classmethod
     def get_archive_definitions(cls) -> list[dict]:
@@ -95,8 +78,7 @@ class Auction(Market):
                 "name": "auction",
                 "inherits": "market",
                 "columns": [
-                    {"name": "id", "foreign_key": "market.id", "kwargs": {"primary_key": True}},
-                    {"name": "actuate_assets", "type": "Boolean"}
+                    {"name": "id", "foreign_key": "market.id", "kwargs": {"primary_key": True}}
                 ]
             }
         ])

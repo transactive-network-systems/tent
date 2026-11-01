@@ -13,4 +13,4 @@ def test_consensus_market_spawns_from_series():
     assert isinstance(market, ConsensusMarket)
     assert market.MARKET_TYPE is MarketTypes.consensus
     assert series.method is Method.Interpolation
-    assert series.market_kwargs == {'max_balance_iterations': 20}, 'the validated market settings'
+    assert series.market_kwargs == {'actuate_assets': True, 'max_balance_iterations': 20}, 'the validated market settings'

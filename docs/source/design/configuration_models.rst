@@ -35,8 +35,10 @@ The fields of a model are its configuration keys. ``model_fields`` gives each fi
    Neighbor.Config.reconfigurable_fields()    # the fields a running neighbor may change in place
 
 A market series block holds two models' keys: ``MarketSeries.Config`` and the ``Config`` of the class named by
-``market_class_name`` (``Auction.Config`` adds ``actuate_assets``, ``ConsensusMarket.Config`` adds
-``max_balance_iterations``, ``MatchingEngine.Config`` adds ``matching_strategy`` and ``order_expiry``). A model-frame
+``market_class_name`` (``Market.Config`` has ``actuate_assets``, true by default and false for a series whose
+deliveries another series refines, so that only the refining market actuates on entering Delivery;
+``ConsensusMarket.Config`` adds ``max_balance_iterations``, ``MatchingEngine.Config`` adds ``matching_strategy`` and
+``order_expiry``). A model-frame
 model's block (``model_configs.models[]``) has ``class_name``, ``module_name``, ``subscribe_key`` and ``model_config``;
 the keys of ``model_config`` are the model class's ``Config`` fields other than ``subscribe_key`` and
 ``demand_curve_points``, which the frame supplies.

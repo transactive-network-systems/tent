@@ -48,7 +48,7 @@ from typing import TYPE_CHECKING, Mapping
 from weakref import proxy
 
 from tent.base import Component
-from tent.config import ConfigModel
+from tent.config import ConfigModel, Setting
 from tent.containers import IntervalSeries, MarketTimings, Measurement, SDCurve, SDMeasurement, Vertex
 from tent.enumerations import MarketState, MarketTypes, MeasurementType, MeasurementUnit
 from tent.market.price_models import HourlyAveragePriceModel
@@ -81,7 +81,12 @@ class Market(Component):
                                   'market_to_be_refined', 'prior_market_in_series', 'price_model'})
 
     class Config(ConfigModel):
-        """The base market has no settings of its own; subclasses add theirs (Auction.actuate_assets, ...)."""
+        """The settings every market has; subclasses add theirs (ConsensusMarket.max_balance_iterations, ...)."""
+        actuate_assets: bool = Setting(
+            True, description='Whether a market of this series tells the local assets to actuate when it enters '
+                              'Delivery. False for a series whose delivery periods are refined by another series (a '
+                              'day-ahead market corrected by a real-time one), so that only the refining market '
+                              'actuates.')
 
     @classmethod
     def split_keywords(cls, kwargs: Mapping) -> tuple[dict, dict]:
@@ -102,6 +107,8 @@ class Market(Component):
                  **kwargs
                  ):
         self._configure(config, kwargs)
+        # Recorded by get_record(), so it must exist before the market row is archived below.
+        self.actuate_assets: bool = bool(self.config.actuate_assets)
         # Build market name BEFORE calling Component.__init__ (self.name not yet set)
         market_name = '_'.join((*market_series.name.split(' '), transition_times.delivery_lead.isoformat(timespec='seconds')))
         super(Market, self).__init__(market_series.description, market_name, transactive_node, config=self.config)
@@ -646,6 +653,11 @@ class Market(Component):
         return None
 
     def _actuate_assets(self):
+        """Tell every local asset to actuate for this market, unless the series is configured not to (actuate_assets
+        false: its deliveries are refined by another series, which actuates instead)."""
+        if not self.actuate_assets:
+            _log.debug(f'MARKET: {self.name} does not actuate assets (actuate_assets is false for this series).')
+            return
         for local_asset in self.tn.local_assets:
             _log.debug(f'MARKET {self.name} is ACTUATING: {local_asset.name}')
             local_asset.actuate(self)
@@ -1140,7 +1152,8 @@ class Market(Component):
             'delivery_start_time': self.transition_times.delivery,
             'reconciliation_start_time': self.transition_times.reconciliation,
             'expiration_time': self.transition_times.expiration,
-            'market_series_id': self.series.id
+            'market_series_id': self.series.id,
+            'actuate_assets': self.actuate_assets
         })
         return record
 
@@ -1163,7 +1176,8 @@ class Market(Component):
                     {"name": "delivery_start_time", "type": "DateTime"},
                     {"name": "reconciliation_start_time", "type": "DateTime"},
                     {"name": "expiration_time", "type": "DateTime"},
-                    {"name": "market_series_id", "foreign_key": "market_series.id"}
+                    {"name": "market_series_id", "foreign_key": "market_series.id"},
+                    {"name": "actuate_assets", "type": "Boolean"}
                 ]
             },
             {
