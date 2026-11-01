@@ -84,3 +84,43 @@ def test_a_balance_point_cannot_be_marked_on_an_empty_curve(market_and_interval)
     import re
     with pytest.raises(ValueError, match=re.escape(f'neighbor sentNeighbor holds an empty curve for interval {ti.name}')):
         sig.mark_balance_points(_ScheduledPowers(ti, 0.0))
+
+
+class TestBalancePointAtPrices:
+    """mark_balance_points_at_prices: an auction bid's record 0 is the curve's own quantity at the market's price."""
+
+    def test_the_point_is_interpolated_on_the_curve_at_the_interval_price(self, market_and_interval, caplog):
+        tn, market, ti = market_and_interval
+        neighbor = Neighbor(transactive_node=tn, name='CoR', cost_parameters=[0, 0, 0])
+        sig = TransactiveSignal(market=market, neighbor=neighbor)
+        sig.update(ti, [Vertex(price=0.04, quantity=-100.0), Vertex(price=0.08, quantity=-20.0)], archive=False)
+        market.marginal_prices.update(ti, 0.06)
+        with caplog.at_level('WARNING'):
+            sig.mark_balance_points_at_prices(market.marginal_prices)
+        point = sig.balance_point(ti)
+        assert point.quantity == pytest.approx(-60.0) and point.price == pytest.approx(0.06)
+        assert any(v is point for v in sig.get_by_interval(ti).vertices) and len(sig.get_by_interval(ti)) == 3
+        assert [(v.price, v.quantity) for v in sig.flexibility_vertices(ti)] == [(0.04, -100.0), (0.08, -20.0)]
+        assert not any('Indeterminate price' in r.message for r in caplog.records)
+
+    def test_a_price_beyond_the_curve_marks_its_end_vertex_and_a_lone_vertex_is_its_own_point(self, market_and_interval):
+        tn, market, ti = market_and_interval
+        neighbor = Neighbor(transactive_node=tn, name='CoR', cost_parameters=[0, 0, 0])
+        sig = TransactiveSignal(market=market, neighbor=neighbor)
+        sig.update(ti, [Vertex(price=0.04, quantity=-100.0), Vertex(price=0.08, quantity=-20.0)], archive=False)
+        market.marginal_prices.update(ti, 0.50)
+        sig.mark_balance_points_at_prices(market.marginal_prices)
+        assert sig.balance_point(ti) is sig.get_by_interval(ti).vertices[-1] and len(sig.get_by_interval(ti)) == 2
+        lone = TransactiveSignal(market=market, neighbor=neighbor)
+        lone.update(ti, [Vertex(price=float('inf'), quantity=0.0)], archive=False)
+        lone.mark_balance_points_at_prices(market.marginal_prices)
+        assert lone.balance_point(ti) is lone.get_by_interval(ti).vertices[0]
+
+    def test_an_interval_without_a_price_is_an_error(self, market_and_interval):
+        tn, market, ti = market_and_interval
+        neighbor = Neighbor(transactive_node=tn, name='CoR', cost_parameters=[0, 0, 0])
+        sig = TransactiveSignal(market=market, neighbor=neighbor)
+        sig.update(ti, [Vertex(price=0.04, quantity=-100.0), Vertex(price=0.08, quantity=-20.0)], archive=False)
+        market.marginal_prices._data.clear()
+        with pytest.raises(ValueError, match='no price for interval'):
+            sig.mark_balance_points_at_prices(market.marginal_prices)

@@ -513,9 +513,17 @@ class Neighbor(Entity):
                 raise ValueError(f'prep_transactive_signal: the curve prepared for neighbor {self.name} in time interval '
                                  f'{time_interval.name} is empty after bounds and corrections; it is not stored.')
             self.prepared_signals[market].update(time_interval, sd_curve, archive=False, replace=True)
-        # Mark the power scheduled with this neighbor on every interval's curve, so the prepared signal carries the same
-        # balance points the sent one will and the two can be compared by check_for_convergence.
-        self.prepared_signals[market].mark_balance_points(self.scheduled_powers)
+        # Mark record 0, the balance point, on every interval's curve by the market's rule (Market.BALANCE_POINT): a
+        # negotiating market marks the power scheduled with this neighbor, so the prepared signal carries the same
+        # balance points the sent one will and check_for_convergence can compare them; an auction bid marks the residual
+        # curve's own quantity at the market's predicted price, since nothing has been cleared with the neighbor yet.
+        if market.BALANCE_POINT == 'scheduled_power':
+            self.prepared_signals[market].mark_balance_points(self.scheduled_powers)
+        elif market.BALANCE_POINT == 'predicted_price':
+            self.prepared_signals[market].mark_balance_points_at_prices(market.marginal_prices)
+        else:
+            raise ValueError(f'{type(market).__name__}.BALANCE_POINT is {market.BALANCE_POINT!r}; it must be '
+                             f'"scheduled_power" or "predicted_price".')
 
     def send_transactive_signal(self, market, include_schedule=False):
         # Send transactive records to a transactive neighbor.

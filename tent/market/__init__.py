@@ -66,6 +66,11 @@ class Market(Component):
     # At least one Market must exist (see the firstMarket object) to drive the timing with which new TimeIntervals are
     # created.
     MARKET_TYPE = MarketTypes.unknown
+    # How Neighbor.prep_transactive_signal marks record 0 (the balance point) of a signal prepared for this market:
+    # 'scheduled_power' places it at the power this node has scheduled with the neighbor (a negotiating market, whose
+    # convergence check compares that point with the neighbor's); 'predicted_price' (Auction) places it at the residual
+    # curve's own quantity at the market's current price, since no power has been cleared with the neighbor yet.
+    BALANCE_POINT = 'scheduled_power'
     # Two vertex prices closer than this are one price. Market.sum_vertices offsets a duplicate price by 1e-10 so the
     # system curve stays a function; the cleared price then lands within that offset of the flat segment it sits on.
     FLAT_PRICE_TOLERANCE = 1e-8  # [$/kWh]

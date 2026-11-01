@@ -100,32 +100,55 @@ class TransactiveSignal(SDMeasurement):
         Mark the balance point on every interval's curve: the quantity this node has scheduled with the neighbor, seen
         from the neighbor's side. The curve is the residual system curve in the neighbor's perspective (positive means
         this node supplies the neighbor), while scheduled_powers hold the neighbor's power as seen from here (positive
-        means the neighbor supplies this node), so the sign flips.
+        means the neighbor supplies this node), so the sign flips. This is the rule of a negotiating market
+        (Market.BALANCE_POINT == 'scheduled_power').
         """
         for ti, sp in scheduled_powers.all:
-            sd_curve: SDCurve = self.get_by_interval(ti)
-            if sd_curve is None:
-                continue
+            if self.get_by_interval(ti) is not None:
+                self._mark_balance_point(ti, -float(sp.value))
+
+    def mark_balance_points_at_prices(self, prices_by_interval):
+        """
+        Mark the balance point on every interval's curve at the curve's own quantity at that interval's price: what the
+        rest of the system would exchange with the neighbor at the market's current (predicted) price. This is the rule
+        of an auction bid (Market.BALANCE_POINT == 'predicted_price'), where no power has been cleared with the neighbor
+        yet and the scheduled power is a construction-time estimate that may lie outside the curve. prices_by_interval
+        is a Measurement of prices (the market's marginal_prices); an interval of the signal without a price is an error.
+        """
+        prices = {ti: holder.value for ti, holder in prices_by_interval.all}
+        for ti, sd_curve in self.all:
+            if ti not in prices or prices[ti] is None:
+                raise ValueError(f'Signal for neighbor {self.neighbor.name} in {self.market.name}: no price for interval '
+                                 f'{ti.name}; a balance point at the predicted price cannot be marked.')
             if sd_curve.empty:
-                # A signal never holds an empty curve (prep_transactive_signal refuses one); reaching this is a bug.
-                raise ValueError(f'Signal {self.direction.name if self.direction else "prepared"} for neighbor '
-                                 f'{self.neighbor.name} holds an empty curve for interval {ti.name}; a balance point '
-                                 f'cannot be marked on it.')
-            quantity = -float(sp.value)
-            vertices = list(sd_curve.vertices)
-            tolerance = 1e-6 * max(1.0, abs(quantity))
-            # A lone vertex is inelastic: it is the balance point whatever was scheduled. Otherwise reuse a vertex that
-            # already sits at the scheduled quantity (within interpolation noise) rather than adding a duplicate.
-            existing = vertices[0] if len(vertices) == 1 else next(
-                (v for v in vertices if abs(v.quantity - quantity) <= tolerance), None)
-            if existing is not None:
-                self.__balance_vertices[ti] = existing
-                continue
-            balance_price = sd_curve.price_from_vertices(quantity)
-            balance_cost = sd_curve.prod_cost_from_vertices(quantity)
-            vertex = Vertex(balance_price, balance_cost, quantity, curve=sd_curve)
-            sd_curve.update(vertex, archive=False)
-            self.__balance_vertices[ti] = vertex
+                raise ValueError(f'Signal for neighbor {self.neighbor.name} holds an empty curve for interval {ti.name}; '
+                                 f'a balance point cannot be marked on it.')
+            self._mark_balance_point(ti, sd_curve.power_from_vertices(prices[ti]))
+
+    def _mark_balance_point(self, ti: TimeInterval, quantity: float) -> None:
+        """Mark the vertex at quantity on the interval's curve as its balance point: a lone vertex is inelastic and is
+        the balance point whatever the quantity; a vertex already at the quantity (within interpolation noise) is
+        reused rather than duplicated; otherwise a vertex is interpolated on the curve and added."""
+        sd_curve: SDCurve = self.get_by_interval(ti)
+        if sd_curve.empty:
+            # A signal never holds an empty curve (prep_transactive_signal refuses one); reaching this is a bug.
+            raise ValueError(f'Signal {self.direction.name if self.direction else "prepared"} for neighbor '
+                             f'{self.neighbor.name} holds an empty curve for interval {ti.name}; a balance point '
+                             f'cannot be marked on it.')
+        vertices = list(sd_curve.vertices)
+        tolerance = 1e-6 * max(1.0, abs(quantity))
+        existing = vertices[0] if len(vertices) == 1 else next(
+            (v for v in vertices if abs(v.quantity - quantity) <= tolerance), None)
+        if existing is not None:
+            self.__balance_vertices[ti] = existing
+            return
+        balance_price = sd_curve.price_from_vertices(quantity)
+        balance_cost = sd_curve.prod_cost_from_vertices(quantity)
+        vertex = Vertex(balance_price, balance_cost, quantity, curve=sd_curve)
+        sd_curve.update(vertex, archive=False)
+        # A curve copies the vertices it is given, so keep the curve's own object: balance_point and
+        # flexibility_vertices tell the balance point from the flexibility by identity.
+        self.__balance_vertices[ti] = next(v for v in sd_curve.vertices if v == vertex)
 
     def snapshot(self) -> Self:
         """An independent copy of this signal (new id, copied curves and vertices, same balance points and header)."""
