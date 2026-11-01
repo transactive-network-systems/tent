@@ -97,3 +97,38 @@ def test_a_surplus_residual_curve_bids_zero_to_the_supplier_instead_of_crashing(
     assert any('CoR' in r.message and 'lies entirely outside its limits [-20000.0, -0.0]' in r.message
                for r in caplog.records), 'the collapse is reported, naming the neighbor'
     assert not any('IndexError' in r.message for r in caplog.records)
+
+
+def test_the_bid_marks_record_0_at_the_residual_curve_at_the_predicted_price(campus, clock, caplog):
+    """The campus has not cleared any power with its supplier when it bids, so record 0 is not the construction-time
+    scheduled power (which lay outside the pure-load residual curve and drew an indeterminate-price warning on every
+    bid) but the curve's own quantity at the market's predicted price for the interval."""
+    market = campus.market_series[0].newest_market
+    times = market.transition_times
+    supplier, offices = campus.neighbors[0], campus.neighbors[1:]
+    for office in offices:
+        office.last_received_signals[market] = received_demand(market, office)
+    for t in (T0, times.active, times.negotiation):
+        clock['t'] = t
+        campus.step()
+    assert type(market).BALANCE_POINT == 'predicted_price'
+    clock['t'] = times.market_lead
+    with caplog.at_level('WARNING'):
+        campus.step()
+    assert market.market_state is MarketState.MarketLead and market._stateIsCompleted
+
+    bid = supplier.prepared_signals[market]
+    surplus, deficit = market.time_intervals
+    curve = bid.get_by_interval(deficit)
+    predicted_price = market.marginal_prices.get_by_interval(deficit).value
+    point = bid.balance_point(deficit)
+    assert point is not None and point in curve.vertices
+    assert point.quantity == pytest.approx(curve.power_from_vertices(predicted_price))
+    assert curve.vertices[0].quantity <= point.quantity <= curve.vertices[-1].quantity, 'inside the curve'
+    assert point.quantity != pytest.approx(-supplier.scheduled_powers.get_by_interval(deficit).value) or \
+        supplier.scheduled_powers.get_by_interval(deficit).value == pytest.approx(-point.quantity, abs=1e-6)
+    assert bid.balance_point(surplus) is bid.get_by_interval(surplus).vertices[0], 'a lone vertex is its own record 0'
+    assert not any('Indeterminate price' in r.message for r in caplog.records)
+    # What went on the wire carries the same record 0.
+    sent = supplier.last_sent_signals[market]
+    assert sent.balance_point(deficit).quantity == pytest.approx(point.quantity)

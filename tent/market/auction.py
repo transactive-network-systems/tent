@@ -57,6 +57,7 @@ class Auction(Market):
     one Market must exist (see the firstMarket object) to drive the timing with which new TimeIntervals are created.
     """
     MARKET_TYPE = MarketTypes.auction
+    BALANCE_POINT = 'predicted_price'  # a bid's record 0: the residual curve at the predicted price (see Market)
 
     class Config(Market.Config):
         actuate_assets: bool = Setting(

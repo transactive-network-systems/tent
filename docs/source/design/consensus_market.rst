@@ -33,7 +33,12 @@ system curve with that neighbor excluded, bounded to what the node can exchange 
 side (positive quantity means this node supplies the neighbor), with losses and demand charges that only apply locally
 removed. The curve carries a *balance point*: the vertex at the power this node has scheduled with the neighbor, sign
 flipped into the neighbor's perspective. The neighbor folds a received signal into its own balancing problem as that
-neighbor's active vertices and replies in kind.
+neighbor's active vertices and replies in kind. The rule for the balance point is the market class attribute
+``Market.BALANCE_POINT``, read by ``Neighbor.prep_transactive_signal``: ``'scheduled_power'`` for ``Market`` and
+``ConsensusMarket`` as described; ``'predicted_price'`` for ``Auction``, whose bid has cleared nothing with the
+supplier yet, so record 0 is the residual curve's own quantity at the market's current (predicted) price for the
+interval (``TransactiveSignal.mark_balance_points_at_prices``). Nothing in the auction flow reads a received signal's
+balance point; only the consensus convergence check does.
 
 Convergence with a neighbor
 ---------------------------

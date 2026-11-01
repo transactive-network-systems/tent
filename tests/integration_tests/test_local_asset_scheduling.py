@@ -70,14 +70,17 @@ def test_a_flexible_asset_is_rescheduled_at_the_cleared_price(campus, clock):
     for time_interval in market.time_intervals:
         inelastic = -sum(e.scheduled_powers.get_by_interval(time_interval).value
                          for e in campus.local_assets + campus.neighbors[1:] if e is not flexible)
-        curve = bid.get_by_interval(time_interval)
+        # The bid's flexibility vertices (record 0, the balance point at the predicted price, sits between them).
         # Bid quantities are what the supplier delivers (negative, its perspective); net of the transport losses they
         # are the campus demand at each of the flexible asset's breakpoints.
-        at_the_campus = [-v.quantity - cor.loss_factor * v.quantity ** 2 / cor.maximum_power for v in curve.vertices]
-        assert at_the_campus[:2] == pytest.approx([inelastic + 1000.0, inelastic], rel=1e-9), \
+        breakpoints = bid.flexibility_vertices(time_interval)
+        at_the_campus = [-v.quantity - cor.loss_factor * v.quantity ** 2 / cor.maximum_power for v in breakpoints]
+        assert at_the_campus == pytest.approx([inelastic + 1000.0, inelastic], rel=1e-9), \
             'the bid to the supplier spans the flexible asset\'s range'
-        assert curve.vertices[0].price < 0.03 and curve.vertices[0].price < curve.vertices[1].price < 0.06, \
+        assert breakpoints[0].price < 0.03 and breakpoints[0].price < breakpoints[1].price < 0.06, \
             'the breakpoint prices, restated at the supplier (before its losses)'
+        assert bid.balance_point(time_interval).quantity == pytest.approx(
+            bid.get_by_interval(time_interval).power_from_vertices(DEFAULT_PRICE)), 'record 0 at the predicted price'
 
     step_to(campus, clock, market.transition_times.delivery_lead)
     assert market.market_state is MarketState.DeliveryLead and market._stateIsCompleted

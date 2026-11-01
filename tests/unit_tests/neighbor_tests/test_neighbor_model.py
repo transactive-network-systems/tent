@@ -291,6 +291,7 @@ def test_prep_transactive_signal():
             return None
 
     class DummyMarket:
+        BALANCE_POINT = 'scheduled_power'  # the rule Neighbor.prep_transactive_signal reads (see Market)
         """Mock Market with sum_vertices capability"""
         def __init__(self, name, data_manager, tn):
             self.name = name
