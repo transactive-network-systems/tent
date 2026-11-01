@@ -96,7 +96,32 @@ TENT implements continuous double auctions where:
 </details>
 
 <details open>
-<summary><b>4. Configuration: naming classes</b></summary>
+<summary><b>4. Neighbors (<code>Neighbor</code>, <code>BulkSupplierDC</code>, <code>ResponseNeighbor</code>)</b></summary>
+<br>
+
+A neighbor is the party on the other side of a boundary meter. Each one contributes a supply or demand curve to every
+market interval, stated from this node's side (positive quantity is power imported from the neighbor). A transactive
+`Neighbor` exchanges transactive signals with the remote node (see `docs/source/design/consensus_market.rst`); a
+non-transactive one uses its `default_vertices`. `BulkSupplierDC` is a bulk supplier on a published tariff: a flat curve
+at the month's heavy- or light-load-hour rate across the power limits, with demand charges above the threshold.
+
+`ResponseNeighbor` is a counterparty in an existing market system that states only a price (dynamic pricing, a tariff)
+or only a quantity (a demand-response instruction, an import cap) and neither sends nor accepts transactive signals.
+Configured with `response_type` (`"price"` or `"quantity"`), a `subscribe_key` on the node's subscription mechanism,
+the `Neighbor` power limits and an optional `curtailment_reward` ($/kWh, quantity form). The schedule arrives on the key
+as a list of `{"start_time": <aware ISO 8601>, "value": <number>}` entries, merged by start time and holding until
+changed, or as a single number for every interval. The price form is a flat two-vertex curve at the stated price across
+the power limits; the quantity form is one inelastic vertex at the stated quantity, or a flat segment at the reward from
+the minimum power to the stated quantity when a reward is configured. An interval before the first value is reported
+once per market and interval and has no curve. Each message rebuilds the curves of every market still scheduling and
+calls `market.on_local_change`, so a consensus market rebalances and renegotiates. The neighbor's archive row
+(`response_neighbor`, inheriting `neighbor`) carries the response type, the key and the reward. Details:
+`docs/source/neighbors/index.rst`.
+
+</details>
+
+<details open>
+<summary><b>5. Configuration: naming classes</b></summary>
 <br>
 
 A node is built from a JSON configuration. Every configurable slot (data manager, meter points, information services,
@@ -107,8 +132,8 @@ actuation managers) names its class with `class_name`; the other keys of the blo
 1. With a `module_name` in the block, that module is imported and the class taken from it. This is how classes TENT
    does not ship are used; it works for shipped classes too.
 2. Without one, the name is looked up among the classes TENT ships, registered by name in `tent.registry.SHIPPED`
-   (for example `Neighbor`, `BulkSupplierDC`, `ModelFrameAsset`, `Thermostat`, `MarketSeries`, `Auction`,
-   `ConsensusMarket`, `MatchingEngine`, `HourlyAveragePriceModel`, `LocalDataManager`).
+   (for example `Neighbor`, `BulkSupplierDC`, `ResponseNeighbor`, `ModelFrameAsset`, `Thermostat`, `MarketSeries`,
+   `Auction`, `ConsensusMarket`, `MatchingEngine`, `HourlyAveragePriceModel`, `LocalDataManager`).
 3. Then among the `tent.components` entry points of installed packages. A package registers a class with
    `[project.entry-points."tent.components"] MyAsset = "my_package.assets:MyAsset"` and configurations can then name
    `MyAsset` without a `module_name`.
