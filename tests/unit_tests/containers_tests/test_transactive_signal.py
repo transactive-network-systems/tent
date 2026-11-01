@@ -124,3 +124,44 @@ class TestBalancePointAtPrices:
         market.marginal_prices._data.clear()
         with pytest.raises(ValueError, match='no price for interval'):
             sig.mark_balance_points_at_prices(market.marginal_prices)
+
+
+class TestBalancePointNearTheEndOfTheCurve:
+    """The campus's residual curve towards the city was nearly inelastic (-442.93 to -442.93 kW over its price range)
+    and the city's scheduled power, read back from it, was -442.635 kW: 0.3 kW (0.07 percent) past the end, from
+    rounding. Marking that balance point warned "Indeterminate price" on every pass."""
+    CURVE = [(0.0402, -442.929673980963), (0.0486, -442.929673980963 + 1e-9)]
+    SCHEDULED = 442.63539393683266  # the neighbor's power as seen from this node; the balance point flips the sign
+
+    def signal(self, tn, market, ti):
+        neighbor = Neighbor(transactive_node=tn, name='city', cost_parameters=[0, 0, 0])
+        sig = TransactiveSignal(market=market, neighbor=neighbor)
+        sig.update(ti, [Vertex(price=p, quantity=q) for p, q in self.CURVE], archive=False)
+        return sig
+
+    def test_a_quantity_a_hair_beyond_the_end_is_the_end_vertex_without_a_warning(self, market_and_interval, caplog):
+        tn, market, ti = market_and_interval
+        sig = self.signal(tn, market, ti)
+        with caplog.at_level('WARNING'):
+            sig.mark_balance_points(_ScheduledPowers(ti, self.SCHEDULED))
+        point = sig.balance_point(ti)
+        assert point is max(sig.get_by_interval(ti).vertices, key=lambda v: v.quantity), 'the end vertex itself'
+        assert len(sig.get_by_interval(ti)) == 2, 'no vertex added outside the curve'
+        assert not any('Indeterminate price' in r.message for r in caplog.records)
+
+    def test_a_quantity_beyond_the_tolerance_still_warns(self, market_and_interval, caplog):
+        tn, market, ti = market_and_interval
+        sig = self.signal(tn, market, ti)
+        with caplog.at_level('WARNING'):
+            sig.mark_balance_points(_ScheduledPowers(ti, 440.0))  # 0.66 percent past the end
+        assert sig.balance_point(ti).quantity == pytest.approx(-440.0)
+        assert len(sig.get_by_interval(ti)) == 3
+        assert any('Indeterminate price' in r.message and '-440.0' in r.message for r in caplog.records)
+
+    def test_the_tolerance_is_one_constant(self):
+        from tent.containers.sd_curve import SDCurve
+        assert SDCurve.END_VERTEX_TOLERANCE == 1e-3
+        end = Vertex(price=0.05, quantity=-442.929673980963)
+        assert SDCurve.is_at_end_vertex(-442.63539393683266, end)
+        assert not SDCurve.is_at_end_vertex(-440.0, end)
+        assert SDCurve.is_at_end_vertex(0.0005, Vertex(price=0.05, quantity=0.0)), 'at least 1 kW absolute near zero'

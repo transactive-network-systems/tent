@@ -21,6 +21,11 @@ class SDCurve(Archivable):
     """
     Aggregates Vertex objects into their supply or demand curve.
     """
+    # A quantity this close (relative to the end vertex's quantity, at least 1 kW absolute) beyond either end of the
+    # curve is read as that end vertex, silently: a scheduled power and the curve it was read from differ by rounding
+    # (a consensus balance point landed 0.07 percent past a near-inelastic residual curve on every pass). Further out
+    # the price is indeterminate and a warning says so.
+    END_VERTEX_TOLERANCE = 1e-3
 
     # TODO: If there is only one vertex, should we:
     #  - overwrite the vertex price with inf on read?
@@ -376,25 +381,33 @@ class SDCurve(Archivable):
                         # The marginal price is the same as the indexed active vertex. Use its power value.
                         return lower.quantity  # [kW]
 
+    @classmethod
+    def is_at_end_vertex(cls, quantity: float, end_vertex: Vertex) -> bool:
+        """True when quantity is within END_VERTEX_TOLERANCE (relative, at least 1 kW) of the end vertex's quantity."""
+        return abs(quantity - end_vertex.quantity) <= cls.END_VERTEX_TOLERANCE * max(1.0, abs(end_vertex.quantity))
+
     def price_from_vertices(self, quantity: float) -> float:
         """ Given a power [avg.kW], determine the corresponding marginal price [$/kWh] from the SDCurve.
         """
         # TODO: This and power_from_vertices assume a rational curve (power monotonic with price). Is this actually guaranteed?
         if not self.vertices:
             raise ValueError(f'price_from_vertices: the curve for {self._owner_description()} has no vertices.')
-        if quantity < self.vertices[0].quantity:
-            # The power is below the first vertex. Marginal price is indeterminate.
-            #  Return price of the first vertex and warn. (This should be an unlikely condition.)
-            _log.warning(f'Indeterminate price: Quantity provided ({quantity})'
-                         f' is lower than that of first vertex ({self.vertices[0].quantity}).')
-            return self.vertices[0].price
+        first, last = self.vertices[0], self.vertices[-1]
+        if quantity < first.quantity:
+            # Below the first vertex: within END_VERTEX_TOLERANCE it is the first vertex; further out the marginal price
+            # is indeterminate, the first vertex's price is returned and a warning says so.
+            if not self.is_at_end_vertex(quantity, first):
+                _log.warning(f'Indeterminate price: Quantity provided ({quantity})'
+                             f' is lower than that of first vertex ({first.quantity}).')
+            return first.price
 
-        elif quantity >= self.vertices[-1].quantity:
-            # The power is above the last vertex. Marginal price is indeterminate.
-            # Return price of the last vertex and warn. (This should be an unlikely condition.)
-            _log.warning(f'Indeterminate price: Quantity provided ({quantity})'
-                         f' is greater than that of last vertex ({self.vertices[-1].quantity}).')
-            return self.vertices[-1].price
+        elif quantity >= last.quantity:
+            # At or above the last vertex: at it, or within END_VERTEX_TOLERANCE beyond it, the last vertex's price;
+            # further out indeterminate, with the same price and a warning.
+            if not self.is_at_end_vertex(quantity, last):
+                _log.warning(f'Indeterminate price: Quantity provided ({quantity})'
+                             f' is greater than that of last vertex ({last.quantity}).')
+            return last.price
 
         # # The marginal power lies among the active vertices.
         for lower, upper in zip(self.vertices, self.vertices[1:]):
