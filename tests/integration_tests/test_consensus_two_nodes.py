@@ -12,38 +12,21 @@ price, campus schedules +100 kW from its city neighbor and city schedules -100 k
 interval records full consensus on both sides.
 """
 import logging
-from copy import copy
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import pytest
 
 from tent.enumerations import MarketState, MeasurementType
-from tent.local_asset import LocalAsset
 from tent.market.consensus_market import ConsensusMarket
 from tent.market.market_series import MarketSeries
 from tent.neighbor import Neighbor
 from tent.utils.timer import Timer
 from tests.mock_tn import MockTN
+from tests.stubs import FlexibleAsset
 
 T0 = datetime(2017, 7, 1, 0, 0, tzinfo=timezone.utc)
 INF = float('inf')
-
-
-class FlexibleAsset(LocalAsset):
-    """A local resource whose flexibility is its default_vertices curve and that schedules at the market price."""
-
-    def update_vertices(self, market):
-        for time_interval in market.time_intervals:
-            self.active_vertices.update(time_interval, [copy(v) for v in self.default_vertices.vertices],
-                                        archive=False, replace=True)
-
-    def schedule_power(self, market):
-        for time_interval in market.time_intervals:
-            mp = market.marginal_prices.get_by_interval(time_interval)
-            price = market.series.default_price if mp is None or mp.value is None else mp.value
-            self.scheduled_powers.update(time_interval, self.default_vertices.power_from_vertices(price))
-        self.schedule_calculated = True
 
 
 class RecordingDataManager:

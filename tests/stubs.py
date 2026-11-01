@@ -1,4 +1,5 @@
-"""Stand-ins shared by tests that build a Market without a MarketSeries."""
+"""Stand-ins shared by tests: a series-less Market, a constant price model, a clock, and a price-responsive asset."""
+from copy import copy
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -7,6 +8,7 @@ from uuid6 import uuid7
 from tent.containers.market_time import MarketDurations
 from tent.enumerations.market_state import MarketState
 from tent.enumerations.method import Method
+from tent.local_asset import LocalAsset
 from tent.market import Market
 from tent.utils.timer import Timer
 
@@ -57,3 +59,20 @@ def clock_at(when: datetime, tz: str = 'UTC') -> None:
     """Run the node clock from `when` at real-time rate. Unlike patching Timer.now to a constant, successive readings of
     the clock differ, so archive rows keyed by record_time do not collide. The autouse fixture restores the clock."""
     Timer.set(sim_one_hr_in_sec=3600, sim_start_time=when, simulation=True, tz=ZoneInfo(tz))
+
+
+class FlexibleAsset(LocalAsset):
+    """A local resource whose flexibility is its default_vertices curve and that schedules at the market price (the
+    series default where the market has none yet)."""
+
+    def update_vertices(self, market):
+        for time_interval in market.time_intervals:
+            self.active_vertices.update(time_interval, [copy(v) for v in self.default_vertices.vertices],
+                                        archive=False, replace=True)
+
+    def schedule_power(self, market):
+        for time_interval in market.time_intervals:
+            mp = market.marginal_prices.get_by_interval(time_interval)
+            price = market.series.default_price if mp is None or mp.value is None else mp.value
+            self.scheduled_powers.update(time_interval, self.default_vertices.power_from_vertices(price))
+        self.schedule_calculated = True

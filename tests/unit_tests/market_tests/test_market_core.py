@@ -5,7 +5,9 @@ import pytest
 
 from tent.containers.sd_curve import SDCurve
 from tent.containers.vertex import Vertex
+from tent.enumerations import MarketState
 from tent.local_asset import LocalAsset
+from tent.market import Market
 from tent.neighbor import Neighbor
 from tests.mock_tn import MockTN
 from tests.stubs import ConstantPriceModel, make_market
@@ -227,3 +229,50 @@ class TestSumVertices:
         market, ti, asset, _ = setup
         asset.active_vertices.update(ti, curve(ti, [Vertex(0.1, 0, -110), Vertex(0.1, 0, -90)]), replace=True)
         assert self.points(market.sum_vertices(ti)) == [(0.1, -110), (0.1, -90), (0.3, 110)]
+
+
+class TestRefreshPricesFromPriorMarket:
+    T = datetime(2017, 7, 1, tzinfo=timezone.utc)
+
+    def successor_of(self, tn, prior):
+        """A market clearing one hour after `prior` in the same series: its first interval is the prior's second."""
+        series = prior._stub_series
+        later = Market(tn, series, MarketState.Inactive, series.duration.get_timings(self.T + timedelta(hours=1)),
+                       prior_market_in_series=prior)
+        tn.markets.append(later)
+        return later
+
+    def test_the_prior_markets_cleared_prices_replace_the_opening_prices_of_the_shared_intervals(self):
+        tn = MockTN()
+        prior = make_market(tn, clearing_time=self.T, intervals_to_clear=2)
+        later = self.successor_of(tn, prior)
+        shared, new = later.time_intervals
+        assert shared.start_time == prior.time_intervals[1].start_time
+        assert [later.marginal_prices.get_by_interval(ti).value for ti in (shared, new)] == [0.05, 0.05], \
+            'spawned before the prior cleared: the opening prices are the prior\'s opening prices'
+        prior.marginal_prices.update(prior.time_intervals[1], 0.07)  # the prior clears
+        in_force = later.refresh_prices_from_prior_market()
+        assert later.marginal_prices.get_by_interval(shared).value == 0.07
+        assert later.marginal_prices.get_by_interval(new).value == 0.05, 'an interval the prior does not cover is kept'
+        assert in_force == {shared.start_time: 0.07, new.start_time: 0.05}
+        prior.marginal_prices.update(prior.time_intervals[1], 0.08)  # and clears again
+        later.refresh_prices_from_prior_market()
+        assert later.marginal_prices.get_by_interval(shared).value == 0.08, 'a later refresh follows the prior again'
+
+    def test_a_price_this_market_balanced_itself_is_never_overwritten(self):
+        tn = MockTN()
+        prior = make_market(tn, clearing_time=self.T, intervals_to_clear=2)
+        later = self.successor_of(tn, prior)
+        asset = LocalAsset(transactive_node=tn, cost_parameters=[])
+        neighbor = Neighbor(transactive_node=tn, cost_parameters=[])
+        tn.local_assets, tn.neighbors = [asset], [neighbor]
+        for ti in later.time_intervals:
+            neighbor.active_vertices.update(ti, curve(ti, [Vertex(0.02, 0, 0), Vertex(0.05, 0, 10)]))
+            asset.active_vertices.update(ti, curve(ti, [Vertex(INF, 0, -4)]))
+        later.balance()
+        shared, new = later.time_intervals
+        assert later.marginal_prices.get_by_interval(shared).value == pytest.approx(0.032)
+        prior.marginal_prices.update(prior.time_intervals[1], 0.07)
+        later.refresh_prices_from_prior_market()
+        assert later.marginal_prices.get_by_interval(shared).value == pytest.approx(0.032), 'balanced here: kept'
+        assert later.marginal_prices.get_by_interval(new).value == pytest.approx(0.032)

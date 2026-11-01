@@ -113,6 +113,8 @@ class Auction(Market):
         #            time intervals. Local assets may predict more future prices if they need to. Point 2: This initial
         #            marginal price should be replaced by the auction mechanisms.
         self.check_marginal_prices()
+        # A successor was spawned before its predecessor cleared; open at the prices the predecessor has cleared since.
+        self.refresh_prices_from_prior_market()
 
         # Set the auction convergence flag false prior to the Negotiation market state.
         self.converged = False

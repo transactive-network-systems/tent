@@ -124,6 +124,7 @@ class Market(Component):
         # (entity id, interval name) -> (the entity's curve balance() read, its cleared power). See assign_cleared_powers.
         self._cleared_powers: dict[tuple, tuple[SDCurve, float]] = {}
         self._information_services_updated: bool = False  # see update_information_services
+        self._own_prices: set[datetime] = set()  # start times of intervals this market has balanced itself; see balance
 
         # Set up market
         self.check_marginal_prices()
@@ -521,6 +522,8 @@ class Market(Component):
         :return: None
         """
         _log.debug(f'MARKET: {self.name} STATE IS NOW TRANSITIONING: Active to Negotiation')
+        # Price discovery opens here: start from what the prior market in the series has cleared by now.
+        self.refresh_prices_from_prior_market()
         return None
 
     def while_in_negotiation(self):
@@ -562,6 +565,8 @@ class Market(Component):
         :return: None
         """
         _log.debug(f'MARKET: {self.name} STATE IS NOW TRANSITIONING: Negotiation to Market Lead')
+        # The prior market may have cleared during this market's Negotiation; intervals not priced here follow it.
+        self.refresh_prices_from_prior_market()
         return None
 
     def while_in_market_lead(self):
@@ -751,6 +756,7 @@ class Market(Component):
             # indexed active time interval.
             self.marginal_prices.update(time_interval, cleared_marginal_price)
             self.assign_cleared_powers(time_interval, cleared_marginal_price)
+            self._own_prices.add(time_interval.start_time)
         return True
 
     def assign_cleared_powers(self, time_interval, price: float) -> None:
@@ -904,13 +910,17 @@ class Market(Component):
         """
         Re-seed this market's marginal prices from the prior market in the series for the intervals they share.
         check_marginal_prices() runs at construction, which for a rolling series is before the prior market has cleared,
-        so the prices it copied were the prior market's own opening prices. Call this when negotiation starts and the
-        prior market has cleared. Intervals the prior market does not cover keep their current price. Returns the
-        prices in force after the refresh, keyed by interval start time.
+        so the prices it copied were the prior market's own opening prices. The base state machine calls this as
+        Negotiation opens and again as MarketLead starts, so a market opens at whatever its predecessor has cleared by
+        then. Only intervals this market has not balanced itself are refreshed (see balance): a price found here is
+        never overwritten by the predecessor's, so repeated calls are harmless. Intervals the prior market does not
+        cover keep their current price. Returns the prices in force after the refresh, keyed by interval start time.
         """
         prior = self.prior_market_in_series
         if prior is not None:
             for time_interval in self.time_intervals:
+                if time_interval.start_time in self._own_prices:
+                    continue
                 price = self._extract_price_from_other_market(prior, time_interval)
                 if price is not None:
                     self.marginal_prices.update(time_interval, price)

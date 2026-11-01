@@ -190,6 +190,8 @@ class TransactiveNode(Archivable):
             self.neighbors = self._configure_components(config.get('neighbors'), Neighbor)
             _log.debug('DONE WITH NEIGHBORS')
             self.market_series = self._configure_components(config.get('market_series'), MarketSeries)
+            for series in self.market_series:  # a series may refine another configured after it
+                series.resolve_references()
             # TODO: Organize them by market order?
             _log.debug('DONE WITH MARKETS')
         except ValueError as e:

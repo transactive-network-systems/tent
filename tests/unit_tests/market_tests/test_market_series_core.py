@@ -1,6 +1,6 @@
 import pytest
-from datetime import datetime, timedelta
-from unittest.mock import Mock
+from datetime import datetime, timedelta, timezone
+from unittest.mock import Mock, patch
 
 from tent.market.market_series import MarketSeries
 from tent.enumerations import MarketState
@@ -107,3 +107,34 @@ def test_markets_expiring_in_one_tick_are_pruned_after_the_iteration():  # audit
     newest._stateIsCompleted = False
     tn.step()
     assert list(series.markets) == [newest], 'the newest market is never pruned, even when expired'
+
+
+def _two_series(refining_first: bool) -> dict:
+    day_ahead = {'class_name': 'MarketSeries', 'name': 'Day-Ahead', 'market_clearing_interval': 86400,
+                 'intervals_to_clear': 24, 'interval_duration': 3600, 'duration_market_lead': 600}
+    real_time = {'class_name': 'MarketSeries', 'name': 'Real-Time', 'refined_series': 'Day-Ahead',
+                 'market_clearing_interval': 3600, 'interval_duration': 3600, 'duration_market_lead': 600}
+    return {'tz': 'UTC', 'data_manager': {'class_name': 'NullDataManager'},
+            'market_series': [real_time, day_ahead] if refining_first else [day_ahead, real_time]}
+
+
+@pytest.mark.parametrize('refining_first', [False, True], ids=['refined series first', 'refining series first'])
+def test_a_series_configured_to_refine_another_by_name_resolves_it_in_either_configuration_order(refining_first):
+    tn = MockTN()
+    with patch.object(Timer, 'now', return_value=datetime(2017, 7, 1, tzinfo=timezone.utc)):
+        tn.configure_node(_two_series(refining_first))
+    day_ahead = tn.get_market_series_by_attribute('name', 'Day-Ahead', first_only=True)
+    real_time = tn.get_market_series_by_attribute('name', 'Real-Time', first_only=True)
+    assert real_time.refined_series.name == 'Day-Ahead' and day_ahead.refined_series is None
+    assert len(day_ahead.markets) == len(real_time.markets) == 1, 'each series has its first market once configured'
+    first = real_time.newest_market
+    assert first.market_state is MarketState.Initial
+    assert first.market_to_be_refined is not None and first.market_to_be_refined.name == day_ahead.newest_market.name, \
+        'the first real-time market refines the day-ahead market cleared at the same instant'
+
+
+def test_a_refined_series_name_matching_no_series_is_a_configuration_error():
+    configs = _two_series(refining_first=False)
+    configs['market_series'][1]['refined_series'] = 'Day-After'
+    with pytest.raises(ValueError, match="MarketSeries Real-Time: refined_series 'Day-After' names no market series"):
+        MockTN().configure_node(configs)
