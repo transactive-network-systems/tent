@@ -182,10 +182,10 @@ class TransactiveSignal(SDMeasurement):
                                  f" Expected: {cls.PROTOCOL_VERSION}.")
             # TODO: This won't work yet, since the function to get market by name does not currently exist.
             if not (market := tn.get_market_by_name(message['market'])):
-                _log.warning(f'Unable to find valid market "{market}" from received transactive signal.')
+                _log.warning(f'Unable to find valid market "{message["market"]}" from received transactive signal.')
                 return  # TODO: Should we raise on bad market or neighbor and let the caller handle it?
             if not (neighbor := tn.get_neighbors_by_attribute('name', message['neighbor'], first_only=True)):
-                _log.warning(f'Unable to find valid neighbor "{neighbor}" from received transactive signal.')
+                _log.warning(f'Unable to find valid neighbor "{message["neighbor"]}" from received transactive signal.')
             signal_time = (require_aware(datetime.fromisoformat(message['signal_time']), 'signal_time')
                            if message.get('signal_time') else None)
             in_reply_to = message['in_reply_to']
