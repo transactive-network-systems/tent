@@ -112,10 +112,24 @@ def test_the_sample_configuration_validates_and_configures_a_node(tmp_path):
     assert all(row['version'] == 1 for row in rows)
 
 
+# Keys of the deployed files that belong to the host application (the TransactiveNodeAgent), not to TENT: the agent
+# reads and removes them before the configuration reaches TENT (see the agent's README). Mirrored here so the deployed
+# files can be checked against TENT's models; TENT itself refuses them, by design.
+HOST_COMPONENT_KEYS = {'neighbors': {'sender'}}
+
+
+def _without_host_keys(configs: dict) -> dict:
+    stripped = dict(configs)
+    for list_name, keys in HOST_COMPONENT_KEYS.items():
+        stripped[list_name] = [{k: v for k, v in entry.items() if k not in keys} for entry in configs.get(list_name, [])]
+    return stripped
+
+
 def _component_problems(configs: dict) -> tuple[list[str], list[str]]:
     """(problems the models report, components whose class could not be imported here) for a deployed configuration,
     component by component, so that one host-package class does not hide the rest."""
     problems, unavailable = [], []
+    configs = _without_host_keys(configs)
     try:
         cfg = TransactiveNode.Config.validate_for('TransactiveNode', configs)
     except ConfigurationError as error:
@@ -138,12 +152,6 @@ def _component_problems(configs: dict) -> tuple[list[str], list[str]]:
         except ImportError as error:  # a nested specification (actuation manager) names a host-package class
             unavailable.append(f'{where}: {error}')
     return problems, unavailable
-
-
-KNOWN_DEPLOYED_DEVIATIONS = (
-    'every container config gives the TemperatureForecastModel location "" where the model takes a dict or null, and '
-    'the LocalDataManager db_params carry db_type, a key TENT never read'
-)
 
 
 @pytest.mark.parametrize('path', CONTAINER_CONFIGS or [None], ids=lambda p: Path(p).name if p else 'none')
