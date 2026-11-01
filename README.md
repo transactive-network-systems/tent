@@ -120,6 +120,24 @@ its price model in the `price_model` block; a model-frame asset names each model
 `class_name` with the model's own keys in `model_config`. The configuration dictionaries are only read, so the same
 ones can be given again to rebuild a node.
 
+**The keys of a block are the fields of the class's `Config` model.** Every configurable class declares a nested
+`Config` (Pydantic v2, on `tent.config.ConfigModel`); the constructor validates its keywords through it and reads its
+settings from the validated instance, so `Neighbor.Config.model_fields` is the list of a neighbor's keys with their
+types, bounds, defaults and descriptions (units in brackets), and `Neighbor.Config.model_json_schema()` the same as
+JSON Schema. A subclass's model extends its parent's. The models encode TENT's conventions: durations are numbers of
+seconds (read as `timedelta`), times of day are `"HH:MM"`, enumerations are given by member name, `cost_parameters` is
+exactly three numbers or `null`, `default_vertices` is a list of `[price, cost, quantity, continuity, uncertainty]`
+lists or dicts (`"inf"` for an infinite price), datetimes carry an offset (`simulation_start_time` without one is in
+the node's `tz`), and other components are referred to by name. An unknown key is an error that names the component
+and the key. `TransactiveNode.validate_configuration(configs)` checks a whole configuration before anything is built,
+and `configure_node` does so first. Fields a running component may change in place (costs, limits, thresholds, default
+prices, loss factors, demand rates, forecast sources, schedules) are marked `reconfigurable`; `component.reconfigure
+(changes)` applies such a change and archives the new configuration version (table `component_configuration`), and
+`TransactiveNode.reconfigure(new_config)` applies a whole new configuration in place when it differs only in such
+fields (returning `True`) or returns `False` so the host rebuilds. `tent.registry.configuration_schema()` is the JSON
+Schema (draft 2020-12) of a node configuration, every slot a `oneOf` over the registered classes, for editors and the
+configuration tool. See `docs/source/design/configuration_models.rst`.
+
 Between nodes, transactive signals travel in the wire format defined by `TransactiveSignalMessage`
 (`tent/containers/transactive_signal_message.py`, protocol version 1.0): a Pydantic model that the sender serialises
 through and the receiver validates before anything is looked up. An inelastic vertex's infinite price is `null` on the

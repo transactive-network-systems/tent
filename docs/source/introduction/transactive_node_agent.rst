@@ -9,17 +9,20 @@ The Transactive Node (TN) Agent can be deployed as a standalone simulation runti
 Instantiating a Transactive Node
 --------------------------------
 
-A node can be constructed directly from a JSON configuration file using the built-in loader:
+A host (the VOLTTRON agent, or a test harness such as ``tests/mock_tn.py``) subclasses ``TransactiveNode``, supplying
+the message-bus methods, and configures it from a JSON configuration (validated through the configuration models, see
+:ref:`Configuration_Models`):
 
 .. code-block:: python
 
-   from tent.transactive_node import TransactiveNode
+   import json
+   from tests.mock_tn import MockTN
 
-   # Load node from JSON configuration
-   tn = TransactiveNode.from_json("sample_configs/tn.campus.json")
+   with open("sample_configs/tn.campus.json") as f:
+       tn = MockTN()
+       tn.configure_node(json.load(f))
 
-   # Start transactive execution loop
-   tn.start()
+   tn.step()  # one iteration of the state machine; the agent runs state_machine_loop()
 
 Event Timing & Horizon Rolling
 ------------------------------

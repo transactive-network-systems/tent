@@ -9,25 +9,28 @@ TENT configurations are organized as declarative JSON files that specify node pa
 Configuration Structure
 -----------------------
 
-A standard node JSON configuration includes:
+A node configuration is one JSON object whose keys are the fields of ``TransactiveNode.Config`` (see
+:ref:`Configuration_Models` for how every block's keys are read from its model):
 
-1. **Top-Level Node Metadata**:
-   * ``agentid``: Unique string identifier for the node.
-   * ``name``: Human-readable node name.
-   * ``market_cycle_in_min``: Negotiation period in minutes (e.g., 15 or 60).
-   * ``duality_gap_threshold``: Convergence threshold for market clearing.
+1. **Node settings**: ``name``, ``description``, ``actor_id`` (the permanent identity of the actor this node
+   represents), ``organization_id``, ``tz`` (an IANA zone name), ``mechanism``, ``status``, ``loop_sleep_duration``.
 
-2. **Local Assets List** (``local_assets``):
-   * Array of ``ModelFrameAsset`` objects with their sub-model configurations.
+2. **Simulation settings**: ``simulation``, ``simulation_start_time`` (ISO 8601; without an offset it is in ``tz``),
+   ``simulation_one_hour_in_seconds``, ``simulation_anchor_time`` (set by the host from its environment).
 
-3. **Neighbors List** (``neighbors``):
-   * Array of neighboring transactive agents and bulk power suppliers.
+3. **Host settings** read by the TransactiveNodeAgent, not by the node: ``db_topic``, ``subscribe_all_platforms``,
+   ``topics``.
 
-4. **Market Series List** (``market_series``):
-   * Market series definition with horizon length, interval duration, and auction rules.
+4. **The archive** (``data_manager``): one block naming the data manager class and its settings
+   (``LocalDataManager`` with ``db_params.url``, or ``NullDataManager``); without it nothing is archived.
 
-5. **Information Services List** (``information_services``):
-   * Forecast models for weather, temperature, and solar irradiance.
+5. **The component lists**, built in this order so that an entry may refer by name to one before it:
+   ``meter_points``, ``information_service_models``, ``local_assets``, ``neighbors``, ``market_series``. Each entry is
+   a block naming its class and giving that class's settings; a ``market_series`` entry also names its market class
+   with ``market_class_name`` and holds that class's settings.
+
+Any other key is an error, as is a key a block's class does not declare. ``sample_configs/tn.campus.json`` is a
+complete example.
 
 Naming Classes
 --------------
@@ -49,3 +52,11 @@ configuration fails with a ``TypeError`` naming the slot. An unknown name withou
 ``market_class_name`` (and ``market_module_name`` for one from elsewhere); without it the series spawns plain
 ``Market`` objects. Configuration dictionaries are only read, never changed, so the same contents can configure a node
 again.
+
+Validation
+----------
+
+``TransactiveNode.validate_configuration(configs)`` checks a whole configuration through the models without building
+anything, and ``configure_node`` does so before it builds; the error names the list entry, the component and the keys.
+``tent.registry.configuration_schema()`` returns the JSON Schema of a node configuration for editors and tools. Both are
+described in :ref:`Configuration_Models`.
