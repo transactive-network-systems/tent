@@ -364,17 +364,3 @@ def test_init_with_none_creates_child_orders(market, interval, actor, crossing_v
 # simplify_order basic behaviors
 #############################################
 
-def test_simplify_order_limit_collapse_supply(market, interval, actor):
-	order = make_order(market, interval, actor, [v(10, 5.0), v(20, 5.0)], SupplyOrDemand.SUPPLY)
-	simplified = order.simplify_order()
-	assert simplified is order
-	assert len(order.vertices) == 1  # collapsed
-	assert math.isinf(order.vertices[0].price)  # price mutated to inf then overwritten to -inf for demand vs supply
-
-
-def test_simplify_order_more_than_two(market, interval, actor):
-	order = make_order(market, interval, actor, [v(10, 0.0), v(15, 2.0), v(20, 4.0)], SupplyOrDemand.SUPPLY)
-	simplified = order.simplify_order()
-	assert simplified is order
-	# linear middle expected to be removed (perfect linear interpolation)
-	assert len(order.vertices) == 2

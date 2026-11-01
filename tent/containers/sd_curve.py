@@ -305,7 +305,7 @@ class SDCurve(Archivable):
                         else:
                             # [$/kWh] / [$/kWh/kW]
                             a2 = (upper.price - lower.price) / (upper.quantity - lower.quantity)
-                            a2 = a2 * (power - lower.quantity) ** 2  # [$/h]
+                            a2 = 0.5 * a2 * (power - lower.quantity) ** 2  # [$/h]: integral of the linear marginal price
                             a2 = a2 * self.interval.duration.total_seconds() / 3600  # [$]
 
                         # Finally, calculate the production cost for the time interval by summing the terms

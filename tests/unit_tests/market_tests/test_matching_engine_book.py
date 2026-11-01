@@ -380,7 +380,7 @@ def test_match_archives_every_booked_and_superseded_order(engine, neighbor, asse
 
 
 # ---------------------------------------------------------------------------------------------------------------------
-# get_order_by_id and order_id_is_unique: legacy test_get_order_by_id and test_order_id_is_unique
+# get_order_by_id: legacy test_get_order_by_id (order_id_is_unique was removed: ids are UUIDv7)
 # ---------------------------------------------------------------------------------------------------------------------
 
 @pytest.fixture
@@ -397,12 +397,6 @@ def test_get_order_by_id(two_lists):
     assert two_lists.get_order_by_id(an_id=two_lists.matchList[0].id) is two_lists.matchList[0]
     assert two_lists.get_order_by_id(an_id=uuid7()) is None
 
-
-def test_order_id_is_unique(two_lists):
-    assert two_lists.order_id_is_unique() is None, 'no id, no answer'
-    assert two_lists.order_id_is_unique(an_id=two_lists.orderList[0].id) is False
-    assert two_lists.order_id_is_unique(an_id=two_lists.matchList[1].id) is False
-    assert two_lists.order_id_is_unique(an_id=uuid7()) is True
 
 
 # ---------------------------------------------------------------------------------------------------------------------

@@ -1,6 +1,5 @@
 from copy import copy
 from datetime import datetime, timedelta
-from json import dumps, load
 from warnings import warn
 
 from tent.containers import SDCurve, TimeInterval, Vertex
@@ -115,38 +114,6 @@ class Order(SDCurve):
     @property
     def expire_by(self):
         return self.__expireBy__
-
-    # TODO: create/load_json_message methods are not used, and may be partially or entirely superseded by get_record.
-    # TODO: Should we instead have an abstract serialization method in the TN that receives a dict?
-    def create_json_message(self):
-        """
-        Convert an Order object into json message, which can be sent to another agent and loaded again into an
-        identical Order object.
-
-        Parameters: None
-
-        Returns: flat JSON file
-        """
-        #
-        # TODO: Review this method to make sure that recursion captures all the nested objects properly.
-        return dumps({"actor": self.actor.name,
-                      "childOrderIds": self.child_order_ids,
-                      "duration [s]": self.interval.duration.total_seconds(),
-                      "expire_by": self.expire_by.isoformat(),
-                      "id": self.id,
-                      "parentOrderId": self.parent_order_id,
-                      "vertices": self.vertices,
-                      "startTime": self.interval.start_time.isoformat(),
-                      "status": self.status.name,
-                      "timeStamp": self.time_stamp.isoformat(),
-                      "supplyOrDemand": self.supply_or_demand})
-
-    def load_json_message(self, filename: str or None = None):
-        # Recreate an Order object from a json file, as may have been received from a Neighbor agent object.
-        # TODO: Review this method to make sure it unpacks the json file so that a new Order object may be easily
-        #       recreated.
-        raw_load = load(filename)
-        return raw_load
 
     def mark_as_revised(self):
         # Update order status in [NEW, STANDING_ORDER, and MATCHED] to corresponding revised status.
@@ -738,89 +705,6 @@ class Order(SDCurve):
 
             # Mark this Order object as having been revised.
             self.mark_as_revised()
-
-            return self.order_or_none()
-
-    def simplify_order(self):
-        """
-        Returns the order after eliminating all Vertices that are irrelevant or that can be inferred by
-        interpolation.
-
-        Returns: simplified Order object that omits vertices that could be inferred by linear interpolation
-        TODO: Check this logic. I don't think it is right when the center value matches one of the bookend values.
-        TODO: Extend logic in this method to also account for continuity.
-        TODO: Write tests for this method.
-        """
-        self.sort_order()
-        vertices = self.vertices
-
-        # [This Order object does not have any Vertices.]
-        # Return None.
-        if not vertices:
-            return None
-
-        # [This Order object is probably a market order.] (A "market order" has one Vertex with infinite price
-        #                                                 magnitude.)
-        # Return the Order. It cannot be simplified further.
-        elif len(vertices) <= 1:
-            return self.order_or_none()
-
-        # [this Order object has two Vertices.]
-        elif len(vertices) == 2:
-
-            # [This Order is a simple limit order.] (A "limit order" is defined by a single strike price.)
-            # Check and perhaps correct the price assignments of the existing Vertices.
-            if vertices[0].quantity == vertices[1].quantity:
-                self.vertices = [vertices[0]]
-                self.vertices[0].price = float('inf')
-                if self.supply_or_demand == SupplyOrDemand.DEMAND:
-                    self.vertices[0].price = -float('inf')
-
-            # Return the Order object, corrected or not.
-            return self.order_or_none()
-
-        # [This Order object has more than two Vertices.]
-        # Check whether any of the Vertices are superfluous and may be deleted.
-        else:
-            # new_pp:= list of Vertex objects that should be retained as this Order object is simplified.
-            new_pp = []
-
-            # [The quantities of the first two Vertices are not the same.]
-            # The first Vertex object is probably useful.
-            if vertices[0].quantity != vertices[1].quantity:
-                new_pp.append(vertices[0])
-
-            # Index a PricePont and both its prior and next Vertices.
-            # Three consecutive Vertices are needed to determine which are necessary.
-            for i in range(1, len(vertices) - 1):
-                prior_pp = vertices[i-1]
-                pp = vertices[i]
-                next_pp = vertices[i+1]
-                lin_err = abs((pp.price - prior_pp.price) / (next_pp.price - prior_pp.price)
-                              - (pp.quantity - prior_pp.quantity) / (next_pp.quantity - prior_pp.quantity))
-                if lin_err > 1e-4 and \
-                        not (pp.continuity and next_pp.continuity):
-                    new_pp.append(pp)
-
-            # [The last Vertex's quantity is not the same as the next-to-last's quantity.]
-            # The last Vertex is probably useful and needed.
-            if vertices[-1].quantity != vertices[-2].quantity:
-                new_pp.append(vertices[-1])
-
-            # [More than one Vertex has been saved.]
-            # [The saved Vertex include quantity float('inf') at least once.]
-            # Remove the Vertex having quantity float('inf').
-            if len(new_pp) > 1 and [x for x in new_pp if x.quantity == float('inf')]:
-                new_pp = [x for x in new_pp if x.quantity != float('inf')]
-
-            # [More than one Vertex has been saved.]
-            # [The saved Vertices include quantity -float('inf') at least once.]
-            # Remove the Vertices having quantity -float('inf').
-            if len(new_pp) > 1 and [x for x in new_pp if x.quantity == -float('inf')]:
-                new_pp = [x for x in new_pp if x.quantity != -float('inf')]
-
-            # Replace the original Order object's Vertices with the new simplified set of Vertices.
-            self.vertices = new_pp
 
             return self.order_or_none()
 

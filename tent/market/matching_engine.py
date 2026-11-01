@@ -442,23 +442,6 @@ class MatchingEngine(Market):
         else:
             return None
 
-    def order_id_is_unique(self, an_id: int or None = None):
-        """
-        Returns True if ID parameter is provided and the ID unique among those in this market's matched or standing
-        orders.
-
-        Parameters:
-            an_id: (integer)
-
-        Returns: None
-        """
-        if an_id:
-            return not any(
-                [x.id == an_id for x in self.orderList + self.matchList]
-            )
-        else:
-            return None
-
     def while_in_negotiation(self):
         """
         In this market state, actors may submit from zero to many offer or bid orders to secure a position in this

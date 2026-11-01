@@ -206,7 +206,6 @@ def test_no_counteroffers_leaves_order_standing(market):
     assert len(market.orderList) == 1
     assert market.orderList[0].status is OrderStatus.STANDING_ORDER
     assert market.get_order_by_id(market.orderList[0].id) is market.orderList[0]
-    assert market.order_id_is_unique(uuid7()) is True
     # Append-only archive: one version per state the order passed through.
     history = [r['status'] for r in market.tn.data_manager.by_table('order') if r['id'] == aggressive.id]
     assert history == [OrderStatus.NEW, OrderStatus.STANDING_ORDER]

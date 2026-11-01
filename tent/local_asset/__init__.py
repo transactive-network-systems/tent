@@ -90,34 +90,12 @@ class LocalAsset(Entity):
 
         # These following static properties may be assigned as parameters:
         self.default_power: float = float(default_power)           # [avg.kW, signed] Assignable default power value(s)
-        self.engagement_costs: list[float] = [float(ec) for ec in engagement_costs]  # {engagement, [$]; hold, [$]; disengagement, [$]} Transition costs
+        self.engagement_costs: list[float] = [float(ec) for ec in engagement_costs]  # [disengagement, hold, engagement] transition costs [$]; see engagement_cost()
 
         # These following properties are dynamically managed and should not normally be manually configured:
         self.engagement_schedule: Measurement = Measurement(self, MeasurementType.EngagementSchedule, MeasurementUnit.Boolean, archive_now=False)  # True = engaged
         self.schedule_calculated: bool = False            # Flag set True after asset has scheduled power
         self.transition_costs: Measurement = Measurement(self, MeasurementType.TransitionCost, MeasurementUnit.Monetary, archive_now=False)
-
-    def cost(self, power=0):
-        # Calculate production (consumption) cost at the given power level.
-        #
-        # INPUTS:
-        # power - power production (consumption) for which production (consumption) costs are to be calculated [kW]. By
-        #         convention, imported and generated power is positive exported or consumed power is negative.
-        #
-        # RETURN:
-        # production_cost - calculated production (consumption) cost [$/h]
-        #
-        # LOCAL:
-        # a - array of production cost coefficients that must be ordered [a0 a1 a2], such that
-        #                              cost = a0 + a1*power + a2*power ** 2 [$/h].
-
-        # Extract the production cost coefficients for the given object
-        a = self.cost_parameters
-
-        # Calculate the production (consumption) cost for the given power
-        production_cost = a[0] + a[1] * power + a[2] * power ** 2  # [$/h]
-
-        return production_cost
 
     # SEALED - DO NOT MODIFY
     def schedule(self, market):
@@ -130,6 +108,7 @@ class LocalAsset(Entity):
         self.schedule_power(market)
 
         self.schedule_engagement(market)  # only applied to LocalAsset class
+        self.assign_transition_costs(market)  # engagement / holding / disengagement costs per interval
 
         # Update vertices and calculate reserve margins if schedule powers have been calculated
         if self.schedule_calculated:

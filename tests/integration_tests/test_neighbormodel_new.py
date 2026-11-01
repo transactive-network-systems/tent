@@ -1374,7 +1374,7 @@ def test_update_production_costs():
     # At power=0: cost=1000, price=0.1
     # At power=100: cost=1015, price=0.2
     # At power=50 (midpoint): cost = 1000 + (50/100) * (1015-1000) = 1000 + 7.5 = 1007.5
-    expected_production_cost = 1007.5
+    expected_production_cost = 1006.25  # integral of the linear marginal price between the bracketing vertices
     production_cost = production_cost_obj.value
     assert production_cost == pytest.approx(expected_production_cost), \
         f'  - unexpected production cost value (got {production_cost}, expected {expected_production_cost})'

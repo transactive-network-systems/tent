@@ -1,3 +1,4 @@
+import pytest
 from uuid6 import uuid7
 from datetime import datetime, timedelta, timezone
 
@@ -136,61 +137,6 @@ def test_calculate_reserve_margin():
 
     # Success
     print('Method test_calculate_reserve_margin() ran to completion.\n')
-
-
-def test_cost():
-    """Test the cost calculation method for a LocalAsset.
-    
-    Tests production cost calculation using cost_parameters.
-    The cost formula is: cost = a + b*power + c*power^2
-    where cost_parameters = [a, b, c]
-    """
-    print('Running LocalAsset.test_cost()')
-
-    # Create test node
-    test_node = MockTN()
-
-    print('  Case 1: Use default cost_parameters')
-    # Modern API requires transactive_node, cost_parameters should default to [0, 0, 0]
-    test_asset = LocalAsset(transactive_node=test_node, cost_parameters=[0, 0, 0])
-    power = 10
-
-    try:
-        production_cost = test_asset.cost(power)
-        print('  - The method ran without errors')
-    except Exception as cause:
-        print('  - ERRORS ENCOUNTERED', cause)
-        production_cost = None
-
-    assert production_cost == 0, 'The production cost should have been 0'
-
-    print('  Case 2: No power parameter is used')
-    test_value = 1.234
-    immutable_trio = (test_value, 0, 0)
-    test_asset.cost_parameters = immutable_trio
-
-    try:
-        production_cost = test_asset.cost()
-        print('  - The method ran without errors')
-    except Exception as cause:
-        print('  - ERRORS ENCOUNTERED', cause)
-
-    assert production_cost == test_value, 'The production cost should have been provided test value'
-
-    print('  Case 3: Full calculation')
-    test_asset.cost_parameters = [1, 1, 1]
-    power = 10
-
-    try:
-        production_cost = test_asset.cost(power)
-        print('  - The method ran without errors')
-    except Exception as cause:
-        print('  - ERRORS ENCOUNTERED', cause)
-
-    assert production_cost == 111, 'The production cost should have been 111'
-
-    # Success
-    print('Method test_cost() ran to completion.\n')
 
 
 def test_engagement_cost():
@@ -694,7 +640,8 @@ def test_update_production_costs():
 
     production_cost = test_model.production_costs.get_by_interval(time_interval)
     assert production_cost is not None, 'A production cost should have been created'
-    assert production_cost == 1007.5, 'An unexpected production cost value was found'
+    # The integral of the linear marginal price between the bracketing vertices (half factor on the quadratic term).
+    assert production_cost.value == pytest.approx(1006.25), 'An unexpected production cost value was found'
 
     # TEST 2
     print('- Test 2: Reassignment of an existing production cost')
