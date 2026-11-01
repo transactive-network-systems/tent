@@ -65,6 +65,9 @@ class Market(Component):
     # At least one Market must exist (see the firstMarket object) to drive the timing with which new TimeIntervals are
     # created.
     MARKET_TYPE = MarketTypes.unknown
+    # Two vertex prices closer than this are one price. Market.sum_vertices offsets a duplicate price by 1e-10 so the
+    # system curve stays a function; the cleared price then lands within that offset of the flat segment it sits on.
+    FLAT_PRICE_TOLERANCE = 1e-8  # [$/kWh]
 
     def __init__(self,
                  transactive_node,
@@ -118,6 +121,8 @@ class Market(Component):
         self.total_generation: Measurement = Measurement(self, MeasurementType.TotalGeneration, MeasurementUnit.kW)  # [avg.kW]
         self.total_production_cost: float = 0.0  # [$]
         self._missing_curves_reported: set[tuple[str, str]] = set()  # (entity, interval) pairs sum_vertices warned about
+        # (entity id, interval name) -> (the entity's curve balance() read, its cleared power). See assign_cleared_powers.
+        self._cleared_powers: dict[tuple, tuple[SDCurve, float]] = {}
         self._information_services_updated: bool = False  # see update_information_services
 
         # Set up market
@@ -692,15 +697,18 @@ class Market(Component):
             # Call the utility sum_vertices to recreate the aggregate vertices in the indexed time interval.
             self.active_vertices.update(time_interval, self.sum_vertices(time_interval), replace=True)
 
-    def balance(self):
+    def balance(self) -> bool:
         """
         Balance the market once: sum every entity's active vertices into the system curve for each active time interval
         and read the marginal price where that curve crosses zero net power (linear interpolation between the bracketing
-        vertices, which is exact for the piece-wise linear curves TENT entities produce). Sets converged False and returns
-        early when an interval cannot be bracketed (e.g. no supply at all). Iteration, where an asset's curve depends on
-        the price, belongs to the caller (see ConsensusMarket.balance_locally).
+        vertices, which is exact for the piece-wise linear curves TENT entities produce), then assign every entity the
+        power it exchanges at that price (assign_cleared_powers). Sets converged False and returns False when an interval
+        cannot be bracketed (e.g. no supply at all), leaving the remaining intervals untouched; returns True when every
+        interval found a price. Iteration, where an asset's curve depends on the price, belongs to the caller (see
+        ConsensusMarket.balance_locally).
         """
         self.assign_system_vertices()
+        self._cleared_powers.clear()
         _log.debug(f"{self.name} market active vertices are: {self.active_vertices.log_report}")
 
         # Index through active time intervals.
@@ -715,14 +723,16 @@ class Market(Component):
             active_sd_curve: SDCurve = self.active_vertices.get_by_interval(time_interval)
 
             try:
-                # Find the vertex that bookcases the balance point from the lower side.
+                # The vertices that bracket the zero crossing: the largest demand (quantity < 0) and the smallest supply
+                # (quantity >= 0). Several vertices may share a quantity where the curve is vertical (a price step, as
+                # at an inelastic entity's price or a flat segment's edge); of those, the ones nearest the crossing in
+                # price bracket it: the highest-priced demand vertex and the lowest-priced supply vertex.
                 if not (lower_active_vertex := max(filter(lambda v: v.quantity < 0, active_sd_curve.vertices),
-                                                   key=lambda v: v.quantity, default=None)):
+                                                   key=lambda v: (v.quantity, v.price), default=None)):
                     raise ValueError(f'No load demand vertices (quantity < 0) were found.')
 
-                # Find the vertex that bookcases the balance point from the upper side.
                 if not (upper_active_vertex := min(filter(lambda v: v.quantity >= 0, active_sd_curve.vertices),
-                                                   key=lambda v: v.quantity, default=None)):
+                                                   key=lambda v: (v.quantity, v.price), default=None)):
                     raise ValueError(f'No supply vertices (quantity >= 0) were found.')
 
                 if (power_range := upper_active_vertex.quantity - lower_active_vertex.quantity) == 0:
@@ -732,17 +742,59 @@ class Market(Component):
                 marginal_price_range = upper_active_vertex.price - lower_active_vertex.price
                 cleared_marginal_price = (- marginal_price_range * lower_active_vertex.quantity / power_range
                                          + lower_active_vertex.price)
-                # TODO: Consider adding a feature to find each asset's and neighbor's cleared power at this point.
-                #       This would require interpolation of the cleared average power, and the implication must be
-                #       interpreted for each asset and neighbor.
             except ValueError as e:
                 _log.warning(f'Failed to balance {self.name} in time interval {time_interval.name}: {e}')
                 self.converged = False
-                return
+                return False
 
             # Assign the cleared marginal price to the marginal price value for the
             # indexed active time interval.
             self.marginal_prices.update(time_interval, cleared_marginal_price)
+            self.assign_cleared_powers(time_interval, cleared_marginal_price)
+        return True
+
+    def assign_cleared_powers(self, time_interval, price: float) -> None:
+        """
+        Give every entity with a curve in the interval the power it exchanges at the cleared price. An entity whose
+        curve is sloped or inelastic at the price reads its power off the curve. An entity whose curve is flat there (a
+        tariff supplier, a ResponseNeighbor stating a price, any horizontal segment: two or more vertices at the price
+        with different quantities) is the marginal entity, and its curve does not say how much it exchanges; it takes
+        the residual of the others. Several flat entities share the residual in proportion to the widths of their flat
+        segments, each within its segment. The assignment is kept with the curve it was read from (see cleared_power).
+        """
+        sloped, flat = [], []
+        for entity in [*self.tn.local_assets, *self.tn.neighbors]:
+            sd_curve = entity.active_vertices.get_by_interval(time_interval)
+            if sd_curve is None or sd_curve.empty:
+                continue  # left out of the system curve by sum_vertices as well
+            at_price = [v for v in sd_curve.vertices if abs(v.price - price) <= self.FLAT_PRICE_TOLERANCE]
+            quantities = {v.quantity for v in at_price}
+            if len(quantities) > 1:
+                flat.append((entity, sd_curve, min(quantities), max(quantities)))
+            else:
+                sloped.append((entity, sd_curve))
+        for entity, sd_curve in sloped:
+            self._cleared_powers[(entity.id, time_interval.name)] = (sd_curve, entity.production(price, time_interval))
+        if not flat:
+            return
+        residual = -sum(entity.production(price, time_interval) for entity, _ in sloped)
+        lowest, highest = sum(lo for *_, lo, _ in flat), sum(hi for *_, _, hi in flat)
+        if not lowest - 1e-9 <= residual <= highest + 1e-9:
+            _log.warning(f'{self.name}: the residual {residual:.6g} kW at {price:.6g} $/kWh in {time_interval.name} '
+                         f'lies outside what the entities flat at that price can take ({lowest:.6g} to {highest:.6g} '
+                         f'kW); they are scheduled at their limits.')
+        fraction = 0.0 if highest == lowest else min(max((residual - lowest) / (highest - lowest), 0.0), 1.0)
+        for entity, sd_curve, lo, hi in flat:
+            self._cleared_powers[(entity.id, time_interval.name)] = (sd_curve, lo + fraction * (hi - lo))
+
+    def cleared_power(self, entity, time_interval) -> float | None:
+        """The power balance() assigned to the entity in the interval, or None when the market has not balanced against
+        the entity's current curve (never balanced, failed in that interval, or the entity rebuilt its curve since)."""
+        assignment = self._cleared_powers.get((entity.id, time_interval.name))
+        if assignment is None:
+            return None
+        sd_curve, power = assignment
+        return power if sd_curve is entity.active_vertices.get_by_interval(time_interval) else None
 
     def calculate_blended_prices(self):
         """

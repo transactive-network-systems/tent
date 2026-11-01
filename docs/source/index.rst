@@ -31,6 +31,12 @@ TENT empowers autonomous agents—representing commercial buildings, municipal g
 
 .. toctree::
    :maxdepth: 2
+   :caption: Neighbors
+
+   neighbors/index
+
+.. toctree::
+   :maxdepth: 2
    :caption: Markets & Auctions
 
    markets/index

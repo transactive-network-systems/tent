@@ -39,6 +39,7 @@ SHIPPED: dict[str, str] = {
     # Neighbors
     'Neighbor': 'tent.neighbor:Neighbor',
     'BulkSupplierDC': 'tent.neighbor.bulk_supplier_dc:BulkSupplierDC',
+    'ResponseNeighbor': 'tent.neighbor.response_neighbor:ResponseNeighbor',
     # Local assets
     'LocalAsset': 'tent.local_asset:LocalAsset',
     'OpenLoopLoadPredictor': 'tent.local_asset.openloop_load_predictor:OpenLoopLoadPredictor',

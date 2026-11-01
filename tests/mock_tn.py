@@ -5,6 +5,7 @@ from typing import Callable
 
 from tent.data_manager.null_data_manager import NullDataManager
 from tent.transactive_node import TransactiveNode
+from tent.utils.timer import Timer
 
 _log = logging.getLogger(__name__)
 
@@ -71,10 +72,11 @@ class MockTN(TransactiveNode):
         self.subscriptions[subscribe_key] = callback
 
     def provide_subscription(self, subscribe_key: str, message):
-        """Provide data to a subscription callback."""
+        """Deliver a message to a subscription callback with the signature TransactiveNode.register_subscription
+        documents: (time received, subscribe key, message)."""
         if callback := self.subscriptions.get(subscribe_key):
             _log.debug(f"Providing subscription data for {subscribe_key}: {message}")
-            callback(message)
+            callback(Timer.now(), subscribe_key, message)
         else:
             _log.warning(f"No subscription registered for: {subscribe_key}")
 

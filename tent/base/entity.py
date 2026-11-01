@@ -163,6 +163,20 @@ class Entity(Component, abc.ABC):
 
         _log.debug(f"{self.name} asset model production costs are: {self.production_costs.log_report}")
 
+    def market_power(self, market, time_interval: TimeInterval) -> float:
+        """
+        The power [avg.kW] this entity exchanges in the interval at the market's price: the power the market assigned
+        when it balanced against this entity's current curve (Market.assign_cleared_powers, which settles the quantity
+        of an entity whose curve is flat at the price), otherwise the power read off the curve at the market's marginal
+        price, or at the price model's forecast when the market has no price yet.
+        """
+        assigned = market.cleared_power(self, time_interval)
+        if assigned is not None:
+            return assigned
+        marginal_price = market.marginal_prices.get_by_interval(time_interval)
+        price = market.price_model.get(time_interval.start_time)[0] if marginal_price is None else marginal_price.value
+        return self.production(price, time_interval)
+
     def production(self, price: float, time_interval: TimeInterval) -> float:
         """ Find economic power production [avg.kW] in this time interval corresponding to the given price.
                 This is performed as a linear interpolation of a discrete set of price-ordered vertices (SDCurve).
