@@ -59,9 +59,9 @@ _log = logging.getLogger(__name__)
 
 class TemperatureForecastModel(InformationServiceModel):
     """
-    Predict hourly temperature (F)
-    Use CSV as we don't have internet access for now. Thus keep the csv file as small as possible
-    This can be changed to read from real-time data source such as WU
+    Hourly temperature forecast (degF) read from a CSV file (columns Timestamp, Value), the data source used in
+    simulations. The constructor also accepts the keys a service-backed subclass needs (location, max_gap_time,
+    temperature_point_name, tmy_fallback_path) so that such a subclass can fall back to the file when its service fails.
     """
 
     def __init__(self,
@@ -109,11 +109,15 @@ class TemperatureForecastModel(InformationServiceModel):
                 self.weather_file_path = None
 
     def update_information(self, market):
-        #_log.debug(f'@@@@@@@@@@@ IN UPDATE INFORMATION FOR MARKET: {market.name}.')
-        if self.weather_file_path is not None:
-            self.get_forecast_file(market)
-        else:
-            self.get_forecast_weather_service(market)
+        """
+        Fill predicted_values for the market's intervals from the weather file. This class is the file-backed forecast;
+        a service-backed forecast (such as the TransactiveNodeAgent's weather.gov model) subclasses it, reusing the
+        constructor, the file loader and get_forecast_file as its fallback, and overrides this method.
+        """
+        if self.weather_file_path is None:
+            raise RuntimeError(f'{self.name}: no weather file is configured (weather_file_path or tmy_fallback_path) and '
+                               f'this class has no other source of forecasts.')
+        self.get_forecast_file(market)
 
     def init_weather_data(self):
         """
@@ -140,60 +144,6 @@ class TemperatureForecastModel(InformationServiceModel):
             except Exception:
                 self.weather_data = []
                 _log.warning("WEATHER - problem parsing weather file!")
-
-    def map_forecast_to_interval(self, mkt, weather_data):
-        items = []
-        predicted_values = []
-        for ti in mkt.time_intervals:
-            # Find item which has the same timestamp as ti.timeStamp
-            previous_measurement = items
-            items = [x[1] for x in weather_data if x[0] == ti.start_time.replace(minute=0)]
-            # Create interval value and add it to predicted values
-            if items:
-                predicted_values.append((ti, items[0]))
-            elif previous_measurement:
-                predicted_values.append((ti, previous_measurement[0]))
-                items = previous_measurement
-            else:
-                _log.warning("Cannot assign WEATHER information for interval: {}".format(ti))
-        if len(mkt.time_intervals) == len(predicted_values):
-            for val in predicted_values:
-                self.predicted_values.update(*val)
-            return True
-        else:
-            _log.warning("WEATHER data problem when assigning forecast {}".format(len(predicted_values)))
-            return False
-
-    def query_weather_data(self):
-        """
-        Implement query of remote weather data here.
-        """
-        return []
-
-    def get_forecast_weather_service(self, mkt):
-        """
-        Gets weather data from a weather service using query_weather_data (which needs to be implemented in a subclass).
-        :param mkt:
-        :return:
-        """
-        weather_data = self.query_weather_data()
-        if not self.map_forecast_to_interval(mkt, weather_data):
-            if self.predicted_values:
-                gap_time = mkt.time_intervals.first.start_time - self.predicted_values.first.interval.start_time
-                if gap_time > self.max_gap_time:
-                    if self.weather_data:
-                        _log.debug("WEATHER using fallback1 tmy data for forecast!")
-                        self.get_forecast_file(mkt)
-                else:
-                    # TODO: This seems to be intended to shift values forward by one interval.
-                    #  Why do this at all? Is this really the best way to handle missing data?
-                    for time_interval in mkt.time_intervals[1:]:
-                        self.predicted_values.update(time_interval,
-                                                     self.predicted_values.get_prior_by_interval(time_interval))
-            else:
-                if self.weather_data:
-                    _log.debug("WEATHER using fallback2 tmy data for forecast!")
-                    self.get_forecast_file(mkt)
 
     def get_forecast_file(self, mkt):
         #_log.debug(f'IN GET_FORCAST_FILE FOR MARKET: {mkt.name}.')

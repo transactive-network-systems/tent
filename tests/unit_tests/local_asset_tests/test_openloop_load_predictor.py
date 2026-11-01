@@ -25,3 +25,12 @@ def test_configuration_cannot_override_the_forecast_type():
     forecaster = TemperatureForecastModel(transactive_node=tn, name='Weather', weather_file_path=None,
                                           information_type=MeasurementType.Unknown)
     assert forecaster.information_type is MeasurementType.Temperature
+
+
+def test_forecast_model_without_a_file_has_no_source():
+    import pytest
+    Timer.simulation = False
+    tn = MockTN()
+    forecaster = TemperatureForecastModel(transactive_node=tn, name='Weather', weather_file_path=None)
+    with pytest.raises(RuntimeError, match='no weather file'):
+        forecaster.update_information(market=None)
