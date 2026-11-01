@@ -125,6 +125,17 @@ Between nodes, transactive signals travel in the wire format defined by `Transac
 through and the receiver validates before anything is looked up. An inelastic vertex's infinite price is `null` on the
 wire; a message that does not fit is dropped with a logged reason.
 
+The archive carries a schema version. `tent.data_manager.ARCHIVE_SCHEMA_VERSION` (currently 2) numbers the set of
+table definitions TENT ships and is incremented whenever one of them changes; version 1 is every archive written before
+2 November 2026, which has no record of its version. A new database gets one row in the `archive_schema` table
+(`version`, `fingerprint`, `tent_version`, `created`) when `LocalDataManager.init_archive` creates it. Opening an
+existing database written with another version raises `ArchiveSchemaMismatch` naming both versions; nothing is
+migrated, the database is recreated or read with a TENT of its own version. `ArchiveReader.from_url(...).schema_version`
+reports the version of an archive (`None` for a database without the table, meaning version 1).
+`archive_schema_fingerprint()` is a SHA-256 of the canonical JSON of the shipped definitions; the test
+`tests/unit_tests/data_manager_tests/test_archive_schema.py` records the fingerprint of each version and fails when a
+definition changes without a bump.
+
 </details>
 
 ---

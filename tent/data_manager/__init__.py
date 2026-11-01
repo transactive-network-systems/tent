@@ -1,15 +1,83 @@
 import abc
+import hashlib
+import importlib.metadata
+import json
 import logging
 
 import tent.enumerations
 
 from collections import deque
+from datetime import datetime, timezone
 from typing import Mapping, Sequence
 
 from sqlalchemy import Column, Enum, ForeignKey, ForeignKeyConstraint, Identity, Index, Table, types
 from sqlalchemy.orm import registry
 
 _log = logging.getLogger(__name__)
+
+# The version of the set of table definitions TENT ships (known_archive_definitions()). It is incremented whenever any
+# shipped definition changes, so that a database says which TENT wrote it: the historian refuses a database or a node
+# of another version, and tent-analysis reports what it is reading. Version 1 is every archive written before
+# 2 November 2026; those databases have no archive_schema table. Version 2 (2 November 2026) is the first to carry the
+# table. The fingerprint of each version's definitions is recorded in
+# tests/unit_tests/data_manager_tests/test_archive_schema.py; that test fails when a definition changes without a bump.
+ARCHIVE_SCHEMA_VERSION = 2
+ARCHIVE_SCHEMA_TABLE = 'archive_schema'
+
+
+def archive_schema_definition() -> dict:
+    """The table that records which archive schema a database was written with: one row, written when the database is
+    created. Shipped like any other definition (it is in known_archive_definitions()) so a reader decodes it."""
+    return {
+        'name': ARCHIVE_SCHEMA_TABLE,
+        'columns': [
+            {'name': 'version', 'type': 'Integer', 'kwargs': {'primary_key': True}},
+            {'name': 'fingerprint', 'type': 'String', 'type_args': [64]},
+            {'name': 'tent_version', 'type': 'String', 'type_args': [32]},
+            {'name': 'created', 'type': 'DateTime'},
+        ],
+    }
+
+
+def canonical_definitions_json(definitions: Sequence[Mapping]) -> str:
+    """The definitions as one JSON document in which nothing depends on order: tables sorted by name, columns sorted
+    by name, keys sorted. Column order is not part of a definition (DataManager.definition_differences)."""
+    canonical = []
+    for definition in sorted(definitions, key=lambda d: d['name']):
+        definition = dict(definition)
+        definition['columns'] = sorted(definition.get('columns', []), key=lambda c: c['name'])
+        canonical.append(definition)
+    return json.dumps(canonical, sort_keys=True, separators=(',', ':'))
+
+
+def archive_schema_fingerprint() -> str:
+    """SHA-256 of the canonical JSON of every shipped table definition. Two TENTs with the same fingerprint write the
+    same schema; a fingerprint that changes while ARCHIVE_SCHEMA_VERSION does not is a definition change without a
+    version bump, which the recorded-fingerprint test catches."""
+    from tent.data_manager.reader import known_archive_definitions  # the reader imports the component modules lazily
+    return hashlib.sha256(canonical_definitions_json(known_archive_definitions()).encode()).hexdigest()
+
+
+def tent_version() -> str:
+    """The installed TENT distribution's version, or 'unknown' when TENT runs from a source tree that is not installed."""
+    try:
+        return importlib.metadata.version('tent')
+    except importlib.metadata.PackageNotFoundError:
+        return 'unknown'
+
+
+class ArchiveSchemaMismatch(RuntimeError):
+    """An existing database was written with another archive schema version than this TENT writes."""
+
+    def __init__(self, database_version: int, tent_schema_version: int, where: str = 'The database'):
+        self.database_version = database_version
+        self.tent_schema_version = tent_schema_version
+        super().__init__(
+            f'{where} was written with archive schema version {database_version}; this TENT writes archive schema '
+            f'version {tent_schema_version}. Nothing is migrated. Recreate the database (point the data manager at a '
+            f'new URL or delete the file) or open it read-only with a TENT whose archive schema version is '
+            f'{database_version}.')
+
 
 class DataManager:
     def __init__(self, parent, archival_buffer_length: int = 10000, *args, **kwargs):
@@ -141,6 +209,33 @@ class DataManager:
         indices = [self._parse_index_def(i) for i in definition.get('indices', [])]
         constraints = [self._parse_constraint_def(c) for c in definition.get('constraints', [])]
         return Table(name, self.registry.metadata, *columns, *indices, *constraints, **kwargs)
+
+    # ---------------------------------------------------------------- archive schema version
+    @staticmethod
+    def archive_schema_row() -> dict:
+        """The archive_schema row this TENT writes into a new database: the version constant, the fingerprint of the
+        shipped definitions, the installed TENT version and the time of creation (UTC)."""
+        return {'version': ARCHIVE_SCHEMA_VERSION, 'fingerprint': archive_schema_fingerprint(),
+                'tent_version': tent_version(), 'created': datetime.now(timezone.utc)}
+
+    @staticmethod
+    def check_archive_schema(stored: Mapping | None, where: str = 'The database') -> None:
+        """
+        Compare the archive_schema row an existing database holds with what this TENT writes. `stored` is the row, or
+        None for a database that predates the table (archive schema version 1). A different version raises
+        ArchiveSchemaMismatch naming both versions; the same version with another fingerprint is a definition change
+        that was never given a version and is logged as a warning (the archive may still disagree with the code).
+        Managers that own a database (or reach one, through a historian) call this before they write to it.
+        """
+        database_version = 1 if stored is None else int(stored['version'])
+        if database_version != ARCHIVE_SCHEMA_VERSION:
+            raise ArchiveSchemaMismatch(database_version, ARCHIVE_SCHEMA_VERSION, where)
+        fingerprint = archive_schema_fingerprint()
+        if stored is not None and stored.get('fingerprint') != fingerprint:
+            _log.warning(f'{where} records archive schema version {database_version} with fingerprint '
+                         f'{stored.get("fingerprint")}, but this TENT\'s version {ARCHIVE_SCHEMA_VERSION} definitions '
+                         f'have fingerprint {fingerprint}: a table definition changed without a version bump. The '
+                         f'tables in the database may not match what TENT writes.')
 
     @abc.abstractmethod
     def init_archive(self):

@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql.sqltypes import DateTime, Uuid, Boolean, Float, Time
 from typing import Mapping, Sequence
 
-from tent.data_manager import DataManager
+from tent.data_manager import ARCHIVE_SCHEMA_TABLE, DataManager, archive_schema_definition
 from tent.data_manager.reader import ArchiveReader
 from tent.utils.helpers import parse_timedelta, require_aware
 
@@ -30,15 +30,39 @@ class LocalDataManager(ArchiveReader, DataManager):
         self.engine = create_engine(database_url)
 
     def init_archive(self):
+        """
+        Create the registered tables that are missing and release the queued records. Before creating anything, the
+        archive schema version of the database is checked against this TENT's (ARCHIVE_SCHEMA_VERSION): a database
+        that is new (none of the registered tables exists yet) gets the archive_schema row; a database that already
+        holds the row with the same version is accepted; one with another version, or one that has registered tables
+        but no archive_schema table at all (version 1, before 2 November 2026), raises ArchiveSchemaMismatch naming
+        both versions. Nothing is migrated. Called again after more tables are registered, it creates them and
+        checks the row again.
+        """
+        if self.read_only:
+            raise RuntimeError('This data manager was opened for reading (LocalDataManager.from_url); it does not '
+                               'create tables.')
+        if ARCHIVE_SCHEMA_TABLE not in self.tables:
+            self.add_tables([archive_schema_definition()])
+        present = self.present_tables
+        stored = self.archive_schema_record()
+        new_database = stored is None and not (present & (set(self.tables) - {ARCHIVE_SCHEMA_TABLE}))
+        if not new_database:
+            self.check_archive_schema(stored, where=f'Archive {self.redacted_url!r}')
         self.registry.metadata.create_all(self.engine, checkfirst=True)
-        # TODO: Can we check if the database is actually successfully created and ready here?
+        if new_database:
+            row = self.archive_schema_row()
+            with Session(self.engine) as session:
+                session.add(self.orm[ARCHIVE_SCHEMA_TABLE](**row))
+                session.commit()
+            _log.info(f'Archive {self.redacted_url!r} created with archive schema version {row["version"]} '
+                      f'(TENT {row["tent_version"]}, fingerprint {row["fingerprint"][:12]}).')
         self.archive_ready = True
-        # arch_debug = []
-        # for i in self.archival_queue:
-        #     i['data'] = {k: str(v) for k, v in i['data'].items()}
-        #     arch_debug.append(i)
-        # _log.info(f'@@@@@ ARCHIVAL QUEUE HAS: {  arch_debug }')
         self.archive_data()
+
+    @property
+    def redacted_url(self) -> str:
+        return self.engine.url.render_as_string(hide_password=True)
 
     def archive_data(self, records: Mapping|Sequence = None):
         # TODO: Would it be better to move db write logic into a periodic and always append here to the archival_queue?

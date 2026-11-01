@@ -7,6 +7,7 @@ from sqlalchemy import text
 
 from tent.containers.sd_curve import SDMeasurement
 from tent.containers.vertex import Vertex
+from tent.data_manager import ARCHIVE_SCHEMA_VERSION
 from tent.data_manager.local_data_manager import LocalDataManager
 from tent.enumerations import MarketState, MeasurementType
 from tests.mock_tn import MockTN
@@ -51,6 +52,7 @@ def test_opens_known_and_unknown_tables(reader, archive):
     assert 'agent_extra' in reader.tables, 'tables TENT does not know are reflected'
     assert reader.execute(reader.select('agent_extra')) == [{'id': 1, 'note': 'hello'}]
     assert reader.has_table('market') and not reader.has_table('matching_engine')  # known but never created
+    assert reader.schema_version == ARCHIVE_SCHEMA_VERSION, 'a node run writes the archive schema row'
     with pytest.raises(RuntimeError):
         reader.archive_data({'table_name': 'component', 'data': {}})
 

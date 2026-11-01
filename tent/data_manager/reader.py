@@ -13,11 +13,14 @@ from typing import Iterable, Sequence
 from sqlalchemy import DateTime, Select, and_, func, inspect, select
 from sqlalchemy.exc import ArgumentError
 
+from tent.data_manager import ARCHIVE_SCHEMA_TABLE, ARCHIVE_SCHEMA_VERSION, archive_schema_definition
+
 _log = logging.getLogger(__name__)
 
 
 def known_archive_definitions() -> list[dict]:
-    """Archive definitions of every component class in TENT, de-duplicated by table name."""
+    """Archive definitions of every component class in TENT plus the archive_schema table, de-duplicated by table name.
+    This is the set ARCHIVE_SCHEMA_VERSION versions and archive_schema_fingerprint() hashes."""
     # Imported lazily: these modules import the data manager package.
     from tent.transactive_node import TransactiveNode
     from tent.market.auction import Auction
@@ -40,6 +43,7 @@ def known_archive_definitions() -> list[dict]:
             if definition['name'] not in seen:
                 seen.add(definition['name'])
                 definitions.append(definition)
+    definitions.append(archive_schema_definition())
     return definitions
 
 
@@ -60,7 +64,29 @@ class ArchiveReader:
         if reflect_unknown:
             dm.reflect_unknown_tables()
         dm.read_only = True
+        version = dm.schema_version
+        if (version or 1) != ARCHIVE_SCHEMA_VERSION:
+            _log.warning(f'Archive {url!r} was written with archive schema version {version or 1} (this TENT writes '
+                         f'version {ARCHIVE_SCHEMA_VERSION}); tables whose definitions changed between the two may '
+                         f'not read correctly.')
         return dm
+
+    def archive_schema_record(self) -> dict | None:
+        """The archive_schema row (version, fingerprint, tent_version, created) of the database, or None when the
+        database has no archive_schema table or the table is empty: an archive written before the table existed
+        (archive schema version 1), or an empty database."""
+        if ARCHIVE_SCHEMA_TABLE not in self.tables or not self.has_table(ARCHIVE_SCHEMA_TABLE):
+            return None
+        table = self.tables[ARCHIVE_SCHEMA_TABLE]
+        rows = self.execute(select(table).order_by(table.c.version.desc()))
+        return rows[0] if rows else None
+
+    @property
+    def schema_version(self) -> int | None:
+        """The archive schema version the database was written with; None when the database has no archive_schema
+        table, which means version 1 (before 2 November 2026) or a database nothing has been written to yet."""
+        record = self.archive_schema_record()
+        return None if record is None else record['version']
 
     def reflect_unknown_tables(self, only: Iterable[str] | None = None) -> list[str]:
         """
