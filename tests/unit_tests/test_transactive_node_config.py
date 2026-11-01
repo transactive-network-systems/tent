@@ -58,3 +58,22 @@ def test_simulation_start_time_keeps_an_explicit_offset():  # audit T-20
     tn = _configure({'tz': 'UTC', 'simulation': True, 'simulation_one_hour_in_seconds': 60,
                      'simulation_start_time': '2017-07-01T00:00:00', 'simulation_anchor_time': '2026-10-31T12:00:00-07:00'})
     assert tn.simulation_anchor_time == datetime(2026, 10, 31, 19, 0, tzinfo=timezone.utc)
+
+
+def test_configuration_dicts_are_left_as_given():  # audit T-29 (node side)
+    from copy import deepcopy
+    configs = {
+        'name': 'twin', 'data_manager': {'class_name': 'NullDataManager'},
+        'local_assets': [{'class_name': 'LocalAsset', 'module_name': 'tent.local_asset', 'name': 'Load',
+                          'default_power': -5.0}],
+        'neighbors': [{'class_name': 'Neighbor', 'module_name': 'tent.neighbor', 'name': 'Peer', 'maximum_power': 10.0}],
+        'market_series': [{'class_name': 'MarketSeries', 'module_name': 'tent.market.market_series', 'name': 'Core',
+                           'market_class_name': 'Auction', 'market_module_name': 'tent.market.auction'}],
+    }
+    before = deepcopy(configs)
+    first, second = MockTN(), MockTN()
+    first.configure_node(configs)
+    assert configs == before, 'configuring a node does not consume its configuration'
+    second.configure_node(configs)  # the same dict configures a second node
+    assert [a.name for a in second.local_assets] == ['Load'] and second.market_series[0].market_class.__name__ == 'Auction'
+    assert configs == before

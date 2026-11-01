@@ -201,6 +201,9 @@ class TransactiveNode(Archivable):
             _log.info(f'No {component_type} configurations were provided.')
             return components
         for config in configs:
+            # A copy: get_class_from_spec consumes class_name and module_name and the market keys are popped below, and
+            # the caller's configuration must still be whole (to configure another node, or this one again).
+            config = dict(config)
             _log.info(f'Configuring {config.get("class_name")}: {config.get("name")}')
             component_class = get_class_from_spec(config, default_module_prefix='tent', transactive_node=self)
             self.data_manager.add_tables(component_class.get_archive_definitions())
@@ -223,6 +226,7 @@ class TransactiveNode(Archivable):
     def _setup_data_manager(self, config):
         dm_configs = config.get('data_manager')
         if dm_configs:
+            dm_configs = dict(dm_configs)  # get_class_from_spec consumes the class and module names
             dm_class = get_class_from_spec(dm_configs, default_module_prefix='tent.data_manager', transactive_node=self)
         else:
             # Without a data_manager block the node runs without an archive.

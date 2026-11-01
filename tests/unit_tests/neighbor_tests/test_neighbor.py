@@ -348,3 +348,28 @@ def test_loss_and_demand_charge_corrections_replace_vertices_in_the_curve():  # 
     assert sorted(v.price for v in on_threshold) == pytest.approx([corrected[1][0], corrected[1][0] + 5.0])
     assert [v.price for v in curve.vertices if v.quantity > threshold] == pytest.approx([corrected[2][0] + 5.0])
     assert len(curve.vertices) == 4
+
+
+class TestHeavyLoadHours:  # audit T-30
+    def supplier(self, **kwargs):
+        return BulkSupplierDC(transactive_node=MockTransactiveNode(), name='BPA', **get_default_neighbor_params(), **kwargs)
+
+    def test_hours_weekdays_and_configured_holidays(self):
+        supplier = self.supplier(holidays=['2026-07-03', '2026-12-25'])
+        friday = datetime(2026, 7, 10, 12, 0)
+        assert supplier.is_heavy_load_hour(friday) is True
+        assert supplier.is_heavy_load_hour(friday.replace(hour=5)) is False and supplier.is_heavy_load_hour(friday.replace(hour=22)) is False
+        assert supplier.is_heavy_load_hour(friday.replace(hour=6)) is True and supplier.is_heavy_load_hour(friday.replace(hour=21)) is True
+        assert supplier.is_heavy_load_hour(datetime(2026, 7, 12, 12, 0)) is False, 'Sunday'
+        assert supplier.is_heavy_load_hour(datetime(2026, 7, 11, 12, 0)) is True, 'Saturday counts'
+        assert supplier.is_heavy_load_hour(datetime(2026, 7, 3, 12, 0)) is False, 'a configured holiday'
+        assert supplier.is_heavy_load_hour(datetime(2026, 12, 25, 12, 0)) is False
+
+    def test_without_holidays_every_non_sunday_day_counts(self):
+        assert self.supplier().is_heavy_load_hour(datetime(2026, 12, 25, 12, 0)) is True
+
+    def test_bad_inputs_are_errors(self):
+        with pytest.raises(ValueError, match='holidays must be ISO dates'):
+            self.supplier(holidays=['Christmas'])
+        with pytest.raises(TypeError, match='needs a datetime'):
+            self.supplier().is_heavy_load_hour('2026-07-10T12:00')
