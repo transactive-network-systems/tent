@@ -671,3 +671,31 @@ def test_expired_remainder_expires_its_quote_lineage_and_the_curve_is_requoted(e
     assert len(requoted) == 1 and requoted[0].root_order_id != quoted.id
     assert requoted[0].vertices[-1].quantity == 100.0 and requoted[0].expire_by == t0 + timedelta(minutes=21)
     assert engine.quotes[(asset.id, ti.id)].orders == requoted
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# the price of a fill made at the infinite level
+# ---------------------------------------------------------------------------------------------------------------------
+
+def test_a_curve_hitting_a_resting_market_order_prices_the_fill_from_the_curve(engine, neighbor, asset, caplog):
+    """A demand market order rests (it takes any price); a piece-wise linear supply offer hits it at the infinite rung
+    of the ladder. The trade is priced by the side that has a curve: the offer's price for the matched quantity."""
+    engine.orderList = [market_order(engine, neighbor, -40.0)]
+    with caplog.at_level('WARNING', logger='tent.market'):
+        engine.match(pwl_order(engine, asset, 100.0, status=OrderStatus.NEW))  # 0 kW at 0.15 up to 100 kW at 0.25
+    assert_balanced_matches(engine, 2, Counter({40.0: 2}))
+    assert [m.vertices[-1].price for m in engine.matchList] == pytest.approx([0.15 + 0.10 * 40.0 / 100.0] * 2)
+    assert not caplog.records
+    remainder = engine.orderList[0]
+    assert remainder.actor is asset and max(v.quantity for v in remainder.vertices) == pytest.approx(60.0)
+
+
+def test_two_market_orders_have_no_price_and_are_named_once(engine, neighbor, asset, caplog):
+    engine.orderList = [market_order(engine, neighbor, -40.0), market_order(engine, neighbor, -10.0)]
+    with caplog.at_level('WARNING', logger='tent.market'):
+        engine.match(market_order(engine, asset, 30.0, status=OrderStatus.NEW))
+        engine.match(market_order(engine, asset, 20.0, status=OrderStatus.NEW))
+    assert all(abs(m.vertices[-1].price) == INF for m in engine.matchList)
+    messages = [r.getMessage() for r in caplog.records if 'neither side names a price' in r.getMessage()]
+    assert len(messages) == 1, 'once per interval'
+    assert 'LocalAsset #1' in messages[0] and 'Neighbor #1' in messages[0]

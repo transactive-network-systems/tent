@@ -119,3 +119,31 @@ def test_a_node_clears_its_book_into_schedules_and_prices(node, clock):
         # The hourly-average price model blends the settled 0.10 into its prior; it has moved from the default.
         modelled = market.price_model.get(ti.start_time)[0]
         assert 0.05 < modelled <= 0.10 + 1e-9, modelled
+
+
+def test_an_inelastic_load_against_a_supply_curve_discovers_the_curves_price(clock):
+    """The campus case: the buildings are an inelastic market order (the base LocalAsset) resting in the book, the
+    utility's offer is a curve from 0.04 at 0 kW to 0.08 at 100 kW. The 40 kW trade is priced from the curve, 0.056,
+    and settlement makes that the interval's price."""
+    tn = MockTN(name='campus')
+    tn._data_manager = RecordingDataManager()
+    tn.local_assets = [LocalAsset(transactive_node=tn, name='buildings', cost_parameters=[0.0, 0.0, 0.0],
+                                  default_power=-40.0)]
+    tn.neighbors = [Neighbor(transactive_node=tn, name='utility', transactive=False, up_or_down='upstream',
+                             default_vertices=[[0.04, 0.0, 0.0, True], [0.08, 0.0, 100.0, True]],
+                             minimum_power=0.0, maximum_power=100.0, loss_factor=0.0, demand_rate=0.0,
+                             cost_parameters=[0.0, 0.0, 0.0])]
+    tn.market_series = [MarketSeries(transactive_node=tn, name='Book', market_class=MatchingEngine,
+                                     duration_active=300.0, duration_negotiation=600.0, duration_market_lead=300.0,
+                                     duration_delivery_lead=300.0, interval_duration=3600.0, intervals_to_clear=2,
+                                     market_clearing_interval=3600.0, default_price=0.05)]
+    market = tn.market_series[0].newest_market
+    times = market.transition_times
+    for t in (times.active, times.negotiation, times.market_lead):
+        step(tn, clock, t)
+    assert market.market_state is MarketState.MarketLead
+    for ti in market.time_intervals:
+        assert market.marginal_prices.get_by_interval(ti).value == pytest.approx(0.04 + 0.04 * 40.0 / 100.0)
+        assert market.average_match_prices.get_by_interval(ti).value == pytest.approx(0.056)
+        assert tn.local_assets[0].scheduled_powers.get_by_interval(ti).value == pytest.approx(-40.0)
+        assert tn.neighbors[0].scheduled_powers.get_by_interval(ti).value == pytest.approx(40.0)
