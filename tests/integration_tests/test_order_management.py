@@ -36,7 +36,6 @@ def test_order_creation_and_structure():
     print("INTEGRATION TEST: Order Creation & Structure")
     print("="*80)
     
-    Timer.simulation = False
     tn = MockTN()
     base_dir = Path(__file__).resolve().parent.parent.parent
     config_path = base_dir / 'sample_configs' / 'tn.campus.json'
@@ -158,7 +157,6 @@ def test_order_submission_to_market():
     print("INTEGRATION TEST: Order Submission to Market")
     print("="*80)
     
-    Timer.simulation = False
     tn = MockTN()
     base_dir = Path(__file__).resolve().parent.parent.parent
     config_path = base_dir / 'sample_configs' / 'tn.campus.json'
@@ -271,7 +269,6 @@ def test_order_matching_and_clearing():
     print("INTEGRATION TEST: Order Matching & Clearing")
     print("="*80)
     
-    Timer.simulation = False
     tn = MockTN()
     base_dir = Path(__file__).resolve().parent.parent.parent
     config_path = base_dir / 'sample_configs' / 'tn.campus.json'
@@ -397,7 +394,6 @@ def test_order_lifecycle_end_to_end():
     print("INTEGRATION TEST: Complete Order Lifecycle")
     print("="*80)
     
-    Timer.simulation = False
     tn = MockTN()
     base_dir = Path(__file__).resolve().parent.parent.parent
     config_path = base_dir / 'sample_configs' / 'tn.campus.json'

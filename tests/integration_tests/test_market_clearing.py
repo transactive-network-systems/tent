@@ -25,7 +25,6 @@ def test_market_aggregates_asset_curves():
     print("INTEGRATION TEST: Market Curve Aggregation")
     print("="*80)
     
-    Timer.simulation = False
     tn = MockTN()
     base_dir = Path(__file__).resolve().parent.parent.parent
     config_path = base_dir / 'sample_configs' / 'tn.campus.json'
@@ -97,7 +96,6 @@ def test_market_clears_and_sets_prices():
     print("INTEGRATION TEST: Market Clearing and Price Discovery")
     print("="*80)
     
-    Timer.simulation = False
     tn = MockTN()
     base_dir = Path(__file__).resolve().parent.parent.parent
     config_path = base_dir / 'sample_configs' / 'tn.campus.json'
@@ -178,7 +176,6 @@ def test_market_clears_multiple_intervals_independently():
     print("INTEGRATION TEST: Independent Interval Clearing")
     print("="*80)
     
-    Timer.simulation = False
     tn = MockTN()
     base_dir = Path(__file__).resolve().parent.parent.parent
     config_path = base_dir / 'sample_configs' / 'tn.campus.json'
@@ -255,7 +252,6 @@ def test_cleared_quantities_match_asset_commitments():
     print("INTEGRATION TEST: Cleared Quantity vs Asset Commitment")
     print("="*80)
     
-    Timer.simulation = False
     tn = MockTN()
     base_dir = Path(__file__).resolve().parent.parent.parent
     config_path = base_dir / 'sample_configs' / 'tn.campus.json'
@@ -330,7 +326,6 @@ def test_supply_demand_curve_intersection():
     print("INTEGRATION TEST: Supply/Demand Curve Intersection")
     print("="*80)
     
-    Timer.simulation = False
     tn = MockTN()
     base_dir = Path(__file__).resolve().parent.parent.parent
     config_path = base_dir / 'sample_configs' / 'tn.campus.json'
@@ -418,7 +413,6 @@ def test_spawn_markets():
     print("INTEGRATION TEST: Spawn Markets")
     print("="*80)
     
-    Timer.simulation = False
     tn = MockTN()
     
     # Create a config that defines a Day-Ahead market series

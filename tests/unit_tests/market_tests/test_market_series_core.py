@@ -4,7 +4,6 @@ from unittest.mock import Mock
 
 from tent.market.market_series import MarketSeries
 from tent.market import Market
-from tent.utils.timer import Timer
 from tests.mock_tn import MockTN
 
 
@@ -30,7 +29,6 @@ def test_market_series_record_keys():
 
 
 def test_refined_series_resolves_by_name_and_refined_market_lookup(): # audit T-10
-    Timer.simulation = False
     tn = MockTN()
     real_time = MarketSeries(transactive_node=tn, name='Real-Time', market_class=Market, market_clearing_interval=3600.0,
                              interval_duration=3600.0, duration_delivery_lead=0.0, duration_market_lead=600.0)

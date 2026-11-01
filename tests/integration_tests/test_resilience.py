@@ -36,7 +36,6 @@ def test_neighbor_communication_failure():
     print("INTEGRATION TEST: Neighbor Communication Failure Resilience")
     print("="*80)
     
-    Timer.simulation = False
     tn = MockTN()
     base_dir = Path(__file__).resolve().parent.parent.parent
     config_path = base_dir / 'sample_configs' / 'tn.campus.json'
@@ -228,7 +227,6 @@ def test_negotiation_timeout_enforcement():
     print("INTEGRATION TEST: Negotiation Timeout Enforcement")
     print("="*80)
     
-    Timer.simulation = False
     tn = MockTN()
     base_dir = Path(__file__).resolve().parent.parent.parent
     config_path = base_dir / 'sample_configs' / 'tn.campus.json'
@@ -343,7 +341,6 @@ def test_malformed_neighbor_signal():
     from tent.containers.transactive_signal import TransactiveSignal
     from tent.containers.sd_curve import SDCurve
     
-    Timer.simulation = False
     tn = MockTN()
     base_dir = Path(__file__).resolve().parent.parent.parent
     config_path = base_dir / 'sample_configs' / 'tn.campus.json'

@@ -34,7 +34,6 @@ def test_weather_forecast_impacts_market():
     - Solar PV predictor uses irradiance to adjust generation
     - Market signals reflect weather-adjusted forecasts
     """    
-    Timer.simulation = False
     tn = MockTN()
     base_dir = Path(__file__).resolve().parent.parent.parent
     config_path = base_dir / 'sample_configs' / 'tn.campus.json'
@@ -265,7 +264,6 @@ def test_temperature_forecast_model_loading():
     print("INTEGRATION TEST: Temperature Forecast Model CSV Loading")
     print("="*80)
     
-    Timer.simulation = False
     tn = MockTN()
     base_dir = Path(__file__).resolve().parent.parent.parent
     config_path = base_dir / 'sample_configs' / 'tn.campus.json'

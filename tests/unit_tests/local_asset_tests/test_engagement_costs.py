@@ -6,13 +6,11 @@ from tent.enumerations import MarketState
 from tent.local_asset import LocalAsset
 from tent.market.auction import Auction
 from tent.market.market_series import MarketSeries
-from tent.utils.timer import Timer
 from tests.mock_tn import MockTN
 
 
 @pytest.fixture
 def asset_and_market():
-    Timer.simulation = False
     tn = MockTN()
     asset = LocalAsset(transactive_node=tn, name='Chiller', cost_parameters=[0.0, 0.0, 0.0], default_power=-50.0,
                        engagement_costs=[1.0, 2.0, 3.0])  # [disengagement, hold, engagement] in dollars

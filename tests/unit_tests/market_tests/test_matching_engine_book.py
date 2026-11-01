@@ -43,7 +43,6 @@ class RecordingDataManager:
 
 @pytest.fixture
 def engine():
-    Timer.simulation = False
     tn = MockTN()
     tn._data_manager = RecordingDataManager()
     series = MarketSeries(transactive_node=tn, name='Matching Series', market_class=MatchingEngine,

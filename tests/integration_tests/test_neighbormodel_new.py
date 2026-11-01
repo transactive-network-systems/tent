@@ -7,7 +7,6 @@ from tent.containers.sd_curve import SDCurve
 from tent.enumerations import SignalDirection
 from tent.market import Market
 from tent.neighbor import Neighbor
-from tent.utils.timer import Timer
 from tests.mock_tn import MockTN
 
 
@@ -41,7 +40,6 @@ def test_calculate_reserve_margin():
             self.data_manager = data_manager
             self.time_intervals = []
 
-    Timer.simulation = False
     tn = MockTN()
     tn._data_manager = DummyDataManager()
 
@@ -146,7 +144,6 @@ def test_check_for_convergence():
             self.data_manager = data_manager
             self.time_intervals = []
 
-    Timer.simulation = False
     tn = MockTN()
     tn._data_manager = DummyDataManager()
 
@@ -383,7 +380,6 @@ def test_prep_transactive_signal():
             
             return summed_curve
 
-    Timer.simulation = False
     tn = MockTN()
     tn._data_manager = DummyDataManager()
     tn.neighbors = []
@@ -587,7 +583,6 @@ def test_receive_transactive_signal():
         def __iter__(self):
             return iter(self._intervals)
 
-    Timer.simulation = False
     tn = MockTN()
     tn._data_manager = DummyDataManager()
     tn.markets = []  # Needed for parse_signal to find markets
@@ -877,7 +872,6 @@ def test_send_transactive_signal():
             self.data_manager = data_manager
             self.time_intervals = []
 
-    Timer.simulation = False
     tn = MockTN()
     tn._data_manager = DummyDataManager()
     tn.name = "MockTN"
@@ -1009,7 +1003,6 @@ def test_update_dc_threshold():
             self.time_intervals = []
             self.prior_market_in_series = prior_market
 
-    Timer.simulation = False
     tn = MockTN()
     tn._data_manager = DummyDataManager()
     tn.markets = []
@@ -1220,7 +1213,6 @@ def test_update_dual_costs():
             })()
             self.marginal_prices = DummyMarginalPrices(self._marginal_price_measurement)
 
-    Timer.simulation = False
     tn = MockTN()
     tn._data_manager = DummyDataManager()
     tn.markets = []

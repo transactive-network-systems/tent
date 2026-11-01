@@ -403,7 +403,6 @@ def tent_node():
 
     Identical to the GridLAB-D test fixture.
     """
-    Timer.simulation = False
     tn = MockTN()
     config = _build_node_config()
 

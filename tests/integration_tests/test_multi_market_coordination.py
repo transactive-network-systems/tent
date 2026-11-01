@@ -37,7 +37,6 @@ def test_day_ahead_to_real_time_coordination():
     print("INTEGRATION TEST: Day-Ahead to Real-Time Market Coordination")
     print("="*80)
     
-    Timer.simulation = False
     tn = MockTN()
     base_dir = Path(__file__).resolve().parent.parent.parent
     config_path = base_dir / 'sample_configs' / 'tn.campus.json'
@@ -287,7 +286,6 @@ def test_market_series_rolling_progression():
     print("INTEGRATION TEST: Rolling Market Series Progression")
     print("="*80)
     
-    Timer.simulation = False
     tn = MockTN()
     base_dir = Path(__file__).resolve().parent.parent.parent
     config_path = base_dir / 'sample_configs' / 'tn.campus.json'

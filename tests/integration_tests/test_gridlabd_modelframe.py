@@ -384,7 +384,6 @@ def tent_node():
     Build a TENT MockTN with a ModelFrameAsset and supply Neighbor.
     Returns (tn, market, asset).
     """
-    Timer.simulation = False
     tn = MockTN()
     config = _build_node_config()
 

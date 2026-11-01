@@ -32,7 +32,6 @@ def test_data_manager_initialization():
     - Tables are created for markets, assets, neighbors
     - Data manager is accessible from TN
     """
-    Timer.simulation = False
     tn = MockTN()
     base_dir = Path(__file__).resolve().parent.parent.parent
     config_path = base_dir / 'sample_configs' / 'tn.campus.json'
@@ -95,7 +94,6 @@ def test_archiving_across_market_lifecycle():
     - Neighbor signals archived after negotiation
     - archive_data() called at appropriate state transitions
     """    
-    Timer.simulation = False
     tn = MockTN()
     base_dir = Path(__file__).resolve().parent.parent.parent
     config_path = base_dir / 'sample_configs' / 'tn.campus.json'
@@ -211,7 +209,6 @@ def test_market_price_archiving():
     print("INTEGRATION TEST: Market Price Archiving")
     print("="*80)
     
-    Timer.simulation = False
     tn = MockTN()
     base_dir = Path(__file__).resolve().parent.parent.parent
     config_path = base_dir / 'sample_configs' / 'tn.campus.json'
@@ -305,7 +302,6 @@ def test_asset_schedule_archiving():
     - Schedules exist for market intervals
     - Schedule data is archivable format
     """   
-    Timer.simulation = False
     tn = MockTN()
     base_dir = Path(__file__).resolve().parent.parent.parent
     config_path = base_dir / 'sample_configs' / 'tn.campus.json'
@@ -399,7 +395,6 @@ def test_archive_interval_value_data(tmp_path):
     print("INTEGRATION TEST: Archive IntervalValue Data")
     print("="*80)
     
-    Timer.simulation = False
     tn = MockTN()
     base_dir = Path(__file__).resolve().parent.parent.parent
     config_path = base_dir / 'sample_configs' / 'tn.campus.json'
@@ -574,7 +569,6 @@ def test_archive_transactive_record_data(tmp_path):
     print("INTEGRATION TEST: Archive TransactiveRecord Data")
     print("="*80)
     
-    Timer.simulation = False
     tn = MockTN()
     base_dir = Path(__file__).resolve().parent.parent.parent
     config_path = base_dir / 'sample_configs' / 'tn.campus.json'
@@ -698,7 +692,6 @@ def test_archive_market_object_data(tmp_path):
     print("INTEGRATION TEST: Archive Market Object Data")
     print("="*80)
     
-    Timer.simulation = False
     tn = MockTN()
     base_dir = Path(__file__).resolve().parent.parent.parent
     config_path = base_dir / 'sample_configs' / 'tn.campus.json'

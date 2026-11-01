@@ -1,16 +1,13 @@
 import logging
-import os
 import threading
 import time
 from typing import Callable
 
 from tent.transactive_node import TransactiveNode
 
-# Create log file in the same directory as this test file
-log_file_path = os.path.join(os.path.dirname(__file__), "mock_tn.log")
-logging.basicConfig(filename=log_file_path, level=logging.DEBUG)
 _log = logging.getLogger(__name__)
-_log.debug('Running stuff.')
+
+
 class MockTN(TransactiveNode):
     """
     Mock TN useful for integration testing.

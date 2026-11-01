@@ -4,14 +4,12 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from tent.utils.timer import Timer
 from tests.mock_tn import MockTN
 
 LOCAL_DM = {'class_name': 'LocalDataManager', 'module_name': 'tent.data_manager.local_data_manager', 'db_params': {}}
 
 
 def _configure(configs):
-    Timer.simulation = False
     tn = MockTN()
     with patch('tent.data_manager.local_data_manager.LocalDataManager.init_archive', Mock(return_value=None)):
         # get_class_from_spec consumes the spec it is given (class_name, module_name), so each node gets its own copy.

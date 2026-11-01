@@ -20,7 +20,6 @@ from tent.utils.timer import Timer
 
 def test_market_progresses_through_all_states():
     """Validate market transitions through complete state machine cycle."""    
-    Timer.simulation = False
     tn = MockTN()
     base_dir = Path(__file__).resolve().parent.parent.parent
     config_path = base_dir / 'sample_configs' / 'tn.campus.json'
@@ -106,7 +105,6 @@ def test_market_progresses_through_all_states():
 
 def test_delivery_lead_propagates_prices():
     """Validate that DeliveryLead state propagates cleared prices to assets."""    
-    Timer.simulation = False
     tn = MockTN()
     base_dir = Path(__file__).resolve().parent.parent.parent
     config_path = base_dir / 'sample_configs' / 'tn.campus.json'
@@ -189,7 +187,6 @@ def test_delivery_lead_propagates_prices():
 
 def test_asset_schedules_committed_for_delivery():
     """Validate that asset power schedules are committed during delivery phase."""    
-    Timer.simulation = False
     tn = MockTN()
     base_dir = Path(__file__).resolve().parent.parent.parent
     config_path = base_dir / 'sample_configs' / 'tn.campus.json'
@@ -281,7 +278,6 @@ def test_reconciliation_compares_scheduled_vs_actual():
     print("INTEGRATION TEST: Reconciliation Phase")
     print("="*80)
     
-    Timer.simulation = False
     tn = MockTN()
     base_dir = Path(__file__).resolve().parent.parent.parent
     config_path = base_dir / 'sample_configs' / 'tn.campus.json'
@@ -372,7 +368,6 @@ def test_production_and_dual_costs_calculated():
     print("INTEGRATION TEST: Cost Calculations Through Delivery")
     print("="*80)
     
-    Timer.simulation = False
     tn = MockTN()
     base_dir = Path(__file__).resolve().parent.parent.parent
     config_path = base_dir / 'sample_configs' / 'tn.campus.json'

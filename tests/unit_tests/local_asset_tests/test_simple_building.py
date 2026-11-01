@@ -2,7 +2,6 @@
 from tent.local_asset.simple_building import SimpleBuilding
 from tent.market import Market
 from tent.market.market_series import MarketSeries
-from tent.utils.timer import Timer
 from tests.mock_tn import MockTN
 
 
@@ -14,7 +13,6 @@ def _hourly_market(tn):
 
 
 def test_update_vertices_covers_all_24_hours():
-    Timer.simulation = False
     tn = MockTN()
     market = _hourly_market(tn)
     building = SimpleBuilding(transactive_node=tn, name='Building', cost_parameters=[])
@@ -34,7 +32,6 @@ def test_update_vertices_covers_all_24_hours():
 
 
 def test_default_vertices_are_not_shared_with_active_curves():
-    Timer.simulation = False
     tn = MockTN()
     market = _hourly_market(tn)
     building = SimpleBuilding(transactive_node=tn, name='Building', cost_parameters=[])

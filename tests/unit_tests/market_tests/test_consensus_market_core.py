@@ -2,12 +2,10 @@
 from tent.enumerations import MarketState, MarketTypes, Method
 from tent.market.consensus_market import ConsensusMarket
 from tent.market.market_series import MarketSeries
-from tent.utils.timer import Timer
 from tests.mock_tn import MockTN
 
 
 def test_consensus_market_spawns_from_series():
-    Timer.simulation = False
     tn = MockTN()
     series = MarketSeries(transactive_node=tn, name='Consensus Series', market_class=ConsensusMarket,
                           initial_market_state=MarketState.Negotiation, method='Interpolation')

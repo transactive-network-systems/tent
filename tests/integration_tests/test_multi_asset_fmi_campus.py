@@ -21,7 +21,6 @@ from tent.market.auction import Auction
 from tent.market.market_series import MarketSeries
 from tent.market.price_models import HourlyAveragePriceModel
 from tent.neighbor.bulk_supplier_dc import BulkSupplierDC
-from tent.utils.timer import Timer
 
 from tests.mock_tn import MockTN
 
@@ -36,7 +35,6 @@ UTC = timezone.utc
 @pytest.fixture
 def multi_asset_campus_node():
     """Build a complete TransactiveNode containing multi-FMI asset and bulk supplier."""
-    Timer.simulation = False
     tn = MockTN()
 
     # 1. Composite ModelFrameAsset with multiple FMI physical adapters

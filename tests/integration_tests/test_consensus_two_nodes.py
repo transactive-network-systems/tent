@@ -96,7 +96,6 @@ def negotiate(all_nodes, markets, clock, times, max_ticks=12):
 
 @pytest.fixture
 def clock():
-    Timer.simulation = False
     state = {'t': T0}
     with patch.object(Timer, 'now', side_effect=lambda *a, **k: state['t']):
         yield state

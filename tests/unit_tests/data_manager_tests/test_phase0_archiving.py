@@ -16,7 +16,6 @@ SAMPLE_CONFIG = Path(__file__).resolve().parents[3] / 'sample_configs' / 'tn.cam
 
 @pytest.fixture
 def configured(tmp_path):
-    Timer.simulation = False
     with open(SAMPLE_CONFIG) as f:
         configs = json.load(f)
     configs['data_manager']['db_params']['url'] = f'sqlite:///{tmp_path / "phase0.sqlite"}'

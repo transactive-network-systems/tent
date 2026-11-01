@@ -32,7 +32,6 @@ def test_local_asset_generates_forecast():
     - Forecasts are created for all market intervals
     - Scheduled powers are reasonable values
     """
-    Timer.simulation = False
     print("\n" + "="*80)
     print("INTEGRATION TEST: Local Asset Forecast Generation")
     print("="*80)
@@ -154,7 +153,6 @@ def test_local_asset_creates_supply_demand_curves():
     - Curves represent asset flexibility
     - Default vertices are used when no flexibility exists
     """
-    Timer.simulation = False
     print("\n" + "="*80)
     print("INTEGRATION TEST: Local Asset Supply/Demand Curve Creation")
     print("="*80)
@@ -249,7 +247,6 @@ def test_local_asset_responds_to_price_signals():
     
     # Reset Timer class state to avoid overflow from previous tests
     from datetime import datetime, timezone
-    Timer.simulation = False
     
     tn = MockTN()
     base_dir = Path(__file__).resolve().parent.parent.parent
@@ -420,7 +417,6 @@ def test_campus_net_power_aggregation():
     
     # Reset Timer class state to avoid overflow from previous tests
     from datetime import datetime, timezone
-    Timer.simulation = False
     
     tn = MockTN()
     base_dir = Path(__file__).resolve().parent.parent.parent

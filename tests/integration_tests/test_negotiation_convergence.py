@@ -39,7 +39,6 @@ def test_neighbor_convergence_criteria():
     print("INTEGRATION TEST: Neighbor Convergence Criteria")
     print("="*80)
     
-    Timer.simulation = False
     tn = MockTN()
     base_dir = Path(__file__).resolve().parent.parent.parent
     config_path = base_dir / 'sample_configs' / 'tn.campus.json'
@@ -131,7 +130,6 @@ def test_multi_iteration_signal_exchange():
     print("INTEGRATION TEST: Multi-Iteration Signal Exchange")
     print("="*80)
     
-    Timer.simulation = False
     tn = MockTN()
     base_dir = Path(__file__).resolve().parent.parent.parent
     config_path = base_dir / 'sample_configs' / 'tn.campus.json'
@@ -253,7 +251,6 @@ def test_convergence_threshold_sensitivity():
     print("INTEGRATION TEST: Convergence Threshold Sensitivity")
     print("="*80)
     
-    Timer.simulation = False
     
     # Test with different thresholds
     thresholds = [0.01, 0.05, 0.10]  # 1%, 5%, 10% relative error
@@ -354,7 +351,6 @@ def test_signal_stability_convergence():
     print("INTEGRATION TEST: Signal Stability Convergence")
     print("="*80)
     
-    Timer.simulation = False
     tn = MockTN()
     base_dir = Path(__file__).resolve().parent.parent.parent
     config_path = base_dir / 'sample_configs' / 'tn.campus.json'
@@ -487,7 +483,6 @@ def test_convergence_blocks_state_transition():
     print("INTEGRATION TEST: Convergence Blocks State Transition")
     print("="*80)
     
-    Timer.simulation = False
     tn = MockTN()
     base_dir = Path(__file__).resolve().parent.parent.parent
     config_path = base_dir / 'sample_configs' / 'tn.campus.json'

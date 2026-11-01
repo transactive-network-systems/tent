@@ -36,7 +36,6 @@ class Actor:
 
 @pytest.fixture
 def market():
-    Timer.simulation = False
     tn = MockTN()
     tn._data_manager = RecordingDataManager()
     series = MarketSeries(transactive_node=tn, name='Matching Series', market_class=MatchingEngine,

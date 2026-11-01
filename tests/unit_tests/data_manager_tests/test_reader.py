@@ -9,7 +9,6 @@ from tent.containers.sd_curve import SDMeasurement
 from tent.containers.vertex import Vertex
 from tent.data_manager.local_data_manager import LocalDataManager
 from tent.enumerations import MarketState, MeasurementType
-from tent.utils.timer import Timer
 from tests.mock_tn import MockTN
 
 SAMPLE_CONFIG = Path(__file__).resolve().parents[3] / 'sample_configs' / 'tn.campus.json'
@@ -18,7 +17,6 @@ SAMPLE_CONFIG = Path(__file__).resolve().parents[3] / 'sample_configs' / 'tn.cam
 @pytest.fixture(scope='module')
 def archive(tmp_path_factory):
     """A database written by a configured node plus a few values, curves, and one table TENT knows nothing about."""
-    Timer.simulation = False
     url = f'sqlite:///{tmp_path_factory.mktemp("reader") / "archive.sqlite"}'
     with open(SAMPLE_CONFIG) as f:
         configs = json.load(f)
