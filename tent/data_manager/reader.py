@@ -19,33 +19,27 @@ _log = logging.getLogger(__name__)
 
 
 def known_archive_definitions() -> list[dict]:
-    """Archive definitions of every component class in TENT plus the archive_schema table, de-duplicated by table name.
-    This is the set ARCHIVE_SCHEMA_VERSION versions and archive_schema_fingerprint() hashes."""
+    """Archive definitions of the node and of every class TENT ships (tent.registry.SHIPPED), plus the archive_schema
+    table, de-duplicated by table name. This is the set ARCHIVE_SCHEMA_VERSION versions and archive_schema_fingerprint()
+    hashes, so a shipped class that adds or changes a table changes the fingerprint and the version must be bumped."""
     # Imported lazily: these modules import the data manager package.
+    import importlib
+    from tent import registry
     from tent.transactive_node import TransactiveNode
-    from tent.market.auction import Auction
-    from tent.market.consensus_market import ConsensusMarket
-    from tent.market.matching_engine import MatchingEngine
-    from tent.local_asset import LocalAsset
-    from tent.local_asset.model_frame.model_frame_asset import ModelFrameAsset
-    from tent.local_asset.solar_pv_resource_model import SolarPvResource
-    from tent.local_asset.openloop_load_predictor import OpenLoopLoadPredictor
-    from tent.neighbor import Neighbor
-    from tent.meter_point import MeterPoint
-    from tent.information_service_model import InformationServiceModel
-    from tent.information_service_model.temperature_forecast_model import TemperatureForecastModel
-    classes = [TransactiveNode, Auction, ConsensusMarket, MatchingEngine, LocalAsset,
-               ModelFrameAsset, SolarPvResource, OpenLoopLoadPredictor, Neighbor, MeterPoint, InformationServiceModel,
-               TemperatureForecastModel]
+    classes = [TransactiveNode]
+    for class_name, location in sorted(registry.SHIPPED.items()):
+        module_name, _, attribute = location.partition(':')
+        cls = getattr(importlib.import_module(module_name), attribute)
+        if hasattr(cls, 'get_archive_definitions'):
+            classes.append(cls)
     definitions, seen = [], set()
     for cls in classes:
-        for definition in cls.get_archive_definitions():
+        for definition in cls.get_archive_definitions() or ():  # a class with nothing to archive returns None
             if definition['name'] not in seen:
                 seen.add(definition['name'])
                 definitions.append(definition)
     definitions.append(archive_schema_definition())
     return definitions
-
 
 class ArchiveReader:
     """Mixin for DataManager implementations backed by a SQLAlchemy engine (self.engine, self.tables, self.definitions)."""
