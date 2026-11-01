@@ -118,6 +118,7 @@ class Market(Component):
         self.total_generation: Measurement = Measurement(self, MeasurementType.TotalGeneration, MeasurementUnit.kW)  # [avg.kW]
         self.total_production_cost: float = 0.0  # [$]
         self._missing_curves_reported: set[tuple[str, str]] = set()  # (entity, interval) pairs sum_vertices warned about
+        self._information_services_updated: bool = False  # see update_information_services
 
         # Set up market
         self.check_marginal_prices()
@@ -233,6 +234,8 @@ class Market(Component):
                 self.market_state = MarketState.Active
                 _log.debug(f'MARKET: {self.name} STATE IS NOW: MarketState.Active')
                 self.series.spawn()
+                # Forecasts for this market's intervals, before any asset schedules against them.
+                self.update_information_services()
                 # Call this replaceable method where appropriate actions can be taken.
                 self.transition_from_inactive_to_active()
 
@@ -460,6 +463,25 @@ class Market(Component):
             # called from TransactiveNode.step() after the per-market loop completes; it never
             # removes markets[-1].
             self._stateIsCompleted = True
+
+    def update_information_services(self):
+        """
+        Ask every information service of the node for its predictions over this market's intervals, once per market,
+        when the market becomes Active and before the assets schedule against them. A service that fails is logged with
+        its traceback and skipped: its consumers fall back to their defaults, and the market goes on.
+        """
+        if self._information_services_updated:
+            return
+        self._information_services_updated = True
+        services = getattr(self.tn, 'information_service_models', [])
+        if not isinstance(services, (list, tuple)):  # a placeholder node in tests
+            return
+        for service in services:
+            try:
+                service.update_information(self)
+            except Exception:
+                _log.exception(f'MARKET: {self.name}: information service {service.name!r} failed to update; its '
+                               f'consumers use their defaults for this market.')
 
     def transition_from_initial_to_inactive(self):
         """
