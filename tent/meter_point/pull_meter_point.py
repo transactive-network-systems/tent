@@ -13,12 +13,12 @@ class PullMeterPoint(MeterPoint):
     """
     A meter point that reads its source on a schedule, the counterpart of PushMeterPoint for meters that must be asked.
 
-    Subclasses implement read_meter(), which talks to the device, service or file and returns one reading. The node polls
-    every pull meter point once per state-machine iteration through poll(); poll() reads when data_period_seconds have
-    passed since the last reading (the first poll reads at once) and stores the reading through set_meter_value, which
-    scales and archives it like a pushed reading. A read_meter() that raises is logged with its traceback and retried on
-    the next period, so one unreachable meter does not stop the node's markets; a read_meter() that returns None is a
-    poll with nothing to record and is also retried on the next period.
+    Subclasses implement read_meter(), which talks to the device, service or file and returns one reading. The node's
+    host calls poll() on every meter point once per state-machine iteration; this class's poll() reads when
+    data_period_seconds have passed since the last reading (the first poll reads at once) and stores the reading through
+    set_meter_value, which scales and archives it like a pushed reading. A read_meter() that raises is logged with its
+    traceback and retried on the next period, so one unreachable meter does not stop the node's markets; a read_meter()
+    that returns None is a poll with nothing to record and is also retried on the next period.
     """
 
     def __init__(self, *args, **kwargs):
@@ -38,7 +38,7 @@ class PullMeterPoint(MeterPoint):
         return self.next_read_time is None or now >= self.next_read_time
 
     def poll(self, now: datetime | None = None) -> bool:
-        """Read and store a value if one is due. Returns True when a reading was recorded."""
+        """Read and store a value if one is due (the host's per-iteration call). Returns True when a reading was recorded."""
         now = require_aware(now, 'now') if now is not None else Timer.now()
         if not self.due(now):
             return False

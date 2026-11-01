@@ -41,12 +41,17 @@ operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
 
-# A MeterPoint may correlate directly with a meter. It necessarily
-# corresponds to one measurement type (see MeasurementType enumeration) and
-# measurement location within the circuit. Therefore, a single physical
-# meter might be the source of more than one MeterPoint.
+"""
+Meter points: one measurement type at one location in the circuit, so a single physical meter may be the source of more
+than one MeterPoint. Readings arrive in one of two ways. A PushMeterPoint registers a subscription with the node and
+records what is published to it. A PullMeterPoint asks its source itself: the node's host calls poll(now) on every meter
+point once per state-machine iteration (TransactiveNode._state_machine_iteration), the base class does nothing, and
+PullMeterPoint reads when its data period has elapsed. A meter point of a third party that needs the iteration hook
+overrides poll() the same way. poll() never raises out of the host's loop for one failing read: the failure is logged
+with its traceback, the last value stands and the next period tries again.
+"""
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 from math import ceil
 from statistics import mean
 from typing import Union
@@ -119,6 +124,11 @@ class MeterPoint(Component):
     def current_measurement(self):
         """Most recent measurement."""
         return self.buffer.last.value
+
+    def poll(self, now: datetime | None = None) -> bool:
+        """Called by the host once per iteration. A meter point whose readings are pushed to it has nothing to do here;
+        a meter point that reads its source overrides this (see PullMeterPoint). Returns True when a reading was recorded."""
+        return False
 
     def set_meter_value(self, value, last_update=None):
         last_update = require_aware(last_update, 'last_update') if last_update else Timer.now()

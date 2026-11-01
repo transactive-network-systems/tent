@@ -150,3 +150,20 @@ def test_poll_requires_an_aware_time(tn):
     meter = ScriptedMeter([1.0], transactive_node=tn, name='Pulled')
     with pytest.raises(ValueError, match='now'):
         meter.poll(datetime(2026, 10, 31, 12, 0))
+
+
+def test_the_node_polls_its_pull_meter_points_once_per_iteration(tn, monkeypatch):
+    pulled = ScriptedMeter([1.0, 2.0], transactive_node=tn, name='Pulled', data_period_seconds=10)
+    plain = MeterPoint(tn, name='Plain')
+    tn.meter_points = [plain, pulled]
+    for seconds, expected_reads in ((0, 1), (5, 1), (10, 2)):
+        monkeypatch.setattr(Timer, 'now', classmethod(lambda cls, tz=None, s=seconds: T0 + timedelta(seconds=s)))
+        tn.step()
+        assert pulled.reads == expected_reads, f'after the iteration at T0 + {seconds} s'
+    assert readings(tn) == [(1.0, T0), (2.0, T0 + timedelta(seconds=10))]
+    assert plain.buffer.last.value is None, "the base class's poll records nothing"
+
+
+def test_base_poll_is_a_no_op(tn):
+    meter = MeterPoint(tn, name='Plain')
+    assert meter.poll(T0) is False and readings(tn) == []

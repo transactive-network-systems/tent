@@ -293,7 +293,10 @@ class TransactiveNode(Archivable):
         pass
 
     def _state_machine_iteration(self):
-        """One complete iteration through the market state machine. """
+        """One complete iteration: give every meter point its poll (see tent.meter_point), then run every market's
+        events."""
+        for meter_point in self.meter_points:
+            meter_point.poll()
         for series in self.market_series:
             for market in series:
                 market.events()
