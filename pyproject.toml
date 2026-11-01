@@ -9,6 +9,9 @@ dependencies = [
     "pydantic>=2",
     "SQLAlchemy>=2.0.0",
     "uuid6>=2024.7.10",
+    # The archive machinery. Not on PyPI yet: install it from the tns-utilities repository beside this one first,
+    # `pip install -e ../tns-utilities/lib-archivable` (the pixi environment below does so).
+    "lib-archivable",
 ]
 
 [project.optional-dependencies]
@@ -41,6 +44,7 @@ sortedcontainers = ">=2.4"
 pytest = ">=7.4"
 
 [tool.pixi.pypi-dependencies]
+lib-archivable = { path = "../tns-utilities/lib-archivable", editable = true }
 tent = { path = ".", editable = true }
 
 [tool.pixi.tasks]

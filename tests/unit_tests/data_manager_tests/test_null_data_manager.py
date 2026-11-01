@@ -1,30 +1,30 @@
 """NullDataManager: accepts and discards records; the default when a node has no data_manager block (audit T-INC-01)."""
 import pytest
 
-from tent.data_manager import DataManager
-from tent.data_manager.null_data_manager import NullDataManager
+from archivable import DataManager, NullDataManager
+
+import tent.data_manager
+from tent.enumerations import MarketState
 from tent.market import Market
 from tent.market.market_series import MarketSeries
 from tent.utils.timer import Timer
 from tests.mock_tn import MockTN
 
 
-def test_records_are_accepted_and_discarded():
-    dm = NullDataManager(parent=None)
-    assert isinstance(dm, DataManager) and dm.archive_ready
-    dm.archive_data({'table_name': 'anything', 'data': {'id': 1}})
-    dm.archive_data([{'table_name': 'anything', 'data': {'id': 2}}, {'table_name': 'other', 'data': {}}])
-    dm.archive_data(None)
-    assert dm.discarded == 3
-    assert not dm.archival_queue, 'nothing is ever queued'
-
-
-def test_definitions_are_still_parsed():
-    dm = NullDataManager(parent=None)
+def test_definitions_with_tent_enumerations_are_parsed_once_prepared():
+    dm = tent.data_manager.prepare(NullDataManager(parent=None))
+    assert isinstance(dm, DataManager) and dm.archive_ready and dm.archive_schema.application == 'TENT'
     dm.add_tables(MarketSeries.get_archive_definitions())
-    assert 'market_series' in dm.tables and 'component' in dm.tables
-    with pytest.raises(ValueError, match='Unknown column type'):
-        dm.add_tables([{'name': 'broken', 'columns': [{'name': 'x', 'type': 'NoSuchType'}]}])
+    dm.add_tables(Market.get_archive_definitions())  # market_state_change names MarketState
+    assert {'market_series', 'component', 'market_state_change'} <= set(dm.tables)
+    assert dm.tables['market_state_change'].c.state.type.enums == [m.name for m in MarketState]
+    with pytest.raises(ValueError, match="Unknown enumeration 'NoSuchEnum'"):
+        dm.add_tables([{'name': 'broken', 'columns': [{'name': 'x', 'enumeration': 'NoSuchEnum'}]}])
+
+
+def test_an_unprepared_manager_refuses_tables_that_name_an_enumeration():
+    with pytest.raises(ValueError, match="Unknown enumeration 'MarketTypes'.*register_enumerations"):
+        NullDataManager(parent=None).add_tables(Market.get_archive_definitions())
 
 
 def test_node_without_a_data_manager_block_gets_the_null_manager(caplog):

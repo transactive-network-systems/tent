@@ -15,7 +15,7 @@ from tent.containers.order import Order  # noqa: E402
 from tent.containers.vertex import Vertex  # noqa: E402
 from tent.containers.time_interval import TimeInterval  # noqa: E402
 from tent.containers.sd_curve import SDCurve  # noqa: E402
-from tent.base.archivable import Archivable  # noqa: E402
+from archivable import Archivable  # noqa: E402
 
 
 #############################################

@@ -1,5 +1,5 @@
 """
-The configuration contract of TENT's configurable classes.
+The configuration contract of TENT's configurable classes, built on archivable.config.
 
 Every configurable class (data managers, market series and markets, price models, neighbors, local assets and their
 model-frame models, actuation and occupancy managers, information services, meter points, and the TransactiveNode
@@ -23,69 +23,36 @@ Conventions the models encode, as Pydantic types:
 Fields a running component may change in place are marked reconfigurable (``Setting(..., reconfigurable=True)``,
 which puts ``{"reconfigurable": true}`` in the field's JSON Schema extra); ``Config.reconfigurable_fields()`` lists
 them and ``Configurable.reconfigure`` applies a change to them, refusing anything else.
+
+The generic half of the contract (ConfigModel's validation and error reporting, Configurable's constructor validation
+and reconfiguration, the reconfigurable marker and the two errors) is the library's, in archivable.config, so the data
+managers it ships are configured the same way; TENT's ConfigModel and Configurable extend them with the nested class
+specifications (``class_spec``) and their validation through tent.registry.
 """
-import logging
 from datetime import time, timedelta
 from enum import Enum
 from math import isinf
 from typing import Annotated, Any, ClassVar, Mapping
 
-from pydantic import (BaseModel, BeforeValidator, ConfigDict, Field, PlainSerializer, PlainValidator, ValidationError,
-                      WithJsonSchema)
+from pydantic import BeforeValidator, ConfigDict, Field, PlainSerializer, PlainValidator, WithJsonSchema
+
+from archivable.config import RECONFIGURABLE, ConfigurationError, ReconfigurationError, field_extra
+from archivable.config import ConfigModel as _ConfigModel
+from archivable.config import Configurable as _Configurable
+from archivable.config import Setting as _setting
 
 from tent.utils.helpers import parse_time
 
-_log = logging.getLogger(__name__)
 
 __all__ = ['ConfigModel', 'NamedConfig', 'ConfigurationError', 'ReconfigurationError', 'Configurable', 'Setting', 'ClassSpec',
-           'class_spec', 'Seconds', 'NonNegativeSeconds', 'PositiveSeconds', 'TimeOfDay', 'time_of_day', 'enum_by_name',
-           'CostParameters', 'DefaultVertices', 'NameReferences', 'Coefficients24', 'RECONFIGURABLE', 'SPEC_OF', 'SPEC_DEFAULT',
-           'REFERENCE']
+           'class_spec', 'spec_fields', 'Seconds', 'NonNegativeSeconds', 'PositiveSeconds', 'TimeOfDay', 'time_of_day',
+           'enum_by_name', 'CostParameters', 'DefaultVertices', 'NameReferences', 'Coefficients24', 'RECONFIGURABLE',
+           'SPEC_OF', 'SPEC_DEFAULT', 'REFERENCE']
 
-# Keys of Field.json_schema_extra that the models use as markers.
-RECONFIGURABLE = 'reconfigurable'   # True: a running component may change this field in place.
+# Keys of Field.json_schema_extra that the models use as markers (RECONFIGURABLE is the library's).
 SPEC_OF = 'x-tent-spec'             # Name of the base class a nested class specification must resolve to.
 SPEC_DEFAULT = 'x-tent-spec-default'  # Class a nested specification without class_name names (see class_spec).
 REFERENCE = 'x-tent-reference'      # Name of the node list whose component names this field refers to.
-
-
-# --------------------------------------------------------------------------------------------------------- errors
-
-class ConfigurationError(ValueError):
-    """A configuration the models reject. The message names the component (class and configured name) and every
-    offending key, so the file can be corrected without reading a traceback."""
-
-    def __init__(self, owner: str, problems: list[str]):
-        self.owner = owner
-        self.problems = list(problems)
-        super().__init__(f'{owner}: ' + '; '.join(self.problems))
-
-    @classmethod
-    def from_validation(cls, owner: str, error: ValidationError, model: type[BaseModel]) -> 'ConfigurationError':
-        problems = []
-        unknown = []
-        for detail in error.errors():
-            location = '.'.join(str(part) for part in detail['loc'])
-            if detail['type'] == 'extra_forbidden':
-                unknown.append(location)
-            elif detail['type'] == 'missing':
-                problems.append(f'{location} is required')
-            else:
-                message = detail['msg']
-                if message.startswith('Value error, '):
-                    message = message[len('Value error, '):]
-                problems.append(f'{location}: {message}' if location else message)
-        if unknown:
-            known = sorted(info.alias or name for name, info in model.model_fields.items())
-            problems.insert(0, f'unknown configuration key{"s" if len(unknown) > 1 else ""} '
-                               f'{", ".join(repr(key) for key in unknown)} (the keys of {model.__qualname__} are '
-                               f'{known})')
-        return cls(owner, problems)
-
-
-class ReconfigurationError(ValueError):
-    """A change a running component cannot take in place: it names a field that is not reconfigurable (the node must
-    be rebuilt for it), or the changed values do not validate."""
 
 
 # ---------------------------------------------------------------------------------------------------------- fields
@@ -93,15 +60,13 @@ class ReconfigurationError(ValueError):
 def Setting(default: Any = ..., *, reconfigurable: bool = False, spec_of: str | None = None,
             spec_default: str | None = None, reference: str | None = None, **field_kwargs: Any) -> Any:
     """
-    Field() with TENT's markers in json_schema_extra: ``reconfigurable`` for a setting a running component may change
-    in place, ``spec_of`` for a nested class specification (the name of the base class it must resolve to, see
-    tent.registry.BASES; ``spec_default`` the class a specification without class_name names), ``reference`` for a field
-    naming components of another node list. Everything else (default,
-    description, ge, gt, ...) is passed to Field. Units belong in the description, in brackets.
+    archivable.config.Setting with TENT's markers in json_schema_extra: ``reconfigurable`` for a setting a running
+    component may change in place, ``spec_of`` for a nested class specification (the name of the base class it must
+    resolve to, see tent.registry.BASES; ``spec_default`` the class a specification without class_name names),
+    ``reference`` for a field naming components of another node list. Everything else (default, description, ge, gt,
+    ...) is passed to Field. Units belong in the description, in brackets.
     """
     extra: dict[str, Any] = {}
-    if reconfigurable:
-        extra[RECONFIGURABLE] = True
     if spec_of is not None:
         extra[SPEC_OF] = spec_of
     if spec_default is not None:
@@ -112,12 +77,7 @@ def Setting(default: Any = ..., *, reconfigurable: bool = False, spec_of: str | 
         existing = field_kwargs.pop('json_schema_extra', None) or {}
         extra = {**existing, **extra}
         field_kwargs['json_schema_extra'] = extra
-    return Field(default, **field_kwargs)
-
-
-def _field_extra(info) -> dict:
-    extra = info.json_schema_extra
-    return extra if isinstance(extra, dict) else {}
+    return _setting(default, reconfigurable=reconfigurable, **field_kwargs)
 
 
 # ----------------------------------------------------------------------------------------------------------- types
@@ -323,37 +283,22 @@ Coefficients24 = Annotated[list[float], Field(min_length=24, max_length=24)]
 
 # ------------------------------------------------------------------------------------------------------ the models
 
-class ConfigModel(BaseModel):
-    """Base of every configuration model: unknown keys are errors, Python objects (components, adapters) may be given
-    where code wires things directly, defaults are written in configuration form (seconds, member names) and validated
-    like given values, and the markers set through Setting() are readable."""
-    model_config = ConfigDict(extra='forbid', arbitrary_types_allowed=True, validate_default=True)
+def spec_fields(model: type[_ConfigModel]) -> dict[str, str]:
+    """Field name -> base class name (see tent.registry.BASES) of every nested class specification field of `model`
+    (any configuration model, the library's included)."""
+    return {name: field_extra(info)[SPEC_OF] for name, info in model.model_fields.items()
+            if SPEC_OF in field_extra(info)}
 
-    @classmethod
-    def reconfigurable_fields(cls) -> frozenset[str]:
-        """The fields a running component may change in place."""
-        return frozenset(name for name, info in cls.model_fields.items() if _field_extra(info).get(RECONFIGURABLE))
+
+class ConfigModel(_ConfigModel):
+    """Base of every configuration model TENT declares: the library's ConfigModel (unknown keys are errors, Python
+    objects such as components and adapters may be given where code wires things directly, defaults are written in
+    configuration form and validated like given values) plus the nested class specification fields."""
 
     @classmethod
     def spec_fields(cls) -> dict[str, str]:
         """Field name -> base class name (see tent.registry.BASES) of every nested class specification field."""
-        return {name: _field_extra(info)[SPEC_OF] for name, info in cls.model_fields.items()
-                if SPEC_OF in _field_extra(info)}
-
-    @classmethod
-    def validate_for(cls, owner: str, data: Mapping) -> 'ConfigModel':
-        """model_validate(data), reporting failures as a ConfigurationError that names `owner`."""
-        if not isinstance(data, Mapping):
-            raise ConfigurationError(owner, [f'the configuration must be a dictionary of settings, not '
-                                             f'{type(data).__name__}: {data!r}'])
-        try:
-            return cls.model_validate(dict(data))
-        except ValidationError as error:
-            raise ConfigurationError.from_validation(owner, error, cls) from None
-
-    def changed_fields(self, other: 'ConfigModel') -> set[str]:
-        """The names of the fields whose values differ between this configuration and `other` (same model)."""
-        return {name for name in type(self).model_fields if getattr(self, name) != getattr(other, name)}
+        return spec_fields(cls)
 
 
 class NamedConfig(ConfigModel):
@@ -402,57 +347,21 @@ def class_spec(default_class_name: str | None = None) -> Any:
 
 # ----------------------------------------------------------------------------------------------------- the mixin
 
-class Configurable:
+class Configurable(_Configurable):
     """
-    What a class with a nested Config model gets: validation of its keyword arguments in the constructor (see
-    _configure), the validated configuration as ``config``, and in-place reconfiguration of the fields its Config marks
-    reconfigurable (reconfigure). Subclass models extend the parent's model; a subclass constructor validates once and
-    hands the validated instance down as ``config=``, so the parent reads the same object instead of validating again.
+    The library's Configurable (validation of the keyword arguments in the constructor, the validated configuration as
+    ``config``, in-place reconfiguration of the fields the Config marks reconfigurable) for a TENT class: the nested
+    class specifications its Config holds are validated against the Config of the class they name, resolved through
+    tent.registry, before anything is built (TransactiveNode.validate_configuration).
     """
     Config: ClassVar[type[ConfigModel]] = ConfigModel
-    # Keys of a specification dict that are not settings of the Config (consumed by whoever builds the object).
-    RUNTIME_SPEC_KEYS: ClassVar[frozenset[str]] = frozenset({'class_name', 'module_name'})
-
-    config: ConfigModel
-    config_version: int
-
-    @classmethod
-    def declares_config(cls) -> bool:
-        """True when this class declares its own Config (as every class TENT ships does, ``Config = Parent.Config``
-        when nothing is added). A class from elsewhere that only extends a shipped constructor is validated by the
-        shipped base's Config for the keywords that reach it, and is not pre-validated by the node."""
-        return 'Config' in vars(cls)
-
-    @classmethod
-    def describe(cls, data: Mapping | None = None, name: str | None = None) -> str:
-        """'ClassName' or "ClassName 'configured name'" for messages."""
-        if name is None and isinstance(data, Mapping):
-            name = data.get('name')
-        return f'{cls.__name__} {name!r}' if name else cls.__name__
-
-    @classmethod
-    def validate_config(cls, data: Mapping, name: str | None = None) -> ConfigModel:
-        """The validated Config for the settings `data`; a ConfigurationError names this class and `name`."""
-        return cls.Config.validate_for(cls.describe(data, name), data)
-
-    @classmethod
-    def validate_spec(cls, spec: Mapping) -> ConfigModel:
-        """
-        Validate a configuration dictionary that names this class (class_name, module_name and the settings), and
-        recursively the nested class specifications its fields hold, without building anything. Used by
-        TransactiveNode.validate_configuration to reject a configuration before any component exists.
-        """
-        settings = {key: value for key, value in spec.items() if key not in cls.RUNTIME_SPEC_KEYS}
-        cfg = cls.validate_config(settings)
-        cls.validate_nested_specs(cfg, cls.describe(settings))
-        return cfg
 
     @classmethod
     def validate_nested_specs(cls, cfg: ConfigModel, owner: str) -> None:
         """Validate every nested ClassSpec held by `cfg` (directly, in lists, or inside nested models) against the
         Config of the class it names, resolved through tent.registry against the base its field declares."""
         from tent import registry  # local: registry is imported by tent.utils.helpers, which this module imports
-        for field_name, base_name in type(cfg).spec_fields().items():
+        for field_name, base_name in spec_fields(type(cfg)).items():
             value = getattr(cfg, field_name)
             specs = value if isinstance(value, list) else [value] if value is not None else []
             for index, spec in enumerate(specs):
@@ -460,7 +369,7 @@ class Configurable:
                     continue
                 where = f'{owner}.{field_name}' + (f'[{index}]' if isinstance(value, list) else '')
                 nested_class = registry.resolve(spec.class_name, registry.base_class(base_name), spec.module_name)
-                if issubclass(nested_class, Configurable) and nested_class.declares_config():
+                if issubclass(nested_class, _Configurable) and nested_class.declares_config():
                     try:
                         nested_class.validate_spec(spec.spec())
                     except ConfigurationError as error:
@@ -469,82 +378,5 @@ class Configurable:
             value = getattr(cfg, field_name)
             nested = value if isinstance(value, list) else [value]
             for item in nested:
-                if isinstance(item, ConfigModel) and not isinstance(item, ClassSpec):
+                if isinstance(item, _ConfigModel) and not isinstance(item, ClassSpec):
                     cls.validate_nested_specs(item, f'{owner}.{field_name}')
-
-    def _configure(self, config: ConfigModel | None, kwargs: Mapping) -> ConfigModel:
-        """
-        The validated configuration of this object: `config` when a subclass constructor already validated it (it must
-        then be an instance of this class's Config and `kwargs` must be empty), otherwise `kwargs` validated through
-        this class's Config. Stored as ``self.config`` (version 1).
-        """
-        if config is not None:
-            if not isinstance(config, self.Config):
-                raise TypeError(f'{type(self).__name__} was given a {type(config).__qualname__} as its configuration; '
-                                f'it needs a {self.Config.__qualname__}.')
-            if kwargs:
-                raise TypeError(f'{type(self).__name__} was given both a validated configuration and keywords '
-                                f'{sorted(kwargs)}; give one or the other.')
-            cfg = config
-        else:
-            cfg = self.validate_config(kwargs)
-        if getattr(self, 'config', None) is None:
-            self.config = cfg
-            self.config_version = 1
-        return cfg
-
-    # ------------------------------------------------------------------------------------------- reconfiguration
-
-    def check_reconfigure(self, changes: Mapping) -> ConfigModel:
-        """
-        The configuration this object would have after `changes`, validated, without applying it. Raises
-        ReconfigurationError when a changed field is not reconfigurable (listing them) or the new values do not
-        validate.
-        """
-        changes = dict(changes)
-        refused = sorted(set(changes) - self.Config.reconfigurable_fields())
-        if refused:
-            unknown = sorted(set(refused) - set(self.Config.model_fields))
-            detail = (f' ({", ".join(repr(k) for k in unknown)} {"are" if len(unknown) > 1 else "is"} not a '
-                      f'configuration key at all)' if unknown else '')
-            raise ReconfigurationError(
-                f'{self.describe(name=getattr(self, "name", None))}: {refused} cannot be changed on a running '
-                f'component{detail}; reconfigurable fields are {sorted(self.Config.reconfigurable_fields())}. '
-                f'Rebuild the node for other changes.')
-        current = self.config.model_dump()
-        try:
-            return self.validate_config({**current, **changes}, name=getattr(self, 'name', None))
-        except ConfigurationError as error:
-            raise ReconfigurationError(str(error)) from None
-
-    def reconfigure(self, changes: Mapping) -> None:
-        """Change the reconfigurable fields in `changes` in place: validate (check_reconfigure), apply, and record
-        the new configuration version."""
-        new_config = self.check_reconfigure(changes)
-        changed = set(changes)
-        self._apply_reconfiguration(new_config, changed)
-        self.config = new_config
-        self.config_version += 1
-        _log.info(f'{self.describe(name=getattr(self, "name", None))} reconfigured {sorted(changed)} '
-                  f'(configuration version {self.config_version}).')
-        self._configuration_changed(changed)
-
-    def diff_configuration(self, settings: Mapping) -> dict:
-        """The changes (field -> new value) that would take this object from its current configuration to `settings`
-        (a full set of settings, as configured). Settings `settings` leaves out revert to their defaults."""
-        new_config = self.validate_config(settings, name=getattr(self, 'name', None))
-        return {name: getattr(new_config, name) for name in self.config.changed_fields(new_config)}
-
-    def _apply_reconfiguration(self, cfg: ConfigModel, changed: set[str]) -> None:
-        """Apply the changed fields of `cfg` to this object. The base behaviour sets the attribute of the same name;
-        classes that derive other state from a field extend this."""
-        for field_name in changed:
-            setattr(self, field_name, getattr(cfg, field_name))
-
-    def _configuration_changed(self, changed: set[str]) -> None:
-        """Hook after a reconfiguration is applied (components archive the new version here)."""
-        return None
-
-    def configuration_record(self) -> dict:
-        """The current configuration as JSON-ready data (for the archive and for comparison)."""
-        return self.config.model_dump(mode='json')

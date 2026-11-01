@@ -10,7 +10,8 @@ that model and reads its settings from the validated instance, so the keys a blo
 defaults and descriptions are the model's fields and nothing else. There is no second list to keep in step: this page
 describes how to read the models, not the keys themselves.
 
-The classes with a ``Config`` are the data managers (``DataManager``, ``LocalDataManager``, ``NullDataManager``), the
+The classes with a ``Config`` are the data managers (``DataManager``, ``LocalDataManager``, ``NullDataManager``, from
+the ``archivable`` library, whose ``archivable.config`` supplies the generic half of this contract), the
 market series and the markets (``MarketSeries``, ``Market``, ``Auction``, ``ConsensusMarket``, ``MatchingEngine``), the
 price models (``HourlyAveragePriceModel``), the neighbors (``Neighbor``, ``BulkSupplierDC``), the local assets
 (``LocalAsset``, ``OpenLoopLoadPredictor``, ``SimpleBuilding``, ``SolarPvResource``, ``ModelFrameAsset``) and the

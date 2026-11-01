@@ -26,9 +26,9 @@ ENTRY_POINT_GROUP = 'tent.components'
 # Class name -> "module:attribute" of every configurable class TENT ships. Lazy: a module is imported only when its
 # class is asked for, so the optional simulator back-ends behind the model-frame FMI adapter stay optional.
 SHIPPED: dict[str, str] = {
-    # Data managers
-    'LocalDataManager': 'tent.data_manager.local_data_manager:LocalDataManager',
-    'NullDataManager': 'tent.data_manager.null_data_manager:NullDataManager',
+    # Data managers (the library's; TENT ships no data manager of its own)
+    'LocalDataManager': 'archivable.local_data_manager:LocalDataManager',
+    'NullDataManager': 'archivable.null_data_manager:NullDataManager',
     # Market series, markets and price models
     'MarketSeries': 'tent.market.market_series:MarketSeries',
     'Market': 'tent.market:Market',
@@ -149,7 +149,7 @@ def resolve(class_name: str, base: type, module_name: str | None = None) -> type
 
 # The base class of every configurable slot, by the name the Config models use in Setting(spec_of=...).
 BASES: dict[str, str] = {
-    'DataManager': 'tent.data_manager:DataManager',
+    'DataManager': 'archivable.data_manager:DataManager',
     'MarketSeries': 'tent.market.market_series:MarketSeries',
     'Market': 'tent.market:Market',
     'PriceModel': 'tent.market.price_models:PriceModel',

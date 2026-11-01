@@ -134,7 +134,7 @@ def multi_asset_campus_node():
         "market_series": [market_series_config],
     }
 
-    with patch("tent.data_manager.local_data_manager.LocalDataManager.init_archive", Mock(return_value=None)):
+    with patch("archivable.local_data_manager.LocalDataManager.init_archive", Mock(return_value=None)):
         tn.configure_node(node_config)
 
     asset = tn.local_assets[0]

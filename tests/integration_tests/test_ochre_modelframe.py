@@ -146,7 +146,7 @@ def _build_node_config() -> dict:
         # ----------------------------------------------------------------
         "data_manager": {
             "class_name": "NullDataManager",
-            "module_name": "tent.data_manager.null_data_manager"
+            "module_name": "archivable.null_data_manager"
         },
         # ----------------------------------------------------------------
         # Information service: temperature forecast (CSV path is None;
@@ -406,7 +406,7 @@ def tent_node():
     config = _build_node_config()
 
     with patch(
-        "tent.data_manager.local_data_manager.LocalDataManager.init_archive",
+        "archivable.local_data_manager.LocalDataManager.init_archive",
         Mock(return_value=None),
     ):
         tn.configure_node(config)

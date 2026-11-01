@@ -68,7 +68,7 @@ The central orchestrator for a transactive entity. It maintains:
 * **`neighbors`**: External transactive partners with whom power is imported or exported.
 * **`market_series`**: Active double auctions organized into rolling horizons.
 * **`information_services`**: Forecast providers (e.g., outdoor air temperature, solar irradiance).
-* **`data_manager`**: Relational and timeseries logging engine.
+* **`data_manager`**: The archive: a data manager from the `lib-archivable` library (`LocalDataManager` for a database, `NullDataManager` for none) or one a host supplies.
 
 </details>
 
@@ -168,16 +168,25 @@ Between nodes, transactive signals travel in the wire format defined by `Transac
 through and the receiver validates before anything is looked up. An inelastic vertex's infinite price is `null` on the
 wire; a message that does not fit is dropped with a logged reason.
 
-The archive carries a schema version. `tent.data_manager.ARCHIVE_SCHEMA_VERSION` (currently 2) numbers the set of
-table definitions TENT ships and is incremented whenever one of them changes; version 1 is every archive written before
-2 November 2026, which has no record of its version. A new database gets one row in the `archive_schema` table
-(`version`, `fingerprint`, `tent_version`, `created`) when `LocalDataManager.init_archive` creates it. Opening an
-existing database written with another version raises `ArchiveSchemaMismatch` naming both versions; nothing is
-migrated, the database is recreated or read with a TENT of its own version. `ArchiveReader.from_url(...).schema_version`
-reports the version of an archive (`None` for a database without the table, meaning version 1).
-`archive_schema_fingerprint()` is a SHA-256 of the canonical JSON of the shipped definitions; the test
-`tests/unit_tests/data_manager_tests/test_archive_schema.py` records the fingerprint of each version and fails when a
-definition changes without a bump.
+The archive machinery is the `lib-archivable` library (import package `archivable`, in the `tns-utilities`
+repository): `Archivable`, the `DataManager` base, `LocalDataManager`, `NullDataManager`, `ArchiveReader`, the table
+definition parser and the archive schema version. `tent.data_manager` holds what is TENT's own: the definitions and
+enumerations TENT ships (`known_archive_definitions`, `known_enumerations`), their version, and `prepare`, which
+declares TENT's archive schema on a data manager and registers TENT's enumerations (the node does this to the data
+manager it builds). `tent.data_manager.reader.open_archive(url)` opens an existing archive read-only with TENT's
+canonical queries (`runs`, `components`, `markets`, `values`, `curves`, ...).
+
+The archive carries a schema version. `tent.data_manager.ARCHIVE_SCHEMA_VERSION` (currently 3) numbers the set of
+table definitions and enumerations TENT ships and is incremented whenever one of them changes; version 1 is every
+archive written before 2 November 2026, which has no record of its version; version 2 is the first with the record,
+written on 2 November 2026 with TENT's own `archive_schema` table. A new database gets one row in the `archive_schema`
+table (`version`, `fingerprint`, `application`, `application_version`, `created`) when `LocalDataManager.init_archive`
+creates it. Opening an existing database written with another version raises `ArchiveSchemaMismatch` naming both
+versions; nothing is migrated, the database is recreated or read with a TENT of its own version.
+`open_archive(url).schema_version` reports the version of an archive (`None` for a database without the table, meaning
+version 1). `archive_schema_fingerprint()` is a SHA-256 of the canonical JSON of the shipped definitions and
+enumerations; the test `tests/unit_tests/data_manager_tests/test_archive_schema.py` records the fingerprint of each
+version and fails when a definition changes without a bump.
 
 </details>
 
@@ -390,9 +399,11 @@ Dependencies are declared once, in `pyproject.toml` (PEP 621).
 git clone https://github.com/davidraker/TENT.git
 cd TENT
 
-# pip in a virtual environment (development install with the test suite)
+# pip in a virtual environment (development install with the test suite). lib-archivable (the archive machinery,
+# in the tns-utilities repository beside this one) is not on PyPI yet; install it first.
 python -m venv .venv
 source .venv/bin/activate
+pip install -e ../tns-utilities/lib-archivable
 pip install -e ".[dev]"
 
 # or Poetry

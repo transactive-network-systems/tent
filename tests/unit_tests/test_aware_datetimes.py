@@ -53,7 +53,7 @@ def test_timer_assumes_its_zone_for_a_naive_simulation_start():
 
 
 def test_archive_normaliser_refuses_naive_datetimes(tmp_path):
-    from tent.data_manager.local_data_manager import LocalDataManager
+    from archivable import LocalDataManager
     from sqlalchemy import Column, DateTime
     with pytest.raises(ValueError, match='reading_time'):
         LocalDataManager._normalize_value(Column('reading_time', DateTime(timezone=True)), NAIVE)

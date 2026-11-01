@@ -12,7 +12,7 @@ from tent.containers.sd_curve import SDCurve
 from tent.containers.vertex import Vertex
 from tent.containers.time_interval import TimeInterval
 from tent.enumerations import MeasurementType, MeasurementUnit
-from tent.base.archivable import Archivable
+from archivable import Archivable
 
 
 class DummyDataManager:

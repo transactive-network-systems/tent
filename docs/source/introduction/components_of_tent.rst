@@ -30,8 +30,12 @@ Orchestrates continuous rolling double auctions across a configurable horizon (e
 ------------------------------------------------------
 Provides environmental context and forecasts (e.g., outdoor air temperature, weather forecasts, solar irradiance) required by local assets to predict energy demand.
 
-7. Data Manager (``tent.data_manager``)
----------------------------------------
+7. Data Manager (``archivable``, ``tent.data_manager``)
+------------------------------------------------------
 Handles relational database persistence (via SQLAlchemy) for market clearing prices, orders, asset schedules, and physical telemetry.
-``LocalDataManager`` writes to the database named by ``db_params.url`` (a SQLAlchemy URL, required). ``NullDataManager``
-accepts every record and keeps none; it is used when a node's configuration has no ``data_manager`` block and by tests.
+The data managers are the ``lib-archivable`` library's (import package ``archivable``): ``LocalDataManager`` writes to
+the database named by ``db_params.url`` (a SQLAlchemy URL, required); ``NullDataManager`` accepts every record and keeps
+none and is used when a node's configuration has no ``data_manager`` block and by tests. ``tent.data_manager`` holds
+TENT's own side: the table definitions and enumerations TENT ships, their archive schema version, and ``prepare``, which
+declares them on a data manager; ``tent.data_manager.reader.open_archive`` opens an existing archive with TENT's
+queries.

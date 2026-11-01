@@ -1,33 +1,36 @@
 """
-Archive schema versioning: the version constant, the fingerprint that ties it to the shipped definitions, the
-archive_schema row a new database gets, and the refusal of a database written by another version.
+TENT's archive schema version: the version constant, the fingerprint that ties it to the shipped definitions and
+enumerations, the ArchiveSchema TENT declares on its data managers, and what a TENT-prepared archive does with a
+database of another version. The mechanics (the row, the refusal, the warning) are the library's and tested there.
 """
 import logging
 import random
-from datetime import timezone
 
 import pytest
 from sqlalchemy import text
 
+from archivable import ARCHIVE_SCHEMA_TABLE, ArchiveSchemaMismatch, LocalDataManager, canonical_definitions_json, \
+    enumeration_definitions
+
 import tent.data_manager
-import tent.data_manager.reader
-from tent.data_manager import (ARCHIVE_SCHEMA_TABLE, ARCHIVE_SCHEMA_VERSION, ArchiveSchemaMismatch, DataManager,
-                               archive_schema_definition, archive_schema_fingerprint, canonical_definitions_json)
-from tent.data_manager.local_data_manager import LocalDataManager
-from tent.data_manager.reader import known_archive_definitions
+import tent.enumerations
+from tent.data_manager import (APPLICATION, ARCHIVE_SCHEMA_VERSION, archive_schema, archive_schema_fingerprint,
+                               known_archive_definitions, known_enumerations, prepare, tent_version)
+from tent.data_manager.reader import open_archive
 
 # The fingerprint of each archive schema version's shipped definitions. When test_version_matches_the_definitions
-# fails, a shipped table definition changed: increment ARCHIVE_SCHEMA_VERSION in tent/data_manager/__init__.py, add
-# the new version with the fingerprint the failure prints here, and keep the old entries. Version 1 (every archive
-# before 2 November 2026) predates the fingerprint and has none.
+# fails, a shipped table definition or enumeration changed: increment ARCHIVE_SCHEMA_VERSION in
+# tent/data_manager/__init__.py, add the new version with the fingerprint the failure prints here, and keep the old
+# entries. Version 1 (every archive before 2 November 2026) predates the fingerprint and has none.
 RECORDED_FINGERPRINTS = {
-    2: 'dd03e0ba4449f15391b5a84339639dd7284d113afd54bb75ba193fcd5aa10979',  # every shipped class at 2 November 2026 (ResponseNeighbor included)
+    2: 'dd03e0ba4449f15391b5a84339639dd7284d113afd54bb75ba193fcd5aa10979',  # 2 November 2026: every shipped class (ResponseNeighbor included); the fingerprint of this version covered the table definitions only, with TENT's own archive_schema table (version, fingerprint, tent_version, created)
+    3: 'bd4855670eab332bf25ddab880bbda54c747107e5eff16419f997fb487376736',  # 2 November 2026: the library's archive_schema table (version, fingerprint, application, application_version, created); the fingerprint covers the enumerations too
 }
 
 
-def open_archive(url):
+def open_writable(url):
     """A writable data manager with every shipped table registered, as a configured node leaves it."""
-    dm = LocalDataManager(None, {'url': url})
+    dm = prepare(LocalDataManager(None, {'url': url}))
     dm.add_tables(known_archive_definitions())
     return dm
 
@@ -44,111 +47,104 @@ def test_version_matches_the_definitions():
         f'ARCHIVE_SCHEMA_VERSION is {ARCHIVE_SCHEMA_VERSION} but RECORDED_FINGERPRINTS has no entry for it; add '
         f'{ARCHIVE_SCHEMA_VERSION}: {fingerprint!r}.')
     assert fingerprint == RECORDED_FINGERPRINTS[ARCHIVE_SCHEMA_VERSION], (
-        f'The shipped table definitions changed but ARCHIVE_SCHEMA_VERSION is still {ARCHIVE_SCHEMA_VERSION}. '
-        f'Increment ARCHIVE_SCHEMA_VERSION in tent/data_manager/__init__.py and record the new fingerprint '
-        f'{fingerprint!r} under the new version in RECORDED_FINGERPRINTS (keep the old entries).')
+        f'The shipped table definitions or enumerations changed but ARCHIVE_SCHEMA_VERSION is still '
+        f'{ARCHIVE_SCHEMA_VERSION}. Increment ARCHIVE_SCHEMA_VERSION in tent/data_manager/__init__.py and record the '
+        f'new fingerprint {fingerprint!r} under the new version in RECORDED_FINGERPRINTS (keep the old entries).')
 
 
-def test_fingerprint_covers_every_shipped_table_including_archive_schema():
+def test_fingerprint_covers_every_shipped_table_and_enumeration():
     names = {d['name'] for d in known_archive_definitions()}
     assert ARCHIVE_SCHEMA_TABLE in names
     assert {'transactive_node', 'component', 'market', 'measurement_value', 'sd_curve', 'meter_reading'} <= names
+    assert [e.__name__ for e in known_enumerations()] == list(tent.enumerations.__all__)
+    named_in_columns = {c['enumeration'] for d in known_archive_definitions() for c in d['columns'] if 'enumeration' in c}
+    assert named_in_columns <= {e.__name__ for e in known_enumerations()}
+    assert 'MarketState' in named_in_columns
 
 
 def test_fingerprint_does_not_depend_on_table_or_column_order():
     definitions = known_archive_definitions()
+    enumerations = enumeration_definitions(known_enumerations())
     shuffled = [dict(d, columns=random.sample(d['columns'], len(d['columns']))) for d in definitions]
     random.shuffle(shuffled)
-    assert canonical_definitions_json(shuffled) == canonical_definitions_json(definitions)
+    assert canonical_definitions_json(shuffled, list(reversed(enumerations))) == \
+        canonical_definitions_json(definitions, enumerations)
 
 
-def test_fingerprint_changes_when_a_definition_changes(monkeypatch):
+def test_fingerprint_changes_when_a_definition_or_an_enumeration_changes(monkeypatch):
     before = archive_schema_fingerprint()
     changed = [dict(d) for d in known_archive_definitions()]
     changed[0] = dict(changed[0], columns=changed[0]['columns'] + [{'name': 'extra', 'type': 'Integer'}])
-    monkeypatch.setattr(tent.data_manager.reader, 'known_archive_definitions', lambda: changed)
+    monkeypatch.setattr(tent.data_manager, 'known_archive_definitions', lambda: changed)
+    assert archive_schema_fingerprint() != before
+    monkeypatch.undo()
+    monkeypatch.setattr(tent.data_manager, 'known_enumerations', lambda: known_enumerations()[1:])
     assert archive_schema_fingerprint() != before
 
 
-# ---------------------------------------------------------------- the row in the database
-def test_new_database_gets_the_archive_schema_row(tmp_path):
-    dm = open_archive(f'sqlite:///{tmp_path / "new.sqlite"}')
+def test_the_declared_schema_names_tent_and_its_version():
+    schema = archive_schema()
+    assert (schema.application, schema.version) == (APPLICATION, ARCHIVE_SCHEMA_VERSION) == ('TENT', ARCHIVE_SCHEMA_VERSION)
+    assert schema.fingerprint == archive_schema_fingerprint() and schema.application_version == tent_version()
+    assert tent_version() != 'unknown', 'the test environment installs TENT'
+
+
+# ---------------------------------------------------------------- a TENT-prepared archive
+def test_new_database_gets_the_row_and_the_node_tables(tmp_path):
+    dm = open_writable(f'sqlite:///{tmp_path / "new.sqlite"}')
     dm.init_archive()
     record = dm.archive_schema_record()
     assert record['version'] == ARCHIVE_SCHEMA_VERSION == dm.schema_version
     assert record['fingerprint'] == archive_schema_fingerprint()
-    assert record['tent_version'] and record['created'].tzinfo == timezone.utc
-    assert dm.has_table('transactive_node'), 'the node tables are created with the row'
+    assert (record['application'], record['application_version']) == ('TENT', tent_version())
+    assert dm.has_table('transactive_node') and dm.has_table('market_state_change')
 
 
-def test_reopening_with_the_same_version_keeps_one_row(tmp_path):
-    url = f'sqlite:///{tmp_path / "same.sqlite"}'
-    open_archive(url).init_archive()
-    dm = open_archive(url)
-    dm.init_archive()  # a restart
-    dm.init_archive()  # more tables registered during a run
-    assert dm.execute(dm.select(ARCHIVE_SCHEMA_TABLE)) == [dm.archive_schema_record()]
-
-
-def test_database_of_another_version_is_refused_naming_both_versions(tmp_path):
+def test_database_of_another_version_is_refused_naming_tent_and_both_versions(tmp_path):
     url = f'sqlite:///{tmp_path / "other.sqlite"}'
-    dm = open_archive(url)
+    dm = open_writable(url)
     dm.init_archive()
     with dm.engine.begin() as connection:
         connection.execute(text(f'UPDATE {ARCHIVE_SCHEMA_TABLE} SET version = 7'))
     with pytest.raises(ArchiveSchemaMismatch) as error:
-        open_archive(url).init_archive()
+        open_writable(url).init_archive()
     message = str(error.value)
-    assert 'version 7' in message and f'version {ARCHIVE_SCHEMA_VERSION}' in message
-    assert 'Recreate the database' in message and 'read-only' in message
-    assert error.value.database_version == 7 and error.value.tent_schema_version == ARCHIVE_SCHEMA_VERSION
+    assert 'version 7' in message and f'; TENT writes archive schema version {ARCHIVE_SCHEMA_VERSION}' in message
+    assert error.value.database_version == 7 and error.value.expected_version == ARCHIVE_SCHEMA_VERSION
 
 
 def test_database_without_the_table_is_version_one_and_refused(tmp_path):
     url = f'sqlite:///{tmp_path / "old.sqlite"}'
-    dm = open_archive(url)
+    dm = open_writable(url)
     dm.init_archive()
     with dm.engine.begin() as connection:
         connection.execute(text(f'DROP TABLE {ARCHIVE_SCHEMA_TABLE}'))  # what an archive from before 2 Nov 2026 looks like
     with pytest.raises(ArchiveSchemaMismatch, match=f'version 1;.*version {ARCHIVE_SCHEMA_VERSION}'):
-        open_archive(url).init_archive()
+        open_writable(url).init_archive()
 
 
 def test_same_version_with_another_fingerprint_is_a_warning(tmp_path, caplog):
     url = f'sqlite:///{tmp_path / "fp.sqlite"}'
-    dm = open_archive(url)
+    dm = open_writable(url)
     dm.init_archive()
     with dm.engine.begin() as connection:
         connection.execute(text(f"UPDATE {ARCHIVE_SCHEMA_TABLE} SET fingerprint = 'abc'"))
-    with caplog.at_level(logging.WARNING, logger='tent.data_manager'):
-        open_archive(url).init_archive()
+    with caplog.at_level(logging.WARNING, logger='archivable.schema'):
+        open_writable(url).init_archive()
     assert 'without a version bump' in caplog.text and 'abc' in caplog.text
 
 
-def test_tables_tent_does_not_know_do_not_make_a_database_old(tmp_path):
-    """A shared database that holds something else's tables, but none of this manager's, is a new archive."""
-    url = f'sqlite:///{tmp_path / "shared.sqlite"}'
-    dm = open_archive(url)
-    with dm.engine.begin() as connection:
-        connection.execute(text('CREATE TABLE somebody_elses (id INTEGER PRIMARY KEY)'))
-    dm.init_archive()
-    assert dm.schema_version == ARCHIVE_SCHEMA_VERSION
-
-
-def test_check_hook_for_other_data_managers():
-    """Any DataManager can check a row it obtained elsewhere (a historian's, for example) with the base-class hook."""
-    DataManager.check_archive_schema(DataManager.archive_schema_row())
-    with pytest.raises(ArchiveSchemaMismatch, match='version 1'):
-        DataManager.check_archive_schema(None, where='Historian database')
-    with pytest.raises(ArchiveSchemaMismatch, match='Historian database was written with archive schema version 3'):
-        DataManager.check_archive_schema({'version': 3, 'fingerprint': 'x'}, where='Historian database')
+def test_an_unprepared_data_manager_cannot_open_an_archive(tmp_path):
+    dm = LocalDataManager(None, {'url': f'sqlite:///{tmp_path / "bare.sqlite"}'})
+    with pytest.raises(RuntimeError, match='declare_schema'):
+        dm.init_archive()
 
 
 # ---------------------------------------------------------------- the reader
-def test_reader_reports_the_version_and_none_without_the_table(tmp_path, caplog):
+def test_open_archive_reports_the_version_and_none_without_the_table(tmp_path, caplog):
     url = f'sqlite:///{tmp_path / "read.sqlite"}'
-    open_archive(url).init_archive()
-    reader = LocalDataManager.from_url(url)
+    open_writable(url).init_archive()
+    reader = open_archive(url)
     assert reader.schema_version == ARCHIVE_SCHEMA_VERSION
     assert reader.archive_schema_record()['fingerprint'] == archive_schema_fingerprint()
     with pytest.raises(RuntimeError, match='opened for reading'):
@@ -156,16 +152,9 @@ def test_reader_reports_the_version_and_none_without_the_table(tmp_path, caplog)
 
     with reader.engine.begin() as connection:
         connection.execute(text(f'DROP TABLE {ARCHIVE_SCHEMA_TABLE}'))
-    with caplog.at_level(logging.WARNING, logger='tent.data_manager.reader'):
-        old = LocalDataManager.from_url(url)
+    with caplog.at_level(logging.WARNING, logger='archivable.reader'):
+        old = open_archive(url)
     assert old.schema_version is None and old.archive_schema_record() is None
-    assert 'archive schema version 1' in caplog.text
+    assert 'archive schema version 1' in caplog.text and f'TENT {tent_version()} writes version' in caplog.text
 
-    assert LocalDataManager.from_url(f'sqlite:///{tmp_path / "empty.sqlite"}').schema_version is None
-
-
-def test_archive_schema_definition_is_parseable_by_the_data_manager():
-    dm = LocalDataManager(None, {'url': 'sqlite://'})
-    dm.add_tables([archive_schema_definition()])
-    assert {c.name for c in dm.tables[ARCHIVE_SCHEMA_TABLE].columns} == {'version', 'fingerprint', 'tent_version',
-                                                                           'created'}
+    assert open_archive(f'sqlite:///{tmp_path / "empty.sqlite"}').schema_version is None

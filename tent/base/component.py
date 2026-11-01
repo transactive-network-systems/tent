@@ -2,7 +2,7 @@ import abc
 import json
 import logging
 
-from tent.base.archivable import Archivable
+from archivable import Archivable
 from tent.config import ConfigModel, Configurable
 from tent.utils.timer import Timer
 

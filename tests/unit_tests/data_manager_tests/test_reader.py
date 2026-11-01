@@ -1,4 +1,4 @@
-"""ArchiveReader: open an existing archive without a node and answer the canonical queries."""
+"""open_archive / TentArchive: open an existing archive without a node and answer the canonical queries."""
 import json
 from pathlib import Path
 
@@ -8,7 +8,7 @@ from sqlalchemy import text
 from tent.containers.sd_curve import SDMeasurement
 from tent.containers.vertex import Vertex
 from tent.data_manager import ARCHIVE_SCHEMA_VERSION
-from tent.data_manager.local_data_manager import LocalDataManager
+from tent.data_manager.reader import TentArchive, open_archive
 from tent.enumerations import MarketState, MeasurementType
 from tests.mock_tn import MockTN
 
@@ -43,11 +43,11 @@ def archive(tmp_path_factory):
 
 @pytest.fixture(scope='module')
 def reader(archive):
-    return LocalDataManager.from_url(archive['url'])
+    return open_archive(archive['url'])
 
 
 def test_opens_known_and_unknown_tables(reader, archive):
-    assert reader.read_only
+    assert reader.read_only and isinstance(reader, TentArchive)
     assert {'transactive_node', 'market', 'measurement_value', 'sd_curve', 'vertex'} <= set(reader.tables)
     assert 'agent_extra' in reader.tables, 'tables TENT does not know are reflected'
     assert reader.execute(reader.select('agent_extra')) == [{'id': 1, 'note': 'hello'}]
@@ -117,9 +117,9 @@ def test_curves_with_vertices(reader, archive):
 
 
 def test_reflect_only_a_subset_of_unknown_tables(archive):
-    with LocalDataManager.from_url(archive['url']).engine.begin() as conn:
+    with open_archive(archive['url']).engine.begin() as conn:
         conn.execute(text('CREATE TABLE IF NOT EXISTS agent_other (id INTEGER PRIMARY KEY)'))
-    reader = LocalDataManager.from_url(archive['url'], reflect_unknown=False)
+    reader = open_archive(archive['url'], reflect_unknown=False)
     assert 'agent_extra' not in reader.tables and 'agent_other' not in reader.tables
     assert reader.reflect_unknown_tables(only=['agent_extra']) == ['agent_extra']
     assert 'agent_extra' in reader.tables and 'agent_other' not in reader.tables

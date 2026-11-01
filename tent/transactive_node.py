@@ -54,11 +54,12 @@ from zoneinfo import ZoneInfo, available_timezones
 from pydantic import BeforeValidator, field_validator, model_validator
 
 from tent import registry
-from tent.base import Archivable
+from archivable import DataManager, NullDataManager
+
+from tent import data_manager as tent_archive
+from tent.base import Archivable  # before tent.containers: the base package completes before the containers need it
 from tent.config import ClassSpec, ConfigModel, Configurable, ConfigurationError, ReconfigurationError, Setting
 import tent.containers as containers
-from tent.data_manager import DataManager
-from tent.data_manager.null_data_manager import NullDataManager
 from tent.information_service_model import InformationServiceModel
 from tent.local_asset import LocalAsset
 from tent.market import Market
@@ -379,6 +380,8 @@ class TransactiveNode(Configurable, Archivable):
             # Without a data_manager block the node runs without an archive.
             _log.warning(f'Node {self.name!r} has no data_manager configuration; nothing will be archived.')
             self._data_manager = NullDataManager(self)
+        # TENT's archive schema version and enumerations, before any table definition that names an enumeration.
+        tent_archive.prepare(self.data_manager)
         self.data_manager.add_tables(self.get_archive_definitions())
 
     # ----------------------------------------------------------------------------------------------- reconfiguration

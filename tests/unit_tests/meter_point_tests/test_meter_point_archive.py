@@ -1,8 +1,10 @@
 """MeterPoint readings and their archive rows."""
 import pytest
 
-from tent.data_manager.local_data_manager import LocalDataManager
-from tent.data_manager.reader import known_archive_definitions
+from archivable import LocalDataManager
+
+import tent.data_manager
+from tent.data_manager import known_archive_definitions
 from tent.meter_point import MeterPoint
 from tent.utils.timer import Timer
 from tests.mock_tn import MockTN
@@ -12,7 +14,7 @@ from tests.mock_tn import MockTN
 def node(tmp_path):
     Timer.simulation = False
     tn = MockTN()
-    tn._data_manager = LocalDataManager(tn, {'url': f'sqlite:///{tmp_path / "meters.sqlite"}'})
+    tn._data_manager = tent.data_manager.prepare(LocalDataManager(tn, {'url': f'sqlite:///{tmp_path / "meters.sqlite"}'}))
     tn.data_manager.add_tables(known_archive_definitions())
     tn.archive()
     tn.data_manager.init_archive()

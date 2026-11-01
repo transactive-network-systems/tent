@@ -3,7 +3,7 @@ import threading
 import time
 from typing import Callable
 
-from tent.data_manager.null_data_manager import NullDataManager
+from archivable import NullDataManager
 from tent.transactive_node import TransactiveNode
 from tent.utils.timer import Timer
 

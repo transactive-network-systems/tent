@@ -6,13 +6,13 @@ import pytest
 
 from tests.mock_tn import MockTN
 
-LOCAL_DM = {'class_name': 'LocalDataManager', 'module_name': 'tent.data_manager.local_data_manager', 'db_params': {'url': 'sqlite://'}}
+LOCAL_DM = {'class_name': 'LocalDataManager', 'module_name': 'archivable.local_data_manager', 'db_params': {'url': 'sqlite://'}}
 
 
 def _configure(configs):
     snapshot = deepcopy(LOCAL_DM)
     tn = MockTN()
-    with patch('tent.data_manager.local_data_manager.LocalDataManager.init_archive', Mock(return_value=None)):
+    with patch('archivable.local_data_manager.LocalDataManager.init_archive', Mock(return_value=None)):
         tn.configure_node({'data_manager': LOCAL_DM, **configs})
     assert LOCAL_DM == snapshot, 'configuring reads the dictionaries and leaves them as they were'
     return tn

@@ -1,158 +1,38 @@
 """
-Read side of the TENT archive.
+Read side of the TENT archive: open an existing archive (SQLite file, PostgreSQL, ...) without a running
+TransactiveNode and answer the canonical questions the analysis tool, the historian and TENT itself ask.
 
-Opens an existing archive (SQLite file, PostgreSQL, ...) without a running TransactiveNode, registers every table TENT
-knows how to write so column types (Uuid, Interval, enums) decode correctly, reflects any table it does not know (tables
-created by agent-defined component classes), and answers the canonical questions the analysis tool, the historian, and
-TENT itself ask. Plain SQLAlchemy Core; results are lists of dicts. No pandas in TENT.
+``open_archive(url)`` registers every table TENT knows how to write (so column types decode correctly), reflects any
+table it does not know (tables created by agent-defined component classes, a historian's own tables) and returns a
+``TentArchive``: the library's LocalDataManager, read-only, with TENT's queries. Plain SQLAlchemy Core; results are
+lists of dicts. No pandas in TENT.
 """
 import logging
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Iterable, Sequence
 
-from sqlalchemy import DateTime, Select, and_, func, inspect, select
-from sqlalchemy.exc import ArgumentError
+from sqlalchemy import and_, func, select
 
-from tent.data_manager import ARCHIVE_SCHEMA_TABLE, ARCHIVE_SCHEMA_VERSION, archive_schema_definition
+from archivable import LocalDataManager
+
+from tent.data_manager import archive_schema, known_archive_definitions, known_enumerations
 
 _log = logging.getLogger(__name__)
 
 
-def known_archive_definitions() -> list[dict]:
-    """Archive definitions of the node and of every class TENT ships (tent.registry.SHIPPED), plus the archive_schema
-    table, de-duplicated by table name. This is the set ARCHIVE_SCHEMA_VERSION versions and archive_schema_fingerprint()
-    hashes, so a shipped class that adds or changes a table changes the fingerprint and the version must be bumped."""
-    # Imported lazily: these modules import the data manager package.
-    import importlib
-    from tent import registry
-    from tent.transactive_node import TransactiveNode
-    classes = [TransactiveNode]
-    for class_name, location in sorted(registry.SHIPPED.items()):
-        module_name, _, attribute = location.partition(':')
-        cls = getattr(importlib.import_module(module_name), attribute)
-        if hasattr(cls, 'get_archive_definitions'):
-            classes.append(cls)
-    definitions, seen = [], set()
-    for cls in classes:
-        for definition in cls.get_archive_definitions() or ():  # a class with nothing to archive returns None
-            if definition['name'] not in seen:
-                seen.add(definition['name'])
-                definitions.append(definition)
-    definitions.append(archive_schema_definition())
-    return definitions
+def open_archive(url: str, reflect_unknown: bool = True) -> 'TentArchive':
+    """
+    Open an existing TENT archive for reading. Every table TENT knows is registered from its definition and, if
+    `reflect_unknown`, any other table in the database is reflected as-is. An archive of another archive schema version
+    is opened with a warning (tables whose definitions changed may not read correctly).
+    """
+    return TentArchive.from_url(url, known_archive_definitions(), known_enumerations(), schema=archive_schema(),
+                                reflect_unknown=reflect_unknown)
 
-class ArchiveReader:
-    """Mixin for DataManager implementations backed by a SQLAlchemy engine (self.engine, self.tables, self.definitions)."""
 
-    read_only: bool = False
+class TentArchive(LocalDataManager):
+    """A LocalDataManager over a TENT archive with the canonical queries over TENT's tables."""
 
-    # ---------------------------------------------------------------- opening an existing archive
-    @classmethod
-    def from_url(cls, url: str, reflect_unknown: bool = True):
-        """
-        Open an existing archive for reading. Every table TENT knows is registered from its definition (so types decode
-        correctly) and, if `reflect_unknown`, any other table in the database is reflected as-is.
-        """
-        dm = cls(None, {'url': url})
-        dm.add_tables(known_archive_definitions())
-        if reflect_unknown:
-            dm.reflect_unknown_tables()
-        dm.read_only = True
-        version = dm.schema_version
-        if (version or 1) != ARCHIVE_SCHEMA_VERSION:
-            _log.warning(f'Archive {url!r} was written with archive schema version {version or 1} (this TENT writes '
-                         f'version {ARCHIVE_SCHEMA_VERSION}); tables whose definitions changed between the two may '
-                         f'not read correctly.')
-        return dm
-
-    def archive_schema_record(self) -> dict | None:
-        """The archive_schema row (version, fingerprint, tent_version, created) of the database, or None when the
-        database has no archive_schema table or the table is empty: an archive written before the table existed
-        (archive schema version 1), or an empty database."""
-        if ARCHIVE_SCHEMA_TABLE not in self.tables or not self.has_table(ARCHIVE_SCHEMA_TABLE):
-            return None
-        table = self.tables[ARCHIVE_SCHEMA_TABLE]
-        rows = self.execute(select(table).order_by(table.c.version.desc()))
-        return rows[0] if rows else None
-
-    @property
-    def schema_version(self) -> int | None:
-        """The archive schema version the database was written with; None when the database has no archive_schema
-        table, which means version 1 (before 2 November 2026) or a database nothing has been written to yet."""
-        record = self.archive_schema_record()
-        return None if record is None else record['version']
-
-    def reflect_unknown_tables(self, only: Iterable[str] | None = None) -> list[str]:
-        """
-        Reflect tables the database has but no registered definition describes (a historian's own tables, for example)
-        and make them readable through query_data. `only` restricts the reflection to those table names (a name that is
-        not in the database raises); by default every unknown table is reflected. Returns the names added.
-        """
-        metadata = self.registry.metadata
-        known = set(metadata.tables)
-        if only is None:
-            metadata.reflect(bind=self.engine, only=lambda name, _meta: name not in known)
-        else:
-            wanted = [name for name in only if name not in known]
-            if wanted:
-                metadata.reflect(bind=self.engine, only=wanted)
-        added = []
-        for name, table in metadata.tables.items():
-            if name in self.tables:
-                continue
-            self.tables[name] = table
-            orm_name = ''.join(word.title() for word in name.split('_')) + 'Table'
-            try:
-                self.orm[name] = type(orm_name, (), {})
-                self.registry.map_imperatively(self.orm[name], table)
-            except ArgumentError:  # no primary key: Core access only
-                self.orm.pop(name, None)
-            added.append(name)
-        return added
-
-    @property
-    def present_tables(self) -> set[str]:
-        """Tables that actually exist in the database (known tables may be registered but never created)."""
-        return set(inspect(self.engine).get_table_names())
-
-    def has_table(self, name: str) -> bool:
-        return name in self.present_tables
-
-    # ---------------------------------------------------------------- generic access
-    def select(self, table_name: str) -> Select:
-        """A Select over a registered table, for callers that want to add their own joins and filters."""
-        return select(self.tables[table_name])
-
-    def execute(self, statement) -> list[dict]:
-        columns = list(statement.selected_columns)
-        with self.engine.connect() as connection:
-            return [self.decode_row(dict(row._mapping), columns) for row in connection.execute(statement)]
-
-    @staticmethod
-    def decode_row(row: dict, columns) -> dict:
-        """Archive datetimes are UTC; SQLite returns them naive, so reattach UTC for DateTime-typed columns."""
-        for column in columns:
-            name = getattr(column, 'name', None) or getattr(column, 'key', None)
-            value = row.get(name)
-            if isinstance(column.type, DateTime) and isinstance(value, datetime) and value.tzinfo is None:
-                row[name] = value.replace(tzinfo=timezone.utc)
-        return row
-
-    # ---------------------------------------------------------------- inheritance (component -> extension tables)
-    def _parent_table(self, name: str) -> str | None:
-        return (self.definitions.get(name) or {}).get('inherits')
-
-    def table_chain(self, name: str) -> list[str]:
-        """[name, parent, grandparent, ...] following `inherits` declarations."""
-        chain = [name]
-        while (parent := self._parent_table(chain[-1])) is not None:
-            chain.append(parent)
-        return chain
-
-    def tables_inheriting(self, root: str) -> list[str]:
-        return [name for name in self.definitions if name != root and root in self.table_chain(name)]
-
-    # ---------------------------------------------------------------- canonical queries
     def runs(self) -> list[dict]:
         """One row per TransactiveNode run (process start), oldest first."""
         tn = self.tables['transactive_node']
@@ -163,33 +43,10 @@ class ArchiveReader:
         Every component with its concrete type: `type` is the deepest extension table holding the component's id, and
         that table's columns (and its ancestors') are merged into the row.
         """
-        component = self.tables['component']
-        statement = select(component)
-        if tn_id is not None:
-            statement = statement.where(component.c.tn_id == tn_id)
-        rows = {row['id']: dict(row, type='component') for row in self.execute(statement)}
-        present = self.present_tables
-        extension_rows: dict[str, dict] = {}
-        for name in self.tables_inheriting('component'):
-            if name not in present:
-                continue
-            table = self.tables[name]
-            key = list(table.primary_key.columns)[0].name  # 'id', or e.g. 'asset_id' on local_asset extensions
-            extension_rows[name] = {r[key]: {k: v for k, v in r.items() if k != key} for r in self.execute(select(table))}
-        depth = {name: len(self.table_chain(name)) for name in extension_rows}
-        for name, by_id in extension_rows.items():
-            for component_id in by_id:
-                if component_id in rows and depth[name] > depth.get(rows[component_id]['type'], 1):
-                    rows[component_id]['type'] = name
-        for component_id, row in rows.items():
-            for name in reversed(self.table_chain(row['type'])):
-                if name in extension_rows and component_id in extension_rows[name]:
-                    row.update(extension_rows[name][component_id])
-        return list(rows.values())
+        return self.typed_rows('component', {'tn_id': tn_id} if tn_id is not None else None)
 
     def market_series(self, tn_id=None) -> list[dict]:
-        return [c for c in self.components(tn_id) if c['type'] in self.table_chain(c['type']) and
-                'market_series' in self.table_chain(c['type'])]
+        return [c for c in self.components(tn_id) if 'market_series' in self.table_chain(c['type'])]
 
     def markets(self, tn_id=None, series_ids: Sequence = None) -> list[dict]:
         """Markets with their series name, ordered by delivery start."""

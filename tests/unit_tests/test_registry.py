@@ -11,7 +11,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from tent import registry
-from tent.data_manager import DataManager
+from archivable import DataManager
 from tent.local_asset import LocalAsset
 from tent.local_asset.actuation_manager import ActuationManager
 from tent.local_asset.actuation_manager.null_actuation_manager import NullActuationManager
@@ -168,7 +168,7 @@ NODE_CONFIG = {
 def configure(config):
     Timer.simulation = False
     tn = MockTN()
-    with patch('tent.data_manager.local_data_manager.LocalDataManager.init_archive', Mock(return_value=None)):
+    with patch('archivable.local_data_manager.LocalDataManager.init_archive', Mock(return_value=None)):
         tn.configure_node(config)
     return tn
 
