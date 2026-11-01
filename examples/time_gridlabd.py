@@ -129,7 +129,7 @@ def _build_node_config() -> dict:
         "tz": "UTC",
         "data_manager": {
             "class_name": "NullDataManager",
-            "module_name": "tent.data_manager.null_data_manager"
+            "module_name": "archivable.null_data_manager"
         },
         "information_service_models": [
             {
@@ -311,7 +311,7 @@ def main():
         Timer.simulation = False
         tn = MockTN()
         config = _build_node_config()
-        with patch("tent.data_manager.local_data_manager.LocalDataManager.init_archive",
+        with patch("archivable.local_data_manager.LocalDataManager.init_archive",
                    Mock(return_value=None)):
             tn.configure_node(config)
         if hasattr(tn, "data_manager") and tn.data_manager:
