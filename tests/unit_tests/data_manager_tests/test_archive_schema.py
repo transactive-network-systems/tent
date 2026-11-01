@@ -24,7 +24,7 @@ from tent.data_manager.reader import open_archive
 # entries. Version 1 (every archive before 2 November 2026) predates the fingerprint and has none.
 RECORDED_FINGERPRINTS = {
     2: 'dd03e0ba4449f15391b5a84339639dd7284d113afd54bb75ba193fcd5aa10979',  # 2 November 2026: every shipped class (ResponseNeighbor included); the fingerprint of this version covered the table definitions only, with TENT's own archive_schema table (version, fingerprint, tent_version, created)
-    3: '501d00e1228b691a2e042132fe888f6a97455821b53284560706d03f2eb94480',  # 2 November 2026: the library's archive_schema table (version, fingerprint, application, application_version, created); the fingerprint covers the enumerations too
+    3: '78f0819d2817fc99b8f490b2b516cb0ebe076a9732535b40bbefaa4b89103cf0',  # 2 November 2026: the library's archive_schema table, one row per application (application primary key, version, fingerprint, application_version, created); the fingerprint covers the enumerations too; the market row has actuate_assets
 }
 
 
