@@ -6,7 +6,7 @@ from uuid6 import uuid7
 
 from tent.containers.order import Order
 from tent.containers.vertex import Vertex
-from tent.enumerations import MarketState, MarketTypes, OrderStatus, SupplyOrDemand
+from tent.enumerations import MarketState, MarketTypes, MeasurementType, OrderStatus, SupplyOrDemand
 from tent.local_asset import LocalAsset
 from tent.neighbor import Neighbor
 from tent.market.market_series import MarketSeries
@@ -344,3 +344,122 @@ def test_order_submitted_later_in_the_window_is_matched(market):
     with patch.object(Timer, 'now', return_value=market.transition_times.market_lead):
         market.while_in_negotiation()
     assert market._stateIsCompleted
+
+
+# ---------------------------------------------------------------------------------------------------------------------
+# settle(): matched legs become schedules and prices
+# ---------------------------------------------------------------------------------------------------------------------
+
+def settlement_entities(market, intervals=None):
+    """Two suppliers and one load. The suppliers are local generators (quoted first, so they rest in the book with
+    their prices): cheap offers 30 kW at 0.05, dear 100 kW at 0.08. The load is a downstream neighbor (quoted after
+    them, so it is the aggressive order) bidding 50 kW at up to 0.09. Matching takes 30 from cheap at 0.05 and 20 from
+    dear at 0.08; the marginal trade is at 0.08."""
+    tn = market.tn
+    cheap = LocalAsset(transactive_node=tn, name='Cheap')
+    dear = LocalAsset(transactive_node=tn, name='Dear')
+    load = Neighbor(transactive_node=tn, name='Load')
+    tn.local_assets, tn.neighbors = [cheap, dear], [load]
+    for ti in (intervals or market.time_intervals[:1]):
+        cheap.active_vertices.update(ti, [Vertex(price=0.05, quantity=0.0), Vertex(price=0.05, quantity=30.0)])
+        dear.active_vertices.update(ti, [Vertex(price=0.08, quantity=0.0), Vertex(price=0.08, quantity=100.0)])
+    load.active_vertices.update(market.time_intervals[0], [Vertex(price=0.09, quantity=0.0),
+                                                          Vertex(price=0.09, quantity=-50.0)])
+    return load, cheap, dear, market.time_intervals[0]
+
+
+def test_settle_schedules_the_matched_quantities_and_prices_the_marginal_trade(market, caplog):
+    load, cheap, dear, ti = settlement_entities(market)
+    opening = market.marginal_prices.get_by_interval(ti).value
+    market.while_in_negotiation()
+    assert sum(abs(l.vertices[-1].quantity) for l in market.matchList) == pytest.approx(100.0), '50 kW traded, two legs each'
+    with caplog.at_level('WARNING', logger='tent.market'):
+        market.settle()
+    assert market.marginal_prices.get_by_interval(ti).value == pytest.approx(0.08), 'the last match, the marginal trade'
+    assert market.average_match_prices.get_by_interval(ti).value == pytest.approx((30 * 0.05 + 20 * 0.08) / 50)
+    assert market.marginal_prices.get_by_interval(ti).value != opening
+    assert market.cleared_power(cheap, ti) == pytest.approx(30.0)
+    assert market.cleared_power(dear, ti) == pytest.approx(20.0), 'its unmatched 80 kW remainder did not trade'
+    assert market.cleared_power(load, ti) == pytest.approx(-50.0)
+    # The entities were asked to schedule from the settlement.
+    assert load.scheduled_powers.get_by_interval(ti).value == pytest.approx(-50.0)
+    assert cheap.scheduled_powers.get_by_interval(ti).value == pytest.approx(30.0)
+    assert dear.scheduled_powers.get_by_interval(ti).value == pytest.approx(20.0)
+    assert dear.market_power(market, ti) == pytest.approx(20.0), 'market_power reads the settlement, not the curve'
+    assert not any('had no match' in r.getMessage() for r in caplog.records)
+    # The prior market's price must not overwrite a settled one.
+    assert ti.start_time in market._own_prices
+
+
+def test_an_interval_with_no_match_keeps_its_opening_price_and_is_logged_once(caplog):
+    tn = MockTN()
+    tn._data_manager = RecordingDataManager()
+    series = MarketSeries(transactive_node=tn, name='Matching Series', market_class=MatchingEngine,
+                          initial_market_state=MarketState.Negotiation, duration_negotiation=3600.0,
+                          duration_delivery_lead=900.0, interval_duration=3600.0, intervals_to_clear=2,
+                          default_price=0.0428)
+    tn.market_series = [series]
+    market = series.newest_market
+    load, cheap, dear, first = settlement_entities(market, intervals=market.time_intervals)
+    second = market.time_intervals[1]
+    # In the second interval the load bids below every offer: nothing can match there.
+    load.active_vertices.update(second, [Vertex(price=0.01, quantity=0.0), Vertex(price=0.01, quantity=-50.0)])
+    market.while_in_negotiation()
+    with caplog.at_level('WARNING', logger='tent.market'):
+        market.settle()
+    assert market.marginal_prices.get_by_interval(first).value == pytest.approx(0.08)
+    assert market.marginal_prices.get_by_interval(second).value == pytest.approx(0.0428), 'the opening price stands'
+    assert market.average_match_prices.get_by_interval(second) is None
+    assert market.cleared_power(load, second) is None and market.cleared_power(cheap, second) is None, \
+        'nothing was settled there'
+    assert all(l.interval.name == first.name for l in market.matchList), 'no leg crossed into the other interval'
+    messages = [r.getMessage() for r in caplog.records if 'had no match' in r.getMessage()]
+    assert len(messages) == 1 and '1 of 2 intervals' in messages[0] and second.name in messages[0]
+    assert second.start_time not in market._own_prices
+
+
+def test_the_archive_carries_the_marginal_and_the_average_match_price(market):
+    load, cheap, dear, ti = settlement_entities(market)
+    market.while_in_negotiation()
+    market.settle()
+    headers = {h['id']: h['measurement_type'] for h in market.tn.data_manager.by_table('measurement')
+               if h['source_id'] == market.id}
+    values = market.tn.data_manager.by_table('measurement_value')
+    by_type = {}
+    for row in values:
+        kind = headers.get(row['measurement_id'])
+        if kind is not None and row['interval_id'] == ti.id:
+            by_type.setdefault(kind, []).append(row['value'])
+    marginal = by_type[MeasurementType.MarginalPrice.name] if MeasurementType.MarginalPrice.name in by_type \
+        else by_type[MeasurementType.MarginalPrice]
+    blended = by_type[MeasurementType.BlendedPrice.name] if MeasurementType.BlendedPrice.name in by_type \
+        else by_type[MeasurementType.BlendedPrice]
+    assert marginal[-1] == pytest.approx(0.08), 'the latest version of the marginal price is the settled one'
+    assert blended[-1] == pytest.approx(0.062)
+
+
+def test_orders_match_only_within_their_own_interval():
+    """Two intervals, supply quoted in both, demand in the first only: the second interval's supply must not fill the
+    first interval's demand (every order trades in its own delivery interval)."""
+    tn = MockTN()
+    tn._data_manager = RecordingDataManager()
+    series = MarketSeries(transactive_node=tn, name='Matching Series', market_class=MatchingEngine,
+                          initial_market_state=MarketState.Negotiation, duration_negotiation=3600.0,
+                          duration_delivery_lead=900.0, interval_duration=3600.0, intervals_to_clear=2)
+    tn.market_series = [series]
+    market = series.newest_market
+    first, second = market.time_intervals
+    gen = LocalAsset(transactive_node=tn, name='Gen')
+    load = Neighbor(transactive_node=tn, name='Load')
+    tn.local_assets, tn.neighbors = [gen], [load]
+    for ti in (first, second):
+        gen.active_vertices.update(ti, [Vertex(price=0.05, quantity=0.0), Vertex(price=0.05, quantity=30.0)])
+    load.active_vertices.update(first, [Vertex(price=0.09, quantity=0.0), Vertex(price=0.09, quantity=-50.0)])
+    market.while_in_negotiation()
+    assert all(l.interval.name == first.name for l in market.matchList)
+    assert sum(abs(l.vertices[-1].quantity) for l in market.matchList) == pytest.approx(60.0), '30 kW traded, two legs'
+    standing_second = [o for o in market.orderList if o.interval.name == second.name]
+    assert len(standing_second) == 1 and max(v.quantity for v in standing_second[0].vertices) == 30.0, \
+        'the second interval\'s supply stands untouched'
+    assert market.get_counteroffers(SupplyOrDemand.SUPPLY, time_interval=second) == standing_second
+    assert len(market.get_counteroffers(SupplyOrDemand.SUPPLY)) >= 1, 'without an interval the whole book is searched'

@@ -11,3 +11,4 @@ TENT coordinates decentralized energy exchanges using market series and continuo
 
    market_lifecycle
    double_auctions
+   matching_engine
