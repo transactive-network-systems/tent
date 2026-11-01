@@ -5,7 +5,7 @@ from sortedcontainers import SortedSet
 from typing import Self
 from weakref import ProxyType, proxy
 
-from tent.containers import archiving
+from tent.base import archiving
 from tent.base import Archivable, Component
 from tent.containers.measurement import Measurement
 from tent.containers.time_interval import TimeInterval
@@ -504,15 +504,14 @@ class SDCurve(Archivable):
         record_time. Timer.now() is the canonical clock everywhere (simulation time when simulating); real time is
         recoverable from the run's anchor and ratio.
         """
-        if archiving.is_deferring():
-            archiving.defer(self, self._deferral_key())
+        if archiving.defer(self, self._deferral_key(), records):
             return  # written once when the enclosing deferred_archiving block ends, the latest curve for its interval
         super(SDCurve, self).archive(self._version_records(records))
 
-    def archive_records(self) -> list[dict]:
-        """One version of this curve as archive rows (the curve row and its vertex rows), marked as archived, for a
-        caller that writes them in a batch (see tent.containers.archiving)."""
-        return [*self._version_records(None), self.archive_record()]
+    def archive_records(self, records: list[dict] | None = None) -> list[dict]:
+        """One version of this curve as archive rows (`records`, the vertex rows and the curve row), marked as archived,
+        for a caller that writes them in a batch (see tent.base.archiving)."""
+        return [*self._version_records(records), self.archive_record()]
 
     def _version_records(self, records: list[dict] | None) -> list[dict]:
         self.last_record_time = Timer.now()

@@ -519,8 +519,12 @@ class TransactiveNode(Configurable, Archivable):
 
     @abc.abstractmethod
     def _sleep(self):
-        """This method should sleep for self.loop_sleep_duration as is appropriate
-            to the multitasking system employed by the agent.
+        """The host's cooperative yield. The state machine is synchronous Python: _state_machine_iteration calls this
+        after each market's events so that a host which multiplexes the node with its message handling on one thread (a
+        gevent agent, say) can hand control to the hub between markets and receive signals while a long iteration runs,
+        and so that a loop with nothing to do pauses rather than spins. A host implements it as the yield of its
+        multitasking system (gevent.sleep, asyncio's sleep via its loop, time.sleep for a plain thread), pausing for
+        self.loop_sleep_duration where a pause is wanted; a host that runs the node on its own thread may make it a no-op.
         """
         pass
 

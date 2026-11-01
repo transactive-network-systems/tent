@@ -2,7 +2,8 @@ import abc
 import json
 import logging
 
-from archivable import Archivable
+from tent.base import archiving
+from tent.base.archivable import Archivable
 from tent.config import ConfigModel, Configurable
 from tent.utils.timer import Timer
 
@@ -43,6 +44,7 @@ class Component(Configurable, Archivable, abc.ABC):
         for value in list(vars(self).values()):
             if isinstance(value, Measurement) and not value.archived:
                 records.append(value.archive_record())
+                archiving.discard(value)  # its header goes with this row (not after it, as its own deferred write would)
         if self._archived_configuration_version < self.config_version:
             records.append(self.configuration_archive_record())
         super(Component, self).archive(records)

@@ -44,7 +44,7 @@ under Contract DE-AC05-76RL01830
 import logging
 
 from tent.config import ConfigModel, Setting
-from tent.containers.archiving import deferred_archiving
+from tent.base.archiving import deferred_archiving
 from tent.containers.measurement import Measurement
 from tent.enumerations import MarketTypes, MeasurementType, MeasurementUnit
 from tent.market import Market

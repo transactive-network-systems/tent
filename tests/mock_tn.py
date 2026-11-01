@@ -81,10 +81,8 @@ class MockTN(TransactiveNode):
             _log.warning(f"No subscription registered for: {subscribe_key}")
 
     def _sleep(self):
-        """Mock sleep - does nothing for testing."""
-        # Small non-zero sleep to avoid busy spinning when running the background loop.
-        # Tests that call step() directly won't be affected.
-        time.sleep(0.01)
+        """The node's cooperative yield: nothing to yield to here. (The background loop paces itself; a pause here would
+        be taken once per market per step, which a test driving step() by hand would pay for nothing.)"""
 
     def step(self):
         """Execute a single state machine iteration."""
@@ -132,7 +130,7 @@ class MockTN(TransactiveNode):
                 # Log and continue; tests may want the loop to keep running even on transient errors
                 _log.exception('Exception during state machine step')
             # Pace the loop to avoid busy spin
-            self._sleep()
+            time.sleep(self.loop_sleep_duration)
                 
     @property
     def is_running(self):

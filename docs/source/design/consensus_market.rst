@@ -29,8 +29,8 @@ its minimum (``Market.assign_cleared_powers``, read back by ``Entity.market_powe
 market keyword ``max_balance_iterations`` (default 20) and stops as soon as an iteration leaves every price where it
 was, since the curves were rebuilt at those prices and the next iteration would repeat it; with piece-wise linear
 curves one pass suffices. Everything a pass reschedules (powers, costs, curves) is archived once when the pass ends
-(``tent.containers.archiving.deferred_archiving``, one transaction), not once per iteration, and a value that is
-updated to what it already holds writes no new version.
+(``tent.base.archiving.deferred_archiving``, one transaction; every market tick opens such a block in
+``Market.events``), not once per iteration, and a value that is updated to what it already holds writes no new version.
 
 **Coordination (between nodes).** For each transactive neighbor the node prepares a transactive signal: the residual
 system curve with that neighbor excluded, bounded to what the node can exchange with it, stated from the neighbor's

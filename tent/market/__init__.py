@@ -48,6 +48,8 @@ from typing import TYPE_CHECKING, Mapping
 from weakref import proxy
 
 from tent.base import Component
+from tent.base import archiving
+from tent.base.archiving import deferred_archiving
 from tent.config import ConfigModel, Setting
 from tent.containers import IntervalSeries, MarketTimings, Measurement, SDCurve, SDMeasurement, Vertex
 from tent.enumerations import MarketState, MarketTypes, MeasurementType, MeasurementUnit
@@ -184,10 +186,19 @@ class Market(Component):
             self.record_state(new_state)
 
     def record_state(self, state: MarketState) -> None:
-        self.data_manager.archive_data({'table_name': 'market_state_change',
-                                        'data': {'market_id': self.id, 'state': state, 'record_time': Timer.now()}})
+        record = {'table_name': 'market_state_change',
+                  'data': {'market_id': self.id, 'state': state, 'record_time': Timer.now()}}
+        if not archiving.defer_records(self.data_manager, [record]):  # within a tick, written with the tick's batch
+            self.data_manager.archive_data(record)
 
     def events(self):
+        """One tick of the market state machine (_events), with everything the tick archives written once when it ends:
+        a clearing step updates every entity's curve and power in every interval and a spawned market creates a
+        measurement per quantity, each of which would otherwise be its own transaction (see tent.base.archiving)."""
+        with deferred_archiving():
+            self._events()
+
+    def _events(self):
         """
         This is the market state machine. Activities should be assigned to state transition events and to the states
         themselves using the supplied methods. This state machine should not itself be modified by implementers because
@@ -644,7 +655,8 @@ class Market(Component):
         _log.debug(f'{self.name} IS IN T_F_DELIVERY_LEAD_TO_DELIVERY')
         # A good practice upon entering the delivery period is to update the market's price model using the final
         # marginal prices.
-        _log.debug(f'Final prices are: {self.marginal_prices.log_report}')
+        if _log.isEnabledFor(logging.DEBUG):  # the report is built only when it is to be shown
+            _log.debug(f'Final prices are: {self.marginal_prices.log_report}')
         for time_interval, final_price in self.marginal_prices.all:
             self.price_model.update(time_interval.start_time, final_price.value)
 
