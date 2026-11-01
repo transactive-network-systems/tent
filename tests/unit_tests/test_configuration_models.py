@@ -471,6 +471,8 @@ def test_the_configuration_schema_describes_every_registered_class():
     neighbor = variants['Neighbor']['properties']
     assert neighbor['loss_factor']['reconfigurable'] is True and neighbor['loss_factor']['type'] == 'number'
     assert variants['MarketSeries of Auction']['properties']['actuate_assets']['type'] == 'boolean'
+    assert variants['MarketSeries of ConsensusMarket']['properties']['actuate_assets']['default'] is True
+    assert 'actuate_assets' in variants['MarketSeries of MatchingEngine']['properties']
     assert variants['MarketSeries of Auction']['properties']['duration_market_lead']['x-tent-unit'] == 'seconds'
     assert variants['Neighbor']['properties']['up_or_down']['enum'] == [d.name for d in Direction]
     assert schema['properties']['neighbors']['items'] == {'$ref': '#/$defs/AnyNeighbor'}

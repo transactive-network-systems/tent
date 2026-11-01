@@ -84,7 +84,8 @@ def make_series(tn, **kwargs):
 def test_matching_strategy_configured_on_series(market):
     tn = market.tn
     series = make_series(tn, matching_strategy=['ORDER_AGE', 'ORDER_VOLUME'])
-    assert series.market_kwargs == {'matching_strategy': [MatchingStrategy.ORDER_AGE, MatchingStrategy.ORDER_VOLUME],
+    assert series.market_kwargs == {'actuate_assets': True,
+                                    'matching_strategy': [MatchingStrategy.ORDER_AGE, MatchingStrategy.ORDER_VOLUME],
                                     'order_expiry': None}, 'the validated market settings, defaults included'
     assert series.newest_market.matching_strategy == [MatchingStrategy.ORDER_AGE, MatchingStrategy.ORDER_VOLUME]
     series.spawn()  # every spawned market gets the same keywords

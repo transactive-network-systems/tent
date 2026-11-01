@@ -2,7 +2,9 @@ import pytest
 from datetime import datetime, timedelta, timezone
 from unittest.mock import Mock
 
+from tent.market import Market
 from tent.market.auction import Auction
+from tent.market.consensus_market import ConsensusMarket
 from tent.enumerations import MarketState, Direction, MarketTypes
 from tent.containers import MarketTimings
 
@@ -80,18 +82,26 @@ def test_while_in_market_lead_raises_without_upstream():
         auc.while_in_market_lead()
 
 
-def test_actuate_assets_can_be_switched_off_per_series():
-    """A day-ahead series that is refined by a real-time one is configured not to actuate; the real-time one does."""
+def test_actuate_assets_can_be_switched_off_per_series_for_any_market_class():
+    """actuate_assets is a base Market setting: a day-ahead series of any market class that is refined by a real-time
+    one is configured not to actuate; a series with the default does. It is archived on the market row."""
     tn = Mock(); asset = Mock(); tn.local_assets = [asset]; tn.neighbors = []
     series = Mock(); series.name = "TestSeries"; series.description = ""; series.intervals_to_clear = 1
     series.duration = Mock(); series.duration.market_interval = timedelta(hours=1)
-    silent = Auction(transactive_node=tn, market_series=series, initial_market_state=MarketState.Inactive,
-                     transition_times=make_timings(), actuate_assets=False)
+    silent = ConsensusMarket(transactive_node=tn, market_series=series, initial_market_state=MarketState.Inactive,
+                             transition_times=make_timings(), actuate_assets=False)
     silent._actuate_assets()
     asset.actuate.assert_not_called()
-    assert silent.get_record()['actuate_assets'] is False and silent.table_name == 'auction'
+    assert silent.actuate_assets is False and silent.get_record()['actuate_assets'] is False
+    assert silent.table_name == 'market'
     loud = build_auction(tn)
     loud._actuate_assets()
     asset.actuate.assert_called_once_with(loud)
-    assert loud.actuate_assets is True
-    assert any(d['name'] == 'auction' and d['inherits'] == 'market' for d in Auction.get_archive_definitions())
+    assert loud.actuate_assets is True and loud.get_record()['actuate_assets'] is True
+    assert loud.table_name == 'auction'
+    market_columns = {c['name'] for d in Market.get_archive_definitions() if d['name'] == 'market' for c in d['columns']}
+    assert 'actuate_assets' in market_columns
+    auction = next(d for d in Auction.get_archive_definitions() if d['name'] == 'auction')
+    assert auction['inherits'] == 'market' and [c['name'] for c in auction['columns']] == ['id']
+    assert 'actuate_assets' in Market.Config.model_fields and 'actuate_assets' in ConsensusMarket.Config.model_fields
+    assert Market.Config.model_fields['actuate_assets'].default is True

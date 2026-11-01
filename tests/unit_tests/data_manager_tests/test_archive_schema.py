@@ -21,7 +21,9 @@ from tent.data_manager.reader import known_archive_definitions
 # the new version with the fingerprint the failure prints here, and keep the old entries. Version 1 (every archive
 # before 2 November 2026) predates the fingerprint and has none.
 RECORDED_FINGERPRINTS = {
-    2: 'dd03e0ba4449f15391b5a84339639dd7284d113afd54bb75ba193fcd5aa10979',  # every shipped class at 2 November 2026 (ResponseNeighbor included)
+    # Every shipped class at 2 November 2026 (ResponseNeighbor included); actuate_assets on the market row rather than
+    # the auction extension (3 November 2026, still version 2: no version-2 database had been deployed).
+    2: '49a85cf155c7ba09064446fcdcec62f667f8165e6dc0ecfa062e2039702f1573',
 }
 
 
