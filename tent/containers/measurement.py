@@ -251,15 +251,42 @@ class Measurement(Archivable):
         return self._data.get(time_interval)
 
     def get_prior_by_interval(self, time_interval: TimeInterval) -> DATA_TYPE | None:
+        """
+        The value for the interval that precedes time_interval: the interval in the same market when the market covers
+        the preceding period, otherwise the one in the market's predecessor in its series, which is the most recently
+        cleared market covering that period. None when neither holds a value: the true first market of a series, a gap
+        between markets, or a predecessor that has expired and destroyed its intervals. (Overlapping rolling markets
+        have several intervals with one start time; searching by start time alone found the oldest market's.)
+        """
         prior_start_time = time_interval.start_time - time_interval.duration
-        return self.get_by_start_time(prior_start_time)
+        market = time_interval.market
+        value = self.get_by_start_time(prior_start_time, market=market)
+        if value is None and market is not None:
+            prior_market = getattr(market, 'prior_market_in_series', None)
+            if prior_market is not None:
+                value = self.get_by_start_time(prior_start_time, market=prior_market)
+        return value
 
-    def get_by_start_time(self, start_time: datetime) -> DATA_TYPE | None:
-        return next((mv for ti, mv in self._data.items() if ti.start_time == start_time), None)
+    def get_by_start_time(self, start_time: datetime, market=None) -> DATA_TYPE | None:
+        """The value whose interval starts at start_time. With `market`, only that market's interval is considered;
+        without, the interval of the newest market (the last one added) wins when several share the start time."""
+        interval = self.get_interval_by_start_time(start_time, market)
+        return self._data[interval] if interval is not None else None
 
-    def get_interval_by_start_time(self, start_time: datetime) -> TimeInterval | None:
-        """Return the TimeInterval key beginning at start_time, if any."""
-        return next((ti for ti in self._data.keys() if ti.start_time == start_time), None)
+    def get_interval_by_start_time(self, start_time: datetime, market=None) -> TimeInterval | None:
+        """The TimeInterval key beginning at start_time, if any (see get_by_start_time for the market rule)."""
+        matches = [ti for ti in self._data.keys() if ti.start_time == start_time
+                   and (market is None or self._same_market(ti.market, market))]
+        return matches[-1] if matches else None
+
+    @staticmethod
+    def _same_market(a, b) -> bool:
+        """Markets are reached through weak proxies; comparing two proxies compares their referents, and a dead one
+        belongs to no market any more."""
+        try:
+            return a == b
+        except ReferenceError:
+            return False
 
     def total(self, market=None):
         return sum(mv.value for ti, mv in self._data.items() if ti.market == market) if market else sum(self.values)
