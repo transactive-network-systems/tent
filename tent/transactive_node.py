@@ -118,12 +118,6 @@ class TransactiveNode(Configurable, Archivable):
             None, description='ISO 8601 real time at which simulated time equals simulation_start_time; shared by '
                               'every agent of one simulation (the host sets it from its environment). Null means the '
                               'time this node was created.')
-        # Host (agent) settings, read by the TransactiveNodeAgent, not by the node
-        db_topic: str | None = Setting(None, description='Root of the message-bus topics the agent publishes under.')
-        subscribe_all_platforms: bool | None = Setting(None, description='Whether the agent subscribes across '
-                                                                        'platforms.')
-        topics: dict[str, str] | None = Setting(None, description='Subscription key to message-bus topic, for the '
-                                                                 'agent.')
         # Components
         data_manager: ClassSpec | None = Setting(None, spec_of='DataManager',
                                                  description='The archive (class_name and its settings); null means '
@@ -270,7 +264,8 @@ class TransactiveNode(Configurable, Archivable):
 
     def _update_node_configurations(self, configs):
         """Read the node's own settings from `configs`. Returns the configuration with the node's defaults filled in,
-        as a dict, for hosts that read their own settings from it (the agent's db_topic, topics, ...)."""
+        as a dict. Keys the host application reads for itself (the TN agent's topics, sender bindings, ...) are the
+        host's to remove before the configuration reaches the node; the node rejects keys it does not declare."""
         _log.debug('IN _UPDATE_NODE_CONFIGURATIONS')
         updated_configs = self.default_config.copy()
         updated_configs.update(configs)
