@@ -47,6 +47,7 @@ from datetime import datetime, timezone
 from itertools import chain
 from sortedcontainers import SortedList
 from typing import Any, Callable
+from uuid import UUID
 from zoneinfo import ZoneInfo, available_timezones
 
 from tent.base import Archivable
@@ -63,8 +64,11 @@ class TransactiveNode(Archivable):
     TransactiveNode is the local perspective of the computational agent among a network of such nodes.
     """
 
-    def __init__(self, description='', loop_sleep_duration=0.01, mechanism='consensus', name='', status='unknown'):
-        super(TransactiveNode, self).__init__()
+    def __init__(self, description='', loop_sleep_duration=0.01, mechanism='consensus', name='', status='unknown',
+                 node_id: UUID | None = None, created: datetime | None = None):
+        # node_id and created let a node rebuilt from a changed configuration continue the same run (same archive
+        # identity and, when the simulation settings are unchanged, the same clock anchor).
+        super(TransactiveNode, self).__init__(id=node_id, real_time_created=created)
         self.description = description                          # [text]
         self.loop_sleep_duration = loop_sleep_duration
         self.mechanism = mechanism                              # future, unused in Version 2

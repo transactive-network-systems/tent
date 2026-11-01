@@ -7,9 +7,12 @@ from uuid6 import uuid7, UUID
 _log = logging.getLogger(__name__)
 
 class Archivable(abc.ABC):
-    def __init__(self):
-        self.__id: UUID = uuid7()
-        self.__real_time_created: datetime = datetime.now(timezone.utc).astimezone()
+    def __init__(self, id: UUID | None = None, real_time_created: datetime | None = None):
+        # An existing identity may be adopted (a TransactiveNode rebuilt from a changed configuration keeps its run);
+        # by default every archivable is new.
+        self.__id: UUID = id if id is not None else uuid7()
+        self.__real_time_created: datetime = (real_time_created if real_time_created is not None
+                                              else datetime.now(timezone.utc).astimezone())
         self.__last_archived_record: dict | None = None
 
     @property

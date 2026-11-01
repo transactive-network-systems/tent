@@ -33,3 +33,12 @@ def test_iana_zone_names_are_accepted():
 def test_timezone_abbreviations_and_junk_are_rejected(bad):
     with pytest.raises(ValueError, match='IANA zone name'):
         _configure({'tz': bad})
+
+
+def test_a_node_can_adopt_an_existing_run_identity():
+    from datetime import datetime, timezone
+    from uuid6 import uuid7
+    first = _configure({})
+    rebuilt = MockTN(node_id=first.id, created=first.real_time_created)
+    assert rebuilt.id == first.id and rebuilt.real_time_created == first.real_time_created
+    assert MockTN().id != first.id, 'without an identity to adopt a node is a new run'
