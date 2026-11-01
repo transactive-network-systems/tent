@@ -15,13 +15,10 @@ class TestLocalDataManagerUnits:
         self.mock_parent = Mock()
         # Don't create real database engine in setup
         
-    def test_database_url_construction_default(self):
-        """Test default database URL construction"""
-        ldm = LocalDataManager(self.mock_parent, {})
-        
-        # Should use default SQLite URL
-        assert 'tent_db.sqlite' in str(ldm.engine.url)
-        assert ldm.db_params == {}
+    def test_database_url_is_required(self):  # audit T-SEC-03
+        """Without a URL the archive used to land in the process's working directory."""
+        with pytest.raises(ValueError, match='db_params\\["url"\\]'):
+            LocalDataManager(self.mock_parent, {})
         
     def test_database_url_construction_custom(self):
         """Test custom database URL construction"""
@@ -32,17 +29,13 @@ class TestLocalDataManagerUnits:
         assert 'custom_database.db' in str(ldm.engine.url)
         assert ldm.db_params == custom_params
         
-    def test_database_url_construction_none_params(self):
-        """Test database URL construction with None params"""
-        ldm = LocalDataManager(self.mock_parent, None)
-        
-        # Should handle None params gracefully
-        assert 'tent_db.sqlite' in str(ldm.engine.url)
-        assert ldm.db_params == {}
+    def test_database_url_construction_none_params(self):  # audit T-SEC-03
+        with pytest.raises(ValueError, match='db_params\\["url"\\]'):
+            LocalDataManager(self.mock_parent, None)
 
     def test_archive_data_queues_when_not_ready(self):
         """Test that records are queued when archive isn't ready"""
-        ldm = LocalDataManager(self.mock_parent, {})
+        ldm = LocalDataManager(self.mock_parent, {'url': 'sqlite://'})
         ldm.archive_ready = False
         
         records = [
@@ -59,7 +52,7 @@ class TestLocalDataManagerUnits:
 
     def test_archive_data_handles_empty_records(self):
         """Test archive_data handles None and empty records gracefully"""
-        ldm = LocalDataManager(self.mock_parent, {})
+        ldm = LocalDataManager(self.mock_parent, {'url': 'sqlite://'})
         ldm.archive_ready = False
         
         # Should handle None
@@ -72,7 +65,7 @@ class TestLocalDataManagerUnits:
 
     def test_archive_data_extends_queue_correctly(self):
         """Test that archival queue is extended, not replaced"""
-        ldm = LocalDataManager(self.mock_parent, {})
+        ldm = LocalDataManager(self.mock_parent, {'url': 'sqlite://'})
         ldm.archive_ready = False
         
         # Add first batch
@@ -96,7 +89,7 @@ class TestLocalDataManagerUnits:
     @patch('tent.data_manager.local_data_manager.Session')
     def test_archive_data_processes_single_mapping(self, mock_session_class):
         """Test that single mapping gets converted to list for processing"""
-        ldm = LocalDataManager(self.mock_parent, {})
+        ldm = LocalDataManager(self.mock_parent, {'url': 'sqlite://'})
         ldm.archive_ready = True
         ldm.orm = {'test_table': Mock()}
         
@@ -115,7 +108,7 @@ class TestLocalDataManagerUnits:
     @patch('tent.data_manager.local_data_manager.Session')
     def test_archive_data_handles_missing_table_gracefully(self, mock_session_class):
         """Test that missing table doesn't crash the system"""
-        ldm = LocalDataManager(self.mock_parent, {})
+        ldm = LocalDataManager(self.mock_parent, {'url': 'sqlite://'})
         ldm.archive_ready = True
         ldm.orm = {}  # No tables defined
         
@@ -135,7 +128,7 @@ class TestLocalDataManagerUnits:
     @patch('tent.data_manager.local_data_manager.Session')
     def test_archive_data_processes_queue_first(self, mock_session_class):
         """Test that queued records are processed before new records"""
-        ldm = LocalDataManager(self.mock_parent, {})
+        ldm = LocalDataManager(self.mock_parent, {'url': 'sqlite://'})
         ldm.archive_ready = True
         ldm.orm = {'test_table': Mock()}
         
@@ -164,7 +157,7 @@ class TestLocalDataManagerUnits:
     @patch('tent.data_manager.local_data_manager.Session')
     def test_add_to_session_creates_orm_object(self, mock_session_class):
         """Test that _add_to_session creates proper ORM object"""
-        ldm = LocalDataManager(self.mock_parent, {})
+        ldm = LocalDataManager(self.mock_parent, {'url': 'sqlite://'})
         ldm.archive_ready = True
         
         # Mock ORM class
@@ -272,3 +265,38 @@ class TestLocalDataManagerUnits:
         ldm.archive_data({'table_name': 'entities', 'data': {'id': str(entity_id)}})
 
         assert ldm.query_data('entities')[0]['id'] == entity_id
+
+
+class TestTableDefinitions:
+    """Definition parsing refuses what it cannot represent instead of producing a column of the wrong type."""
+
+    def test_unknown_enumeration_is_an_error(self):  # audit T-28
+        dm = LocalDataManager(Mock(), {'url': 'sqlite://'})
+        with pytest.raises(ValueError, match="Unknown enumeration 'NoSuchEnum'.*'state'"):
+            dm.add_tables([{'name': 't', 'columns': [{'name': 'id', 'type': 'Integer', 'kwargs': {'primary_key': True}},
+                                                     {'name': 'state', 'enumeration': 'NoSuchEnum'}]}])
+
+    def test_identical_redefinition_is_accepted_and_a_changed_one_refused(self):  # audit H-07
+        dm = LocalDataManager(Mock(), {'url': 'sqlite://'})
+        definition = {'name': 't', 'columns': [{'name': 'id', 'type': 'Integer', 'kwargs': {'primary_key': True}},
+                                               {'name': 'value', 'type': 'Float'}]}
+        dm.add_tables([definition])
+        reordered = {'name': 't', 'columns': list(reversed(definition['columns']))}
+        dm.add_tables([reordered])  # column order is not part of the definition
+        changed = {'name': 't', 'columns': [{'name': 'id', 'type': 'Integer', 'kwargs': {'primary_key': True}},
+                                            {'name': 'value', 'type': 'String', 'type_args': [8]},
+                                            {'name': 'extra', 'type': 'Float'}]}
+        with pytest.raises(ValueError, match="Table 't' is already registered.*'extra' is new.*'value' differs"):
+            dm.add_tables([changed])
+        with pytest.raises(ValueError, match="'inherits' differs"):
+            dm.add_tables([dict(definition, inherits='component')])
+
+    def test_unknown_boolean_strings_are_refused(self, tmp_path):  # audit T-34
+        dm = LocalDataManager(Mock(), {'url': f'sqlite:///{tmp_path / "b.sqlite"}'})
+        dm.add_tables([{'name': 'flags', 'columns': [{'name': 'id', 'type': 'Integer', 'kwargs': {'primary_key': True}},
+                                                     {'name': 'flag', 'type': 'Boolean'}]}])
+        column = dm.tables['flags'].c.flag
+        assert dm._normalize_value(column, 'yes') is True and dm._normalize_value(column, 0) is False
+        assert dm._normalize_value(column, True) is True and dm._normalize_value(column, None) is None
+        with pytest.raises(ValueError, match="flag: 'maybe' is not a recognised Boolean"):
+            dm._normalize_value(column, 'maybe')

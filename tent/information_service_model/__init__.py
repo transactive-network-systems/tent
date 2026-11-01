@@ -64,10 +64,14 @@ class InformationServiceModel(Component):
                  update_interval: Union[float, timedelta] = timedelta(hours=1)
                  ):
         super(InformationServiceModel, self).__init__(description, name, transactive_node)
-        self.information_type: MeasurementType = information_type if isinstance(information_type, MeasurementType)\
-            else MeasurementType[information_type]
-        self.information_units: MeasurementUnit = information_units if isinstance(information_units, MeasurementUnit)\
-            else MeasurementUnit[information_units]
+        self.information_type: MeasurementType = (
+            information_type if isinstance(information_type, MeasurementType)
+            else MeasurementType(information_type) if isinstance(information_type, int)
+            else MeasurementType[information_type])
+        self.information_units: MeasurementUnit = (
+            information_units if isinstance(information_units, MeasurementUnit)
+            else MeasurementUnit(information_units) if isinstance(information_units, int)
+            else MeasurementUnit[information_units])
         self.update_interval: timedelta = update_interval if isinstance(update_interval, timedelta) \
             else timedelta(seconds=update_interval)  # [h]
         self.update_period: timedelta = update_period if isinstance(update_period, timedelta)\
@@ -120,8 +124,9 @@ class InformationServiceModel(Component):
             {
                 "name": "entity_information_service",
                 "columns": [
-                    {"name": "entity_id", "foreign_key": "component.id", "kwargs": {"primary_key": True}},
-                    {"name": "information_service_id", "foreign_key": "information_service.id"}
+                    {"name": "entity_id", "foreign_key": "entity.id", "kwargs": {"primary_key": True}},
+                    {"name": "information_service_id", "foreign_key": "information_service.id",
+                     "kwargs": {"primary_key": True}}
                 ]
             }
         ])

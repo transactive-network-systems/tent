@@ -7,7 +7,7 @@ import pytest
 from tent.utils.timer import Timer
 from tests.mock_tn import MockTN
 
-LOCAL_DM = {'class_name': 'LocalDataManager', 'module_name': 'tent.data_manager.local_data_manager', 'db_params': {}}
+LOCAL_DM = {'class_name': 'LocalDataManager', 'module_name': 'tent.data_manager.local_data_manager', 'db_params': {'url': 'sqlite://'}}
 
 
 def _configure(configs):

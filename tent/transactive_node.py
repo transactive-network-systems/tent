@@ -52,6 +52,7 @@ from zoneinfo import ZoneInfo, available_timezones
 
 from tent.base import Archivable
 import tent.containers as containers
+from tent.data_manager.null_data_manager import NullDataManager
 from tent.market.market_series import MarketSeries
 from tent.utils.helpers import get_class_from_spec, validate_bool, parse_datetime
 from tent.utils.timer import Timer
@@ -219,10 +220,13 @@ class TransactiveNode(Archivable):
         return components
 
     def _setup_data_manager(self, config):
-        dm_configs = config.get('data_manager', {})
-        # TODO: Make sure that we can run without a DataManager. This chokes if there is not one in the config.
-        #  Alternately, should we have a NullDataManager that just passes when called?
-        dm_class =  get_class_from_spec(dm_configs, default_module_prefix='tent.data_manager', transactive_node=self)
+        dm_configs = config.get('data_manager')
+        if dm_configs:
+            dm_class = get_class_from_spec(dm_configs, default_module_prefix='tent.data_manager', transactive_node=self)
+        else:
+            # Without a data_manager block the node runs without an archive.
+            _log.warning(f'Node {self.name!r} has no data_manager configuration; nothing will be archived.')
+            dm_class, dm_configs = NullDataManager, {}
         self._data_manager = dm_class(self, **dm_configs)
         self.data_manager.add_tables(self.get_archive_definitions())
 
