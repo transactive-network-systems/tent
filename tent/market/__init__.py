@@ -477,6 +477,9 @@ class Market(Component):
         :return: None
         """
         _log.debug(f'MARKET: {self.name} STATE IS NOW TRANSITIONING: Inactive to Active')
+        # Information services (forecasts) are brought up to date for this market before any asset schedules against
+        # it; a failing service is logged and its consumers fall back to their defaults.
+        self.tn.update_information_services(self)
         return None
 
     def while_in_active(self):

@@ -264,6 +264,17 @@ class TransactiveNode(Archivable):
     def get_market_series_by_attribute(self, attribute, match, first_only=False):
         return self.get_objects_by_attribute(self.market_series, attribute, match, first_only)
 
+    def update_information_services(self, market) -> None:
+        """Have every information service update its predictions for this market (called when a market becomes active,
+        before assets schedule). One failing service does not stop the market: it is logged with its traceback and its
+        consumers use their defaults for this market."""
+        for service in self.information_service_models:
+            try:
+                service.update_information(market)
+            except Exception:
+                _log.exception(f'{self.name}: information service {service.name} failed to update for {market.name}; '
+                               f'its consumers use their defaults for this market.')
+
     def on_market_spawned(self, market) -> None:
         """A series created a market: neighbors deliver any signal they held for it (see Neighbor.held_signals)."""
         for neighbor in self.neighbors:

@@ -216,40 +216,6 @@ def json_dumps(obj, **kwargs) -> str:
     return json.dumps(obj, default=json_encoder, allow_nan=False, **kwargs)
 
 
-def is_heavyloadhour(datetime_value):
-    """True if time is within a HLH hour
-    """
-    is_hlh = False
-    if not isinstance(datetime_value, datetime):
-        # noinspection PyStringException
-        raise 'Input value has to be an instance of datetime'
-
-    # TODO: Why do we have a function that only recognizes holidays in the US in 2018?
-    # These holidays are always LLH. If New Year's Day, Independence Day, or
-    # Labor Day fall on a Sunday, the following Monday is LLH. These dates
-    holidays = [
-        "2018-01-01",
-        "2018-05-28",
-        "2018-07-04",
-        "2018-09-03",
-        "2018-11-22",
-        "2018-12-25"
-    ]
-    # Should be maintained far into the future.
-
-    # The basic definition of HLH is based on hour and weekday memberships.
-    h = datetime_value.hour
-    d = datetime_value.weekday()
-    d_str = datetime_value.date().isoformat()
-    is_holiday = d_str in holidays
-    is_in_hlh_hours = 6 <= h <= 21
-    is_sunday = d == 6  # Sunday
-
-    if is_in_hlh_hours and not is_sunday and not is_holiday:
-        is_hlh = True
-
-    return is_hlh
-
 def read_spline(filename=None, xval=0, test=False):
     # Use a cubic spline table to interpolate an dependent variable y for a given independent variable xval.
     # The presumed file structure columns are ordered ['x', 'a', 'b', 'c', 'd'], where the cubic spline is calculated

@@ -116,7 +116,8 @@ class OpenLoopLoadPredictor(LocalAsset):
                 # An appropriate information service was found.
                 # Get the temperature that corresponds to the indexed time interval.
                 interval_value = self.temperature_forecaster.predicted_values.get_by_interval(time_interval)
-                temp = interval_value.value  if interval_value and interval_value.value else self.default_temperature
+                temp = (interval_value.value if interval_value is not None and interval_value.value is not None
+                        else self.default_temperature)  # a forecast of 0.0 is a reading, not a gap
 
             # Determine the dow_intercept.
             # The dow_Intercept is a function of categorical day-of-week number

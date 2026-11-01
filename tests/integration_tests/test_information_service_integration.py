@@ -59,12 +59,6 @@ def test_every_interval_of_every_market_gets_the_hour_temperature(tmp_path):
             assert model.predicted_values.get_by_interval(ti).value == temperature_at(ti.start_time), (market.name, ti.name)
 
 
-@pytest.mark.xfail(strict=True, reason='Nothing in the auction flow calls TemperatureForecastModel.update_information for '
-                                       'the OpenLoopLoadPredictor (only ModelFrameAsset updates its own named forecast), '
-                                       'so predicted_values stay empty and schedule_power uses default_temperature for '
-                                       'every interval: the configured weather file never reaches the market. Found in '
-                                       'WP-7 while making the weather integration test assert; the fix belongs in '
-                                       'local_asset (WP-4 scope).')
 def test_the_building_schedule_follows_the_temperature(tmp_path):
     mild = configured_node(tmp_path, 'mild', temperature=lambda when: 65.0)
     hot = configured_node(tmp_path, 'hot', temperature=lambda when: 95.0)
