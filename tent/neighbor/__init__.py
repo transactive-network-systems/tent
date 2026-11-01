@@ -52,7 +52,7 @@ from tent.base import Entity
 from tent.containers import Measurement, SDCurve, TransactiveSignal, Vertex
 from tent.enumerations import Direction, MeasurementType, MeasurementUnit, MarketState
 from tent.market import Market
-from tent.utils.helpers import validate_bool
+from tent.utils.helpers import require_aware, validate_bool
 from tent.utils.timer import Timer
 
 _log = logging.getLogger(__name__)
@@ -124,6 +124,9 @@ class Neighbor(Entity):
         self.convergence_flags: Measurement = Measurement(self, MeasurementType.ConvergenceFlag, MeasurementUnit.Boolean, archive_now=False)
         self.prepared_signals: WeakKeyDictionary[Market, TransactiveSignal] = WeakKeyDictionary()  # Current signal, ready to send.
         self.last_received_signals: WeakKeyDictionary[Market, TransactiveSignal] = WeakKeyDictionary()  # Last records received.
+        # Signals that named a market this node has not spawned yet (a peer whose clock or start-up runs ahead), by
+        # market name, newest only; replayed by on_market_spawned once the series creates the market.
+        self.held_signals: dict[str, dict] = {}
         self.last_sent_signals: WeakKeyDictionary[Market, TransactiveSignal] = WeakKeyDictionary()  # Last records sent.
     # Internal guards to avoid repeated noisy warnings
         self._loss_warning_reported = False
@@ -572,6 +575,14 @@ class Neighbor(Entity):
                          'No signal is read.')
             return
 
+        market_name = signal_dict.get('market') if isinstance(signal_dict, dict) else None
+        if market_name and self.tn.get_market_by_name(market_name) is None and self._market_may_still_spawn(market_name):
+            # Not an unknown market, an early one: hold the newest signal for it until the series spawns it.
+            _log.info(f'{self.tn.name}: holding a signal from {self.name} for {market_name}, which has not been spawned '
+                      f'here yet.')
+            self.held_signals[market_name] = signal_dict
+            return
+
         parsed_signal = TransactiveSignal.parse_signal(self.tn, signal_dict)
         if parsed_signal:
             self.last_received_signals[parsed_signal.market] = parsed_signal
@@ -579,6 +590,27 @@ class Neighbor(Entity):
             if state in (MarketState.DeliveryLead, MarketState.Delivery, MarketState.Reconcile, MarketState.Expired):
                 _log.info(f'{self.tn.name}: signal {parsed_signal.sequence} from {self.name} for {parsed_signal.market.name} '
                           f'arrived in {state.name}; too late to be used.')
+
+    def _market_may_still_spawn(self, market_name: str) -> bool:
+        """True if some series of this node names its markets like this one and has not passed the clearing time the
+        name carries (market names are <series name>_<clearing time ISO 8601>)."""
+        for series in self.tn.market_series:
+            prefix = series.name.replace(' ', '_') + '_'
+            if not market_name.startswith(prefix):
+                continue
+            try:
+                clearing_time = require_aware(datetime.fromisoformat(market_name[len(prefix):]), 'market name')
+            except ValueError:
+                return False
+            return clearing_time >= series.next_clearing_time
+        return False
+
+    def on_market_spawned(self, market) -> None:
+        """Deliver the signal held for this market, if any (called by MarketSeries.spawn through the node)."""
+        signal_dict = self.held_signals.pop(market.name, None)
+        if signal_dict is not None:
+            _log.info(f'{self.tn.name}: delivering the held signal from {self.name} to {market.name}.')
+            self.receive_transactive_signal(None, None, signal_dict)
 
     def update_costs(self, market):
         """

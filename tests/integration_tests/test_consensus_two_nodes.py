@@ -454,3 +454,47 @@ def test_late_signal_is_absorbed_in_market_lead_without_a_reply(nodes, clock):
     city.step()
     campus.step()
     assert m_campus.marginal_prices.get_by_interval(m_campus.time_intervals[0]).value == price_before
+
+
+def test_signal_for_a_market_not_yet_spawned_is_held_until_it_spawns(clock):
+    """A peer whose clock (or start-up) runs ahead quotes a market this node has not created yet: the signal is held
+    and delivered when the series spawns that market, instead of being dropped (audit T-42)."""
+    city = build_node('city', 'campus',
+                      asset_curve=[[0.04, 0.0, 0.0, True], [0.08, 0.0, 1000.0, True]], asset_limits=(0.0, 1000.0),
+                      neighbor_curve=[[INF, 0.0, -50.0, True]], neighbor_limits=(-1000.0, 0.0),
+                      up_or_down='downstream')
+    clock['t'] = T0 + timedelta(hours=1)  # the campus starts an hour of simulated time later
+    campus = build_node('campus', 'city',
+                        asset_curve=[[INF, 0.0, -100.0, True]], asset_limits=(-100.0, 0.0),
+                        neighbor_curve=[[0.04, 0.0, 0.0, True], [0.08, 0.0, 1000.0, True]],
+                        neighbor_limits=(0.0, 1000.0), up_or_down='upstream')
+    campus.connect_peer(city)
+    city.connect_peer(campus)
+    ahead = market_of(campus)
+    assert city.get_market_by_name(ahead.name) is None, 'the city has not spawned the market the campus is in'
+    city_neighbor = city.neighbors[0]  # the city's view of the campus
+
+    times = ahead.transition_times
+    for t in (times.active, times.negotiation, times.negotiation + timedelta(seconds=1)):
+        clock['t'] = t
+        campus.step()  # only the campus runs: it sends its first signal for `ahead`
+    assert ahead.name in city_neighbor.held_signals, 'held, not dropped'
+    assert not any(m.name == ahead.name for m in city_neighbor.last_received_signals)
+
+    city.market_series[0].spawn()
+    spawned = city.get_market_by_name(ahead.name)
+    assert spawned is not None
+    assert city_neighbor.held_signals == {}
+    received = city_neighbor.last_received_signals.get(spawned)
+    assert received is not None and received.market is spawned and received.sequence == 1
+
+
+def test_signal_for_a_market_that_will_never_spawn_is_not_held(nodes, clock):
+    campus, city = nodes
+    city_neighbor = city.neighbors[0]
+    city_neighbor.receive_transactive_signal(None, None, {'market': 'Consensus_2016-01-01T00:00:00+00:00',
+                                                          'neighbor': 'campus', 'protocol_version': '1.0'})
+    assert city_neighbor.held_signals == {}, 'a clearing time already passed cannot spawn'
+    city_neighbor.receive_transactive_signal(None, None, {'market': 'Other_Series_2017-07-02T00:00:00+00:00',
+                                                          'neighbor': 'campus', 'protocol_version': '1.0'})
+    assert city_neighbor.held_signals == {}, 'no series of this node names markets like that'
