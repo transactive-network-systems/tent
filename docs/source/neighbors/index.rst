@@ -118,10 +118,11 @@ Quantity form with a curtailment reward
 
 Scheduled power
     Both the price form and the reward form have a flat segment, and when the market clears on it the price alone does
-    not say how much is exchanged (the interpolated price lands a hair below the stated price, where the curve reads its
-    minimum). ``ResponseNeighbor.schedule_power`` therefore schedules the residual of the rest of the system at the
-    market's price, minus the sum of the other entities' production, clipped to the curve's quantity range. Off the
-    flat segment this equals reading the curve; for the inelastic form it is the stated quantity.
+    not say how much is exchanged. ``Market.balance`` therefore assigns every entity its power at the cleared price
+    (``Market.assign_cleared_powers``): an entity whose curve is flat at that price takes the residual of the others,
+    shared among several flat entities in proportion to their segment widths, and ``Neighbor.schedule_power`` reads
+    that assignment (``Entity.market_power``) when the market has balanced against the current curve, otherwise the
+    curve at the price. For the inelastic form the assignment is the stated quantity.
 
 Changes during a market
 -----------------------

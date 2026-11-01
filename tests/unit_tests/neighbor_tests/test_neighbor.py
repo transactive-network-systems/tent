@@ -142,6 +142,7 @@ def test_neighbor_schedule_power_calculation():
     
     # Mock market with time intervals and marginal prices
     market = Mock()
+    market.cleared_power.return_value = None  # the market has not balanced against this neighbor's curve
     time_interval = Mock()
     time_interval.start_time = datetime.now()
     market.time_intervals = [time_interval]
@@ -174,6 +175,7 @@ def test_neighbor_schedule_power_fallback_price():
     
     # Mock market setup
     market = Mock()
+    market.cleared_power.return_value = None  # the market has not balanced against this neighbor's curve
     time_interval = Mock()
     time_interval.start_time = datetime.now()
     market.time_intervals = [time_interval]

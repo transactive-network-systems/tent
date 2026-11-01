@@ -199,34 +199,15 @@ class ResponseNeighbor(Neighbor):
         return SDCurve(measurement=None, interval=time_interval, vertices=vertices)
 
     def schedule_power(self, market):
-        """
-        Schedule the power that balances the rest of the system at the market's price, within this neighbor's curve.
-
-        The curves this neighbor builds have flat segments (the price form entirely, the reward form up to the stated
-        quantity), and when the market clears on such a segment the price alone does not say how much is exchanged:
-        the market's interpolation lands a hair below the stated price, where the curve reads its minimum. The quantity
-        is the residual of everything else at that price: minus the sum of the other entities' production, clipped to the
-        curve's own quantity range. Off the flat segment this equals reading the curve, and for the inelastic form it is
-        the stated quantity. An interval without a curve (no stated value yet) schedules zero so the market's sums still
-        add up; it contributes nothing to the system curve.
-        """
+        """As Neighbor.schedule_power (the market's assigned power where it has balanced against this curve, which
+        settles the quantity on the flat segments these curves have, otherwise the curve at the price), except that an
+        interval without a curve (no stated value yet) schedules zero so the market's sums still add up; it contributes
+        nothing to the system curve."""
         for time_interval in market.time_intervals:
-            sd_curve = self.active_vertices.get_by_interval(time_interval)
-            if sd_curve is None:
+            if self.active_vertices.get_by_interval(time_interval) is None:
                 self.scheduled_powers.update(time_interval, 0.0)
                 continue
-            mp = market.marginal_prices.get_by_interval(time_interval)
-            marginal_price = market.price_model.get(time_interval.start_time)[0] if mp is None else mp.value
-            residual = 0.0
-            for entity in [*market.tn.local_assets, *market.tn.neighbors]:
-                if entity is self:
-                    continue
-                other_curve = entity.active_vertices.get_by_interval(time_interval)
-                if other_curve is None or other_curve.empty:
-                    continue  # left out of the system curve by Market.sum_vertices as well
-                residual -= entity.production(marginal_price, time_interval)
-            power = min(max(residual, sd_curve.min_quantity()), sd_curve.max_quantity())
-            self.scheduled_powers.update(time_interval, power)
+            self.scheduled_powers.update(time_interval, self.market_power(market, time_interval))
 
     # ------------------------------------------------------------------------------------------------ no signals
     def prep_transactive_signal(self, market):

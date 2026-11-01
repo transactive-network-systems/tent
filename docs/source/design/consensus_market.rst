@@ -17,8 +17,16 @@ and the price is read where it crosses zero. ``ConsensusMarket.balance_locally``
 neighbor refreshes its active vertices and schedules against the current prices), ``balance`` (sum and solve), a
 re-schedule of powers at the new prices, ``update_costs`` and ``update_supply_demand``, and judges convergence by the
 duality gap ``(production cost - dual cost) / production cost`` against ``series.duality_gap_threshold``. When nothing in
-the system has a cost, the net power itself is the gap. The loop is bounded by the market keyword
-``max_balance_iterations`` (default 20); with piece-wise linear curves one pass suffices.
+the system has a cost, the net power itself is the gap. Convergence also requires the scheduled powers to add up
+(``ConsensusMarket.is_power_balanced``: the net power of every interval within the threshold as a fraction of the
+interval's generation or demand); a price that closes the gap over an unbalanced schedule, as when an interval could not
+be bracketed or a supplier cannot cover the load, is logged and leaves the market unconverged and out of consensus.
+``Market.balance`` brackets each interval's zero crossing with the demand vertex of highest price and the supply
+vertex of lowest price among those nearest the crossing, so a price step clears at the step, and assigns every entity
+its power at the cleared price: an entity whose curve is flat there (a tariff supplier, a ``ResponseNeighbor`` stating
+a price) takes the residual of the others rather than reading its own curve, which at the interpolated price would give
+its minimum (``Market.assign_cleared_powers``, read back by ``Entity.market_power``). The loop is bounded by the
+market keyword ``max_balance_iterations`` (default 20); with piece-wise linear curves one pass suffices.
 
 **Coordination (between nodes).** For each transactive neighbor the node prepares a transactive signal: the residual
 system curve with that neighbor excluded, bounded to what the node can exchange with it, stated from the neighbor's

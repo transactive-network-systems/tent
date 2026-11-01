@@ -724,6 +724,10 @@ def test_schedule_power():
             self.time_intervals = []
             self.marginal_prices = DummyMarginalPrices()
 
+        @staticmethod
+        def cleared_power(entity, time_interval):
+            return None  # never balanced: the neighbor reads its curve at the price
+
     # Create mock TN
     mock_tn = MockTN()
     mock_tn._data_manager = DummyDataManager()

@@ -293,10 +293,9 @@ class Auction(Market):
             for local_asset in local_assets:
                 # local_asset.schedule_power(self) ** COMMENT OUT: TOO CUMBERSOME **
                 for time_interval in self.time_intervals:
-                    price = self.marginal_prices.get_by_interval(time_interval).value
-                    # Interpolate among the asset's active vertices to find power at the cleared market clearing price.
-                    power = local_asset.production(price, time_interval)
-                    local_asset.scheduled_powers.update(time_interval, power)
+                    # The asset's power at the cleared price: the market's assignment (which settles the quantity of an
+                    # asset whose curve is flat at the price), otherwise interpolated among its active vertices.
+                    local_asset.scheduled_powers.update(time_interval, local_asset.market_power(self, time_interval))
 
             # For each downstream agent,
             for downstream_agent in downstream_agents:

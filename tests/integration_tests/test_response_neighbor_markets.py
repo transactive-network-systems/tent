@@ -130,12 +130,7 @@ def test_a_stated_import_cap_is_met_by_local_flexibility(clock):
 
 
 @pytest.mark.parametrize('reward, expected_price, expected_import', [
-    pytest.param(0.10, 0.10, 20.0, marks=pytest.mark.xfail(strict=True, reason=(
-        'Market.balance brackets the zero crossing with the first vertex of several that share the largest demand '
-        'quantity (here the load\'s 20 kW minimum at 0.08 and again just under 0.10, where the reward step is), so it '
-        'interpolates from 0.08 and clears at 0.088 instead of at the reward. Tie-breaking the bracketing vertices by '
-        'price as well as quantity would clear at the step.'))),
-    # the reward exceeds what the load will pay: it curtails to its minimum, imports 20 kW
+    (0.10, 0.10, 20.0),   # the reward exceeds what the load will pay: it curtails to its minimum, imports 20 kW
     (0.05, 0.065, 50.0),  # the reward is below the load's value of power: the instruction is met in full
 ])
 def test_a_curtailment_reward_is_weighed_against_local_flexibility(clock, reward, expected_price, expected_import):
@@ -189,10 +184,13 @@ def test_intervals_before_the_first_value_wait_and_a_value_holds_until_changed(c
     assert neighbor.active_vertices.get_by_interval(first) is None
     assert neighbor.active_vertices.get_by_interval(second) is not None
     assert any(f'counterparty has no vertices in time interval {first.name}' in r.getMessage() for r in caplog.records)
-    # The only supply is missing in the first interval, so that interval cannot balance: the load is unmet there.
+    # The only supply is missing in the first interval, so that interval cannot balance: the load is unmet there, and
+    # an unbalanced schedule is neither converged nor in consensus.
     assert any('Failed to balance' in r.getMessage() and first.name in r.getMessage() for r in caplog.records)
     assert market.net_powers.get_by_interval(first).value == pytest.approx(-100.0)
     assert powers(neighbor, market)[0] == 0.0
+    assert not market.converged and not market.in_consensus
+    assert any('is not balanced' in r.getMessage() and first.name in r.getMessage() for r in caplog.records)
 
     # A value for the first interval arrives; the earlier entry still holds for the later intervals.
     tn.provide_subscription(PRICE_KEY, [{'start_time': first.start_time.isoformat(), 'value': 0.03}])

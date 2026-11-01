@@ -148,7 +148,7 @@ class ConsensusMarket(Market):
             if any(p is None or p.value is None for p in prices):
                 _log.warning(f'{self.name}: no marginal price could be found in at least one interval.')
                 return False
-            # Reschedule powers at the cleared prices, then measure the duality gap.
+            # Reschedule powers at the cleared prices, then measure the duality gap and the power balance.
             for entity in self._entities():
                 entity.schedule_power(self)
             self.update_costs()
@@ -163,15 +163,41 @@ class ConsensusMarket(Market):
                 gap_ok = abs(self.duality_gap) <= self.series.duality_gap_threshold
             _log.debug(f'{self.name} balance iteration {k}: production {self.total_production_cost:.4f}, '
                        f'dual {self.total_dual_cost:.4f}, gap {self.duality_gap:.5f}')
-            if gap_ok:
+            if gap_ok and self.is_power_balanced():
                 self.converged = True
                 break
         else:
             _log.warning(f'{self.name}: local balance did not close the duality gap in {self.max_balance_iterations} '
                          f'iterations (gap {self.duality_gap}); proceeding with the last prices.')
-            self.converged = True
+            # Prices that leave the powers balanced are usable; an unbalanced schedule is not a solution.
+            self.converged = self.is_power_balanced()
         self._mark_signals_seen()
         return self.converged
+
+    def is_power_balanced(self) -> bool:
+        """
+        True when the scheduled powers add up to zero in every interval, within the series' duality_gap_threshold as a
+        fraction of the larger of the interval's total generation and total demand. A price that closes the duality gap
+        is not a solution if the powers behind it do not balance (an interval balance() could not bracket keeps its old
+        price; a supplier scheduled short of the load), so this check gates convergence and with it consensus.
+        """
+        threshold = self.series.duality_gap_threshold
+        balanced = True
+        for time_interval in self.time_intervals:
+            net = self.net_powers.get_by_interval(time_interval)
+            generation = self.total_generation.get_by_interval(time_interval)
+            demand = self.total_demand.get_by_interval(time_interval)
+            if net is None or generation is None or demand is None:
+                _log.warning(f'MARKET: {self.name} has no scheduled powers to balance in {time_interval.name}.')
+                balanced = False
+                continue
+            scale = max(abs(generation.value), abs(demand.value), 1.0)
+            if abs(net.value) > threshold * scale:
+                _log.warning(f'MARKET: {self.name} is not balanced in {time_interval.name}: net power {net.value:.4g} kW '
+                             f'against {generation.value:.4g} kW generation and {demand.value:.4g} kW demand at '
+                             f'{self.marginal_prices.get_by_interval(time_interval).value:.6g} $/kWh; not converged.')
+                balanced = False
+        return balanced
 
     def exchange_signals(self) -> bool:
         """

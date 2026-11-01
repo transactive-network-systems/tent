@@ -47,6 +47,107 @@ def test_balance_finds_the_price_where_the_system_curve_crosses_zero(market_with
     assert market.marginal_prices.get_by_interval(ti).value == pytest.approx(0.032)
 
 
+def test_balance_brackets_a_price_step_with_the_vertices_nearest_the_crossing():
+    """Two demand vertices share the largest demand quantity at different prices (a load's floor reached at 0.08 and
+    still there just under 0.10, where a flat supplier at 0.10 steps in); the crossing is at the step, 0.10."""
+    tn = MockTN()
+    market = make_market(tn)
+    ti = market.time_intervals[0]
+    load = LocalAsset(transactive_node=tn, cost_parameters=[])
+    supplier = Neighbor(transactive_node=tn, cost_parameters=[])
+    tn.local_assets, tn.neighbors = [load], [supplier]
+    load.active_vertices.update(ti, curve(ti, [Vertex(0.04, 0, -100), Vertex(0.08, 0, -20)]))
+    supplier.active_vertices.update(ti, curve(ti, [Vertex(0.10, 0, 0), Vertex(0.10, 0, 50)]))
+    assert market.balance() is True
+    vertices = [(round(v.price, 6), v.quantity) for v in market.active_vertices.get_by_interval(ti).vertices]
+    assert vertices == [(0.04, -100), (0.08, -20), (0.1, -20), (0.1, 30)]
+    assert market.marginal_prices.get_by_interval(ti).value == pytest.approx(0.10, abs=1e-9)
+    # The load reads its curve at the price; the flat supplier takes the residual, 20 kW, not its 0 kW minimum.
+    assert market.cleared_power(load, ti) == pytest.approx(-20.0)
+    assert market.cleared_power(supplier, ti) == pytest.approx(20.0)
+
+
+def test_balance_returns_false_and_keeps_the_old_price_when_an_interval_cannot_be_bracketed(market_with_entities):
+    market, ti, asset, neighbor = market_with_entities
+    neighbor.active_vertices.update(ti, curve(ti, [Vertex(INF, 0, 0)]), replace=True)  # no supply at all
+    market.marginal_prices.update(ti, 0.06)
+    assert market.balance() is False
+    assert market.converged is False
+    assert market.marginal_prices.get_by_interval(ti).value == 0.06
+    assert market.cleared_power(asset, ti) is None
+
+
+class TestClearedPowers:
+    """Market.assign_cleared_powers: entities whose curves are flat at the cleared price take the residual of the rest."""
+
+    def setup_entities(self, supplier_curves, load_quantity=-300.0):
+        tn = MockTN()
+        market = make_market(tn)
+        ti = market.time_intervals[0]
+        load = LocalAsset(transactive_node=tn, cost_parameters=[])
+        load.active_vertices.update(ti, curve(ti, [Vertex(INF, 0, load_quantity)]))
+        suppliers = []
+        for vertices in supplier_curves:
+            supplier = Neighbor(transactive_node=tn, cost_parameters=[])
+            supplier.active_vertices.update(ti, curve(ti, vertices))
+            suppliers.append(supplier)
+        tn.local_assets, tn.neighbors = [load], suppliers
+        return market, ti, load, suppliers
+
+    def test_one_flat_supplier_takes_the_whole_residual(self):
+        market, ti, load, (supplier,) = self.setup_entities([[Vertex(0.05, 0, 0), Vertex(0.05, 0, 1000)]])
+        assert market.balance()
+        assert market.marginal_prices.get_by_interval(ti).value == pytest.approx(0.05, abs=1e-9)
+        assert market.cleared_power(supplier, ti) == pytest.approx(300.0)
+        assert market.cleared_power(load, ti) == pytest.approx(-300.0)
+        # Reading the flat curve at the interpolated price (a hair under 0.05) would have given its minimum.
+        assert supplier.production(market.marginal_prices.get_by_interval(ti).value, ti) == 0.0
+
+    def test_several_flat_suppliers_share_the_residual_by_segment_width(self):
+        market, ti, _, (wide, narrow) = self.setup_entities([[Vertex(0.05, 0, 0), Vertex(0.05, 0, 1000)],
+                                                             [Vertex(0.05, 0, 0), Vertex(0.05, 0, 500)]])
+        assert market.balance()
+        assert market.cleared_power(wide, ti) == pytest.approx(200.0)
+        assert market.cleared_power(narrow, ti) == pytest.approx(100.0)
+
+    def test_a_flat_segment_that_does_not_start_at_zero_is_shared_within_its_bounds(self):
+        market, ti, _, (wide, offset) = self.setup_entities([[Vertex(0.05, 0, 0), Vertex(0.05, 0, 1000)],
+                                                             [Vertex(0.05, 0, 100), Vertex(0.05, 0, 300)]])
+        assert market.balance()
+        # Residual 300 = 100 + 100 (the offset segment's floor) + 200 shared 1000:200 -> 166.67 and 33.33.
+        assert market.cleared_power(wide, ti) == pytest.approx(200.0 * 1000 / 1200)
+        assert market.cleared_power(offset, ti) == pytest.approx(100.0 + 200.0 * 200 / 1200)
+
+    def test_a_sloped_supplier_reads_its_curve_and_the_flat_one_takes_what_is_left(self):
+        market, ti, _, (sloped, flat) = self.setup_entities([[Vertex(0.03, 0, 0), Vertex(0.07, 0, 400)],
+                                                             [Vertex(0.05, 0, 0), Vertex(0.05, 0, 1000)]])
+        assert market.balance()
+        assert market.marginal_prices.get_by_interval(ti).value == pytest.approx(0.05, abs=1e-9)
+        assert market.cleared_power(sloped, ti) == pytest.approx(200.0, abs=1e-6)
+        assert market.cleared_power(flat, ti) == pytest.approx(100.0, abs=1e-6)
+
+    def test_an_assignment_lapses_when_the_entity_rebuilds_its_curve(self):
+        market, ti, _, (supplier,) = self.setup_entities([[Vertex(0.05, 0, 0), Vertex(0.05, 0, 1000)]])
+        assert market.balance()
+        assert market.cleared_power(supplier, ti) == pytest.approx(300.0)
+        assert supplier.market_power(market, ti) == pytest.approx(300.0)
+        supplier.active_vertices.update(ti, curve(ti, [Vertex(0.05, 0, 0), Vertex(0.05, 0, 800)]), replace=True)
+        assert market.cleared_power(supplier, ti) is None
+        assert supplier.market_power(market, ti) == 0.0, 'read off the new curve at the price until the next balance'
+
+    def test_a_residual_outside_the_flat_segments_is_clipped_with_a_warning(self, caplog):
+        market, ti, _, (supplier,) = self.setup_entities([[Vertex(0.05, 0, 0), Vertex(0.05, 0, 1000)]])
+        market.marginal_prices.update(ti, 0.05)
+        import logging
+        with caplog.at_level(logging.WARNING, logger='tent.market'):
+            market.assign_cleared_powers(ti, 0.05)  # consistent: 300 within [0, 1000]
+            assert not any('outside what the entities flat' in r.getMessage() for r in caplog.records)
+            supplier.active_vertices.update(ti, curve(ti, [Vertex(0.05, 0, 0), Vertex(0.05, 0, 100)]), replace=True)
+            market.assign_cleared_powers(ti, 0.05)  # 300 kW needed, 100 kW available
+        assert market.cleared_power(supplier, ti) == pytest.approx(100.0)
+        assert any('outside what the entities flat' in r.getMessage() for r in caplog.records)
+
+
 def test_market_creates_one_interval_per_intervals_to_clear_from_delivery_start():
     clearing = datetime(2020, 1, 1, tzinfo=timezone.utc)
     market = make_market(MockTN(), clearing, intervals_to_clear=6, delivery_lead=timedelta(minutes=10))

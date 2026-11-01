@@ -256,15 +256,9 @@ class Neighbor(Entity):
         # updates array self.scheduledPowers
 
         for time_interval in market.time_intervals:
-
-            # Find the marginal price for the indexed time interval
-            mp = market.marginal_prices.get_by_interval(time_interval)
-            marginal_price = market.price_model.get(time_interval.start_time)[0] if mp is None else mp.value
-
-            # Find the power that corresponds to the marginal price according to the set of active vertices in the
-            # indexed time interval. Function Production() works for any power that is determined by its supply curve or
-            # demand curve, as represented by the object's active vertices.
-            self.scheduled_powers.update(time_interval, self.production(marginal_price, time_interval))  # [avg. kW]
+            # The power at the market's price: assigned by the market when it has balanced against this curve (which
+            # settles the quantity where the curve is flat at the price), otherwise read off the active vertices.
+            self.scheduled_powers.update(time_interval, self.market_power(market, time_interval))  # [avg. kW]
 
     def update_dc_threshold(self, market):
         # Keep track of the month's demand-charge threshold
