@@ -1,4 +1,5 @@
 import logging
+import math
 
 from copy import copy
 from dataclasses import dataclass, field
@@ -244,11 +245,13 @@ class MatchingEngine(Market):
         if not new_order:
             return None
 
-        # Get eligible standing orders from the order book.
+        # Get eligible standing orders from the order book: the other side, in the same interval.
         if new_order.supply_or_demand == SupplyOrDemand.SUPPLY:
-            standing_orders: list = self.get_counteroffers(supply_or_demand=SupplyOrDemand.DEMAND)
+            standing_orders: list = self.get_counteroffers(supply_or_demand=SupplyOrDemand.DEMAND,
+                                                           time_interval=new_order.interval)
         elif new_order.supply_or_demand == SupplyOrDemand.DEMAND:
-            standing_orders: list = self.get_counteroffers(supply_or_demand=SupplyOrDemand.SUPPLY)
+            standing_orders: list = self.get_counteroffers(supply_or_demand=SupplyOrDemand.SUPPLY,
+                                                           time_interval=new_order.interval)
         else:
             raise RuntimeError("There should be no case where the new order is neither supply nor demand.")
 
@@ -299,14 +302,16 @@ class MatchingEngine(Market):
                 limit_orders: list = self.get_counteroffer_vertices(
                     price=price,
                     supply_or_demand=SupplyOrDemand.SUPPLY,
-                    vertex_type=VTypes.LIMIT_ORDER
+                    vertex_type=VTypes.LIMIT_ORDER,
+                    time_interval=new_order.interval
                 )
 
             elif new_order and new_order.supply_or_demand == SupplyOrDemand.SUPPLY:
                 limit_orders: list = self.get_counteroffer_vertices(
                     price=price,
                     supply_or_demand=SupplyOrDemand.DEMAND,
-                    vertex_type=VTypes.LIMIT_ORDER
+                    vertex_type=VTypes.LIMIT_ORDER,
+                    time_interval=new_order.interval
                 )
             else:
                 break
@@ -370,6 +375,96 @@ class MatchingEngine(Market):
         else:
             return None
 
+    def transition_from_active_to_negotiation(self):
+        """Price discovery opens: every local asset schedules itself so that its curve can be quoted into the book (as
+        an auction's assets do), then the inherited price refresh."""
+        for local_asset in self.tn.local_assets:
+            local_asset.schedule(self)
+        super(MatchingEngine, self).transition_from_active_to_negotiation()
+
+    def transition_from_negotiation_to_market_lead(self):
+        """The book closes: settle the matched legs into prices and schedules, then the inherited price refresh for the
+        intervals settlement did not price."""
+        self.settle()
+        super(MatchingEngine, self).transition_from_negotiation_to_market_lead()
+
+    # ------------------------------------------------------------------------------------------------ settlement
+    @property
+    def average_match_prices(self) -> Measurement:
+        """Per interval, the volume-weighted average price of the interval's matches [$/kWh], recorded for reporting
+        beside the marginal price (the price of the last match). Held in the market's BlendedPrice measurement."""
+        return self.blended_prices1
+
+    def _legs_by_interval(self) -> dict[str, list[Order]]:
+        legs: dict[str, list[Order]] = {}
+        for leg in self.matchList:
+            legs.setdefault(leg.interval.name, []).append(leg)
+        return legs
+
+    @staticmethod
+    def _leg_quantity(leg: Order) -> float:
+        """The signed quantity a matched leg transacted (supply positive, demand negative): its last vertex."""
+        return leg.vertices[-1].quantity
+
+    def settle(self) -> None:
+        """
+        Turn the matched legs into the market's result, per interval. Each entity's scheduled power is the signed sum
+        of its matched legs (supply positive, demand negative; unmatched remainders did not trade), stored through the
+        cleared-power store so that Entity.market_power returns it and the entities schedule from it as they do after
+        an auction clears. The interval's marginal price is the price of the last match, the marginal trade; the
+        volume-weighted average match price is recorded beside it (average_match_prices). An interval with no match
+        keeps its opening price and is left to its entities' curves; such intervals are logged, once, by name. The
+        entities are then asked for their schedules as Auction.while_in_delivery_lead asks them.
+        """
+        entities = [*self.tn.local_assets, *self.tn.neighbors]
+        legs_by_interval = self._legs_by_interval()
+        unmatched, unpriced = [], []
+        for time_interval in self.time_intervals:
+            legs = legs_by_interval.get(time_interval.name, [])
+            if not legs:
+                unmatched.append(time_interval.name)
+                continue
+            # A match made at an infinite price level (a market order met by another market order) discovers no price;
+            # the priced legs do. An interval whose matches are all unpriced trades its quantities at the opening price.
+            priced = [leg for leg in legs if math.isfinite(leg.vertices[-1].price)]
+            volume = sum(abs(self._leg_quantity(leg)) for leg in legs)
+            if priced:
+                marginal_price = priced[-1].vertices[-1].price
+                priced_volume = sum(abs(self._leg_quantity(leg)) for leg in priced)
+                average = sum(leg.vertices[-1].price * abs(self._leg_quantity(leg)) for leg in priced) / priced_volume
+                self.marginal_prices.update(time_interval, marginal_price)
+                self._own_prices.add(time_interval.start_time)  # not to be overwritten by a prior market's price
+                self.average_match_prices.update(time_interval, average)
+            else:
+                unpriced.append(time_interval.name)
+                marginal_price = self.marginal_prices.get_by_interval(time_interval).value
+                average = float('nan')
+            for entity in entities:
+                sd_curve = entity.active_vertices.get_by_interval(time_interval)
+                if sd_curve is None or sd_curve.empty:
+                    continue  # never quoted, so it cannot have traded
+                power = sum(self._leg_quantity(leg) for leg in legs
+                            if leg.actor is not None and leg.actor.id == entity.id)
+                self._cleared_powers[(entity.id, time_interval.name)] = (sd_curve, power)
+            _log.debug(f'MARKET: {self.name} settled {time_interval.name}: {len(legs)} legs, {volume / 2:.4g} kW traded, '
+                       f'marginal price {marginal_price:.6g}, average {average:.6g} $/kWh.')
+        if unmatched:
+            _log.warning(f'MARKET: {self.name} had no match in {len(unmatched)} of {len(self.time_intervals)} '
+                         f'intervals; they keep their opening prices: {unmatched}.')
+        if unpriced:
+            _log.warning(f'MARKET: {self.name} matched only market orders against market orders in {len(unpriced)} of '
+                         f'{len(self.time_intervals)} intervals, which discovers no price; the matched quantities are '
+                         f'scheduled at the opening prices: {unpriced}.')
+        # Schedules follow the settlement: the assets' from the cleared powers where an interval settled (an interval
+        # without a match keeps the schedule its curve gives at the opening price), the neighbors' through their own
+        # schedule_power, which reads the same store.
+        for local_asset in self.tn.local_assets:
+            for time_interval in self.time_intervals:
+                if self.cleared_power(local_asset, time_interval) is not None:
+                    local_asset.scheduled_powers.update(time_interval, local_asset.market_power(self, time_interval))
+        for neighbor in self.tn.neighbors:
+            neighbor.schedule_power(self)
+
     def while_in_negotiation(self):
         """
         In this market state, actors may submit from zero to many offer or bid orders to secure a position in this
@@ -391,20 +486,25 @@ class MatchingEngine(Market):
             self._stateIsCompleted = True
         return None
 
-    def get_counteroffers(self, supply_or_demand: SupplyOrDemand or bool or None = SupplyOrDemand.SUPPLY):
+    def get_counteroffers(self, supply_or_demand: SupplyOrDemand or bool or None = SupplyOrDemand.SUPPLY,
+                          time_interval=None):
         """
         Return a list of valid and eligible counteroffer Order objects from the market's orderList.
 
         Parameters:
             supply_or_demand: (SupplyOrDemand enumeration)
+            time_interval: (TimeInterval or None) Only orders for this delivery interval; None means every interval.
+                           An order trades only within its own interval, so matching always passes the new order's.
 
         Returns: (list) of Order objects or None
         """
         return [x for x in self.orderList if x.supply_or_demand == supply_or_demand and x.status in
-                [OrderStatus.STANDING_ORDER, OrderStatus.REVISED_STANDING_ORDER]]
+                [OrderStatus.STANDING_ORDER, OrderStatus.REVISED_STANDING_ORDER]
+                and (time_interval is None or x.interval.name == time_interval.name)]
 
     def get_counteroffer_vertices(self, price: float, supply_or_demand: SupplyOrDemand or bool or None = None,
-                                  continuity: bool or None = None, vertex_type: VTypes or None = None):
+                                  continuity: bool or None = None, vertex_type: VTypes or None = None,
+                                  time_interval=None):
         """
         Returns a qualified list of Vertex counteroffer objects for this Order at the provided price.
 
@@ -420,7 +520,7 @@ class MatchingEngine(Market):
 
         Returns: (list) of Vertex objects
         """
-        counteroffers: list = self.get_counteroffers(supply_or_demand=supply_or_demand)
+        counteroffers: list = self.get_counteroffers(supply_or_demand=supply_or_demand, time_interval=time_interval)
         vertices: list = []
         for co in counteroffers:
             pp: Vertex = co.get_quantity_from_price(test_price=price)
