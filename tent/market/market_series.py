@@ -1,22 +1,26 @@
+import logging
+
 from copy import deepcopy
 from datetime import datetime, timedelta
 from sortedcontainers import SortedList
-from typing import Type, Union
+from typing import Mapping, Type, Union
 from weakref import proxy
 
+from tent import registry
 from tent.base import Component
+from tent.config import (ConfigModel, Configurable, ConfigurationError, NamedConfig, NonNegativeSeconds,
+                         PositiveSeconds, ReconfigurationError, Setting, TimeOfDay, class_spec, enum_by_name)
 from tent.containers import MarketDurations
 from tent.enumerations import MarketState, MarketTypes, Method
 from tent.market import Market
 from tent.market.price_models import PriceModel
-from tent.utils.helpers import get_class_from_spec, safe_weak_proxy_callback, spec_kwargs, validate_bool
+from tent.utils.helpers import get_class_from_spec, safe_weak_proxy_callback, spec_kwargs
+
+
+_log = logging.getLogger(__name__)
 
 
 class MarketSeries(Component):
-    # Keyword arguments that spawn() supplies to the market class; see __init__(**market_kwargs).
-    SPAWN_KEYWORDS = frozenset({'transactive_node', 'market_series', 'initial_market_state', 'transition_times',
-                                'market_to_be_refined', 'prior_market_in_series', 'price_model'})
-
     """
     An object of this class contains all the critical timing and initialization properties of the market objects in a
     series of similar market objects. These properties were initially owned by the market objects and had to be passed
@@ -27,86 +31,87 @@ class MarketSeries(Component):
     Additionally, a MarketSeries constructs its first "dummy" market that jump starts the market state machine for all
     future markets in the series.
     """
-    def __init__(self,
-                 transactive_node,
-                 name: str,
-                 commitment: bool = False,                  # [Boolean] Are scheduled power & price commitments?
-                 default_price: float = 0.05,               # [$/kWh] Static default price assignment
-                 delivery_anchor_time: str | None = None,   # A time of day a market will always start (immediate if None)
-                 description: str = '',
-                 duality_gap_threshold: float = 0.01,       # [dimensionless] 0.01 = 1%
-                 duration_active: float = 0.0,              # [seconds] Length of time between activation and negotiation.
-                 duration_delivery_lead: float = 0.0,       # [seconds] Length of time between clearing and delivery.
-                 duration_market_lead: float = 3600.0,      # [seconds] Length of the market_lead period.
-                 duration_negotiation: float = 0.0,         # [seconds] Length of time allowed for negotiation.
-                 duration_reconciliation: float = 0.0,      # [seconds] Length of time allotted to reconciliation.
-                 future_horizon: Union[timedelta, float] = timedelta(hours=24),  # [seconds or timedelta] Forward window of price-discovery relevance. (Future Use.)
-                 initial_market_state: Union[MarketState, str, int] = MarketState.Inactive, # New market's initial state
-                 interval_duration: Union[timedelta, float] = timedelta(hours=1), # [seconds or timedelta] Length of 1 interval during delivery.
-                 intervals_to_clear: int = 1,               # Number of market intervals to be cleared by each market.
-                 market_class: Type[Market] = Market,       # The subclass of Market spawned by this series.
-                 market_clearing_interval: float = 3600.0,  # [seconds] Time between successive market clearings.
-                 market_order=1,                            # [pos. integer] Ordering of sequential markets  (Unused)
-                 method: Union[Method, str, int] = Method.Interpolation,  # Balancing method (Interpolation is the only one)
-                 price_model: dict = None,                  # Configuration spec for a PriceModel class.
-                 refined_series=None,
-                 **market_kwargs                            # Any further keywords are passed to market_class on spawn.
-                 ):
-        super(MarketSeries, self).__init__(description, name, transactive_node)
-        # Keywords that are not MarketSeries parameters belong to the configured market class (e.g. MatchingEngine's
-        # matching_strategy). They are stored as configured and forwarded verbatim by spawn(); the market class parses
-        # them and records them in its own extension table. Names that spawn() sets itself cannot be configured.
-        reserved = self.SPAWN_KEYWORDS.intersection(market_kwargs)
-        if reserved:
-            raise TypeError(f'MarketSeries {name}: {sorted(reserved)} are set by the series when it spawns markets '
-                            f'and cannot be configured as market keywords.')
-        self.market_kwargs: dict = dict(market_kwargs)
-        self._validate_timings(name, duration_active=duration_active, duration_negotiation=duration_negotiation,
-                               duration_market_lead=duration_market_lead, duration_delivery_lead=duration_delivery_lead,
-                               duration_reconciliation=duration_reconciliation, interval_duration=interval_duration,
-                               intervals_to_clear=intervals_to_clear, market_clearing_interval=market_clearing_interval)
-        self.duration: MarketDurations = MarketDurations.new(duration_active, duration_negotiation,
-                                                             duration_market_lead, duration_delivery_lead,
-                                                             duration_reconciliation, interval_duration,
-                                                             intervals_to_clear, market_clearing_interval,
-                                                             delivery_anchor_time)
+    class Config(NamedConfig):
+        commitment: bool = Setting(False, description='Whether cleared powers and prices are commitments.')
+        default_price: float = Setting(0.05, ge=0, reconfigurable=True,
+                                       description='[$/kWh] price assumed where no market has cleared one.')
+        delivery_anchor_time: TimeOfDay | None = Setting(
+            None, description='Time of day (HH:MM, node zone) at which a delivery period always starts; null means '
+                              'the first market starts at once.')
+        duality_gap_threshold: float = Setting(0.01, gt=0, reconfigurable=True,
+                                               description='[dimensionless] relative duality gap below which a market '
+                                                           'counts as converged; 0.01 is 1%.')
+        duration_active: NonNegativeSeconds = Setting(0.0, description='[s] length of the Active period before '
+                                                                       'negotiation.')
+        duration_delivery_lead: NonNegativeSeconds = Setting(0.0, description='[s] time between clearing and delivery.')
+        duration_market_lead: NonNegativeSeconds = Setting(3600.0, description='[s] length of the MarketLead period.')
+        duration_negotiation: NonNegativeSeconds = Setting(0.0, description='[s] time allowed for negotiation.')
+        duration_reconciliation: NonNegativeSeconds = Setting(0.0, description='[s] time allotted to reconciliation.')
+        future_horizon: PositiveSeconds = Setting(86400, description='[s] forward window of price-discovery relevance '
+                                                                    '(future use).')
+        initial_market_state: enum_by_name(MarketState) = Setting('Inactive',
+                                                                  description='State a new market starts in.')
+        interval_duration: PositiveSeconds = Setting(3600, description='[s] length of one delivery interval.')
+        intervals_to_clear: int = Setting(1, ge=1, description='Number of intervals each market clears.')
+        market_clearing_interval: PositiveSeconds = Setting(3600.0, description='[s] time between successive market '
+                                                                                'clearings.')
+        market_order: int = Setting(1, ge=1, description='Order of this series among the node\'s series.')
+        method: enum_by_name(Method) = Setting('Interpolation', description='Balancing method.')
+        price_model: class_spec('HourlyAveragePriceModel') | None = Setting(
+            None, spec_of='PriceModel', spec_default='HourlyAveragePriceModel',
+            description='The price model (class_name, default HourlyAveragePriceModel, and its settings); the series '
+                        'default_price is its default_price unless given here. Null means the default model.')
+        refined_series: str | None = Setting(None, reference='market_series',
+                                             description='Name of the series whose markets this series refines.')
+
+    # Keys of a market_series configuration that are not settings of the series: its class and its market class.
+    RUNTIME_SPEC_KEYS = frozenset({'class_name', 'module_name', 'market_class_name', 'market_module_name'})
+    # Keyword arguments that spawn() supplies to the market class; see __init__(**market_kwargs).
+    SPAWN_KEYWORDS = Market.RUNTIME_KEYWORDS
+
+    def __init__(self, transactive_node, market_class: Type[Market] = Market, config: ConfigModel | None = None,
+                 **kwargs):
+        """
+        `market_class` is the Market subclass this series spawns (the node resolves it from market_class_name). The
+        keywords that are not settings of the series are settings of that market class, validated by its Config and
+        forwarded verbatim by spawn(); the market class records them in its own extension table.
+        """
+        if not isinstance(market_class, type) or not issubclass(market_class, Market):
+            raise ValueError(f'MarketSeries {kwargs.get("name", "")!r} received {market_class!r}, which is not a Market '
+                             f'class.')
+        series_settings, market_settings = self.split_settings(kwargs) if config is None else ({}, {})
+        cfg = self._configure(config, series_settings)
+        super(MarketSeries, self).__init__(cfg.description, cfg.name, transactive_node, config=cfg)
+        self.market_class: Type[Market] = market_class
+        self.market_config: ConfigModel = self._validate_market_settings(market_class, market_settings)
+        self.market_kwargs: dict = self.market_config.model_dump()
+        self.duration: MarketDurations = MarketDurations.new(cfg.duration_active, cfg.duration_negotiation,
+                                                             cfg.duration_market_lead, cfg.duration_delivery_lead,
+                                                             cfg.duration_reconciliation, cfg.interval_duration,
+                                                             cfg.intervals_to_clear, cfg.market_clearing_interval,
+                                                             cfg.delivery_anchor_time)
         self.markets = SortedList(key=lambda mkt: mkt.transition_times.delivery_lead)  # Sort markets by delivery lead time
 
-        self.commitment: bool = validate_bool(commitment, 'commitment')
-        self.default_price: float = float(default_price)
-        self.duality_gap_threshold: float = float(duality_gap_threshold)
-        self.future_horizon: timedelta = (future_horizon if isinstance(future_horizon, timedelta)
-                                          else timedelta(seconds=future_horizon))
+        self.commitment: bool = cfg.commitment
+        self.default_price: float = float(cfg.default_price)
+        self.duality_gap_threshold: float = float(cfg.duality_gap_threshold)
+        self.future_horizon: timedelta = cfg.future_horizon
         # TODO: Should initial_market_state just always be INITIAL for first object and INACTIVE afterwards?
-        self.initial_market_state: MarketState = (
-            initial_market_state if isinstance(initial_market_state, MarketState)
-            else MarketState(initial_market_state) if isinstance(initial_market_state, int)
-            else MarketState[initial_market_state])
-        if not issubclass(market_class, Market):
-            raise ValueError(f'MarketSeries {self.name} received {market_class}, which is not a valid Market class.')
-        self.market_class: Type[Market] = market_class
-        self.market_order: int = int(market_order)
+        self.initial_market_state: MarketState = cfg.initial_market_state
+        self.market_order: int = int(cfg.market_order)
         self.market_type: MarketTypes = self.market_class.MARKET_TYPE
-        self.method: Method = (method if isinstance(method, Method)
-                               else Method(method) if isinstance(method, int)
-                               else Method[method.title()])
-        # The price model configuration: class_name (HourlyAveragePriceModel unless the configuration says otherwise,
-        # module_name for a class TENT does not ship) and the constructor keywords, default_price among them unless the
-        # configuration overrides it. The configured dict is not modified. Resolved once; constructed at each spawn
-        # until a market exists to copy from.
-        if price_model is not None and not isinstance(price_model, dict):
-            raise TypeError(f'MarketSeries {name}: price_model must be a dict naming the class and its keywords, '
-                            f'not {type(price_model).__name__}')
-        self.price_model_spec: dict = {'class_name': 'HourlyAveragePriceModel', 'default_price': self.default_price,
-                                       **(price_model or {})}
+        self.method: Method = cfg.method
+        # The price model: class_name (HourlyAveragePriceModel unless the configuration says otherwise, module_name for
+        # a class TENT does not ship) and the constructor keywords, default_price among them unless the configuration
+        # overrides it. Resolved once; constructed at each spawn until a market exists to copy from.
+        price_model_spec = cfg.price_model.spec() if cfg.price_model is not None else {'class_name': 'HourlyAveragePriceModel'}
+        self.price_model_spec: dict = {'default_price': self.default_price, **price_model_spec}
         self.price_model_class: Type[PriceModel] = get_class_from_spec(self.price_model_spec, PriceModel)
-        # The series this one refines: given as a MarketSeries, or as its name, which is resolved against the node's
-        # series when first needed (see refined_series and resolve_references; a configured node builds its series one
-        # after another, so the named series may not exist yet).
-        self._refined_series_name: str | None = refined_series if isinstance(refined_series, str) else None
-        self._refined_series: Union[MarketSeries, None] = (
-            proxy(refined_series, safe_weak_proxy_callback(self, '_refined_series'))
-            if isinstance(refined_series, MarketSeries) else None)
+        # The series this one refines, given by name and resolved against the node's series when first needed (see
+        # refined_series and resolve_references; a configured node builds its series one after another, so the named
+        # series may not exist yet).
+        self._refined_series_name: str | None = cfg.refined_series
+        self._refined_series: Union[MarketSeries, None] = None
 
         self.next_clearing_time: datetime = self.duration.get_first_clearing_time()
         # The series row must exist before its first market references it (foreign-key order on PostgreSQL).
@@ -140,6 +145,100 @@ class MarketSeries(Component):
         if not self.markets:
             self.spawn(MarketState.Initial)
 
+    @classmethod
+    def split_settings(cls, settings: Mapping) -> tuple[dict, dict]:
+        """(settings of the series, settings of its market class) from one configuration's keywords."""
+        series = {key: value for key, value in settings.items() if key in cls.Config.model_fields}
+        market = {key: value for key, value in settings.items() if key not in cls.Config.model_fields}
+        return series, market
+
+    def _validate_market_settings(self, market_class: Type[Market], market_settings: Mapping) -> ConfigModel:
+        reserved = self.SPAWN_KEYWORDS.intersection(market_settings)
+        if reserved:
+            raise TypeError(f'MarketSeries {self.name}: {sorted(reserved)} are set by the series when it spawns markets '
+                            f'and cannot be configured as market keywords.')
+        try:
+            return market_class.validate_config(market_settings)
+        except ConfigurationError as error:
+            raise ConfigurationError(f'MarketSeries {self.name!r} (market settings of {error.owner})',
+                                     error.problems) from None
+
+    @classmethod
+    def validate_spec(cls, spec: Mapping, market_class: Type[Market] | None = None) -> ConfigModel:
+        """Validate a market_series configuration: the series settings through this Config, the remaining keys through
+        the Config of the market class (`market_class`, or the one market_class_name names; Market when none)."""
+        settings = {key: value for key, value in spec.items() if key not in cls.RUNTIME_SPEC_KEYS}
+        series_settings, market_settings = cls.split_settings(settings)
+        cfg = cls.validate_config(series_settings)
+        cls.validate_nested_specs(cfg, cls.describe(settings))
+        if market_class is None:
+            market_class = (registry.resolve(spec['market_class_name'], Market, spec.get('market_module_name'))
+                            if 'market_class_name' in spec else Market)
+        if market_class.declares_config():
+            try:
+                market_class.validate_config(market_settings)
+            except ConfigurationError as error:
+                raise ConfigurationError(f'{cls.describe(settings)} (market settings of {error.owner})',
+                                         error.problems) from None
+        return cfg
+
+    # ------------------------------------------------------------------------------------------- reconfiguration
+
+    def check_reconfigure(self, changes: Mapping) -> ConfigModel:
+        """Series settings and market settings may both be changed; each is checked against its own Config."""
+        series_changes, market_changes = self.split_settings(changes)
+        if market_changes:
+            refused = sorted(set(market_changes) - self.market_class.Config.reconfigurable_fields())
+            if refused:
+                raise ReconfigurationError(
+                    f'{self.describe(name=self.name)}: market settings {refused} cannot be changed on a running series '
+                    f'(reconfigurable settings of {self.market_class.__name__} are '
+                    f'{sorted(self.market_class.Config.reconfigurable_fields())}). Rebuild the node for other changes.')
+            try:
+                self._validate_market_settings(self.market_class, {**self.market_kwargs, **market_changes})
+            except (ConfigurationError, TypeError) as error:
+                raise ReconfigurationError(str(error)) from None
+        return super().check_reconfigure(series_changes)
+
+    def reconfigure(self, changes: Mapping) -> None:
+        """Series settings are applied to the series; market settings to the live markets (each archives its own new
+        version) and to every market spawned later. One configuration version records both."""
+        series_changes, market_changes = self.split_settings(changes)
+        new_config = self.check_reconfigure(changes)
+        if market_changes:
+            self.market_config = self._validate_market_settings(self.market_class,
+                                                                {**self.market_kwargs, **market_changes})
+            self.market_kwargs = self.market_config.model_dump()
+            for market in list(self.markets):
+                market.reconfigure(market_changes)
+        self._apply_reconfiguration(new_config, set(series_changes))
+        self.config = new_config
+        self.config_version += 1
+        _log.info(f'{self.describe(name=self.name)} reconfigured {sorted(changes)} (configuration version '
+                  f'{self.config_version}).')
+        self._configuration_changed(set(changes))
+
+    def _apply_reconfiguration(self, cfg, changed: set[str]) -> None:
+        super()._apply_reconfiguration(cfg, changed)
+        if 'default_price' in changed:
+            self.price_model_spec['default_price'] = self.default_price
+
+    def configuration_record(self) -> dict:
+        record = super().configuration_record()
+        record['market_class_name'] = self.market_class.__name__
+        record.update(self.market_config.model_dump(mode='json', fallback=repr))
+        return record
+
+    def diff_configuration(self, settings: Mapping) -> dict:
+        """The changes (field -> new value) that would take this series from its configuration to `settings`, both the
+        series settings and the market settings."""
+        series_settings, market_settings = self.split_settings(settings)
+        changes = Configurable.diff_configuration(self, series_settings)
+        new_market = self._validate_market_settings(self.market_class, market_settings)
+        for name in self.market_config.changed_fields(new_market):
+            changes[name] = getattr(new_market, name)
+        return changes
+
     def __iter__(self):
         """Allow iteration over the series' markets."""
         return iter(self.markets)
@@ -165,25 +264,9 @@ class MarketSeries(Component):
         reaches the model's constructor, so a misspelt or unsupported keyword fails here rather than being ignored."""
         try:
             return self.price_model_class(**spec_kwargs(self.price_model_spec))
-        except TypeError as error:
-            raise TypeError(f'MarketSeries {self.name}: price_model {self.price_model_class.__name__} rejected its '
-                            f'keywords {sorted(spec_kwargs(self.price_model_spec))}: {error}') from error
-
-    @staticmethod
-    def _validate_timings(name: str, **timings):
-        """Refuse timings that cannot make a working series, naming the configuration field."""
-        def seconds(value):
-            return value.total_seconds() if isinstance(value, timedelta) else float(value)
-        for field in ('duration_active', 'duration_negotiation', 'duration_market_lead', 'duration_delivery_lead',
-                      'duration_reconciliation'):
-            if seconds(timings[field]) < 0:
-                raise ValueError(f'MarketSeries {name}: {field} must not be negative; got {timings[field]!r}')
-        for field in ('interval_duration', 'market_clearing_interval'):
-            if seconds(timings[field]) <= 0:
-                raise ValueError(f'MarketSeries {name}: {field} must be positive; got {timings[field]!r}')
-        if int(timings['intervals_to_clear']) < 1:
-            raise ValueError(f'MarketSeries {name}: intervals_to_clear must be at least 1; '
-                             f'got {timings["intervals_to_clear"]!r}')
+        except ConfigurationError as error:
+            raise ConfigurationError(f'MarketSeries {self.name!r}: price_model {error.owner} rejected its keywords '
+                                     f'{sorted(spec_kwargs(self.price_model_spec))}', error.problems) from None
 
     @property
     def intervals_to_clear(self):

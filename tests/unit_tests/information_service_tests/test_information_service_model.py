@@ -20,17 +20,18 @@ def tn():
     return MockTN()
 
 
-def test_type_and_units_accept_names_members_and_values(tn):  # audit T-31
+def test_type_and_units_accept_names_and_members_not_values(tn):  # audit T-31
     by_name = ConstantService(tn, name='a', information_type='Temperature', information_units='degF')
     by_member = ConstantService(tn, name='b', information_type=MeasurementType.Temperature,
                                 information_units=MeasurementUnit.degF)
-    by_value = ConstantService(tn, name='c', information_type=MeasurementType.Temperature.value,
-                               information_units=MeasurementUnit.degF.value)
-    for service in (by_name, by_member, by_value):
+    for service in (by_name, by_member):
         assert service.information_type is MeasurementType.Temperature
         assert service.information_units is MeasurementUnit.degF
         assert service.predicted_values.type is MeasurementType.Temperature
-    with pytest.raises(KeyError):
+    with pytest.raises(ValueError, match="ConstantService 'c': information_type: must be the name of a MeasurementType"):
+        ConstantService(tn, name='c', information_type=MeasurementType.Temperature.value,
+                        information_units=MeasurementUnit.degF.value)
+    with pytest.raises(ValueError, match="information_type: must be the name of a MeasurementType member.*'NoSuchType'"):
         ConstantService(tn, name='d', information_type='NoSuchType')
 
 

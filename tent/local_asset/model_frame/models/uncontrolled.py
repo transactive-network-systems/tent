@@ -1,16 +1,28 @@
 import datetime
 import logging
 
+from tent.config import Coefficients24, Setting
+
 from .base import Model
 
 _log = logging.getLogger(__name__)
 
 
 class UncontrolledLoad(Model):
+    class Config(Model.Config):
+        uncontrolled_load_schedule: Coefficients24 = Setting(..., reconfigurable=True,
+                                                             description='[kW] load per hour of day.')
+
     def __init__(self, config, **kwargs):
+        super(UncontrolledLoad, self).__init__(config, **kwargs)
         self.actuation_key = None
-        self.load_schedule = config['uncontrolled_load_schedule']
-        self.n_points = config.get("demand_curve_points", 2)
+        self.load_schedule = list(self.config.uncontrolled_load_schedule)
+        self.n_points = self.config.demand_curve_points
+
+    def _apply_reconfiguration(self, cfg, changed: set[str]) -> None:
+        super()._apply_reconfiguration(cfg, changed - {'uncontrolled_load_schedule'})
+        if 'uncontrolled_load_schedule' in changed:
+            self.load_schedule = list(cfg.uncontrolled_load_schedule)
 
     def predict_flexibility(self, params=None):
         power = self.predict_power(params)

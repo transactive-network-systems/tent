@@ -51,7 +51,8 @@ Below is an annotated JSON structure defining a campus building asset with physi
            "subscribe_key": "devices/uncontrolled_baseload",
            "class_name": "UncontrolledLoad",
            "model_config": {
-             "default_power": -45.0
+             "uncontrolled_load_schedule": [45.0, 45.0, 45.0, 45.0, 45.0, 45.0, 45.0, 45.0, 45.0, 45.0, 45.0, 45.0,
+                                            45.0, 45.0, 45.0, 45.0, 45.0, 45.0, 45.0, 45.0, 45.0, 45.0, 45.0, 45.0]
            }
          }
        ]
@@ -72,3 +73,7 @@ Configuration Properties
   ``tent.local_asset.model_frame.models.Model``.
 * ``occupancy_manager`` and ``actuation_manager``: Optional blocks naming their class the same way;
   ``SimpleOccupancyManager`` and ``NullActuationManager`` apply when a block gives no ``class_name``.
+* Every key of the asset block and of each ``model_config`` is a field of the class's ``Config`` model
+  (``ModelFrameAsset.Config``, ``Lighting.Config``, ...); an unknown key is a configuration error naming the asset,
+  the model and the key. The fields, their units and which of them a running asset may change in place are read from
+  the models as described in :ref:`Configuration_Models`.

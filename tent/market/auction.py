@@ -43,9 +43,9 @@ under Contract DE-AC05-76RL01830
 
 import logging
 
+from tent.config import ConfigModel, Setting
 from tent.enumerations import Direction, MarketTypes
 from tent.market import Market
-from tent.utils.helpers import validate_bool
 
 _log = logging.getLogger(__name__)
 
@@ -58,16 +58,18 @@ class Auction(Market):
     """
     MARKET_TYPE = MarketTypes.auction
 
-    def __init__(self, *args, actuate_assets: bool = True, **kwargs):
-        """
-        actuate_assets: whether this auction tells the local assets to actuate when it enters Delivery. A series whose
-        delivery periods are later refined by another series (a day-ahead auction corrected by a real-time one) is
-        configured with False, so that only the refining market actuates. Configured on the series like any other
-        market keyword: ``"actuate_assets": false``. Recorded in the ``auction`` extension table.
-        """
+    class Config(Market.Config):
+        actuate_assets: bool = Setting(
+            True, description='Whether this auction tells the local assets to actuate when it enters Delivery. False for '
+                              'a series whose delivery periods are refined by another series (a day-ahead auction '
+                              'corrected by a real-time one), so that only the refining market actuates.')
+
+    def __init__(self, *args, config: ConfigModel | None = None, **kwargs):
+        runtime, settings = self.split_keywords(kwargs)
+        cfg = self._configure(config, settings)
         # Recorded by get_record(), so it must exist before Market.__init__ archives the market row.
-        self.actuate_assets: bool = validate_bool(actuate_assets, 'actuate_assets')
-        super(Auction, self).__init__(*args, **kwargs)
+        self.actuate_assets: bool = cfg.actuate_assets
+        super(Auction, self).__init__(*args, config=cfg, **runtime)
 
     def _actuate_assets(self):
         if not self.actuate_assets:

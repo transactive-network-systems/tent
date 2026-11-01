@@ -58,7 +58,7 @@ def _node_with_forecast(tmp_path, extra_services=()):
     forecaster = TemperatureForecastModel(transactive_node=tn, name='Weather', weather_file_path=str(weather))
     tn.information_service_models = [forecaster, *extra_services(tn)] if extra_services else [forecaster]
     # dow intercepts of zero, every month in season 1, every table row (intercept 0, factor 1): load is -temperature.
-    predictor = OpenLoopLoadPredictor(transactive_node=tn, name='City', cost_parameters=[], information_services=['Weather'],
+    predictor = OpenLoopLoadPredictor(transactive_node=tn, name='City', information_services=['Weather'],
                                       dow_intercept=[0.0] * 7, season=[1] * 12, values=[[0, 1]] * 144,
                                       default_temperature=56.6)
     tn.local_assets, tn.neighbors = [predictor], []

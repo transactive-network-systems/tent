@@ -10,7 +10,6 @@
   "data_manager": {
     "class_name": "LocalDataManager",
     "db_params": {
-      "db_type": "sqlite",
       "url": "sqlite:///testent.sqlite"
     }
   },
@@ -31,7 +30,7 @@
     {
       "class_name": "TemperatureForecastModel",
       "name": "TemperatureForecast",
-      "location": "",
+      "location": null,
       "temperature_point_name": "",
       "tmy_fallback_path": "",
       "weather_file_path": "sample_configs/temperature_forecast_model/pasco_2017_dry_bulb_temperature.csv"

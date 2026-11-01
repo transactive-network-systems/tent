@@ -69,7 +69,7 @@ class TestConfiguration:
 
     def test_response_type_must_be_price_or_quantity(self):
         tn, _ = node_and_market()
-        with pytest.raises(ValueError, match="response_type must be one of"):
+        with pytest.raises(ValueError, match="response_type"):
             price_neighbor(tn, response_type='curve')
 
     def test_subscribe_key_is_required(self):
@@ -88,7 +88,7 @@ class TestConfiguration:
             price_neighbor(tn, curtailment_reward=0.1)
         with pytest.raises(ValueError, match='needs a power range'):
             quantity_neighbor(tn, curtailment_reward=0.1, minimum_power=0.0, maximum_power=0.0)
-        with pytest.raises(ValueError, match='finite non-negative'):
+        with pytest.raises(ValueError, match='greater than or equal to 0'):
             quantity_neighbor(tn, curtailment_reward=-0.1)
         assert quantity_neighbor(tn, curtailment_reward=0.1).curtailment_reward == 0.1
 

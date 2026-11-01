@@ -56,8 +56,9 @@ class MarketDurations:
     @classmethod
     def new(cls, active, negotiation, market_lead, delivery_lead, reconciliation,
             market_interval, intervals_to_clear: int, market_clearing_interval,
-            delivery_anchor_time: str | None):
-        """Factory that tolerates either float seconds or timedelta inputs for duration fields."""
+            delivery_anchor_time: time | str | None):
+        """Factory that takes either float seconds or timedelta inputs for duration fields, and the anchor time as a
+        time or an HH:MM string."""
         def to_td(v):
             return v if isinstance(v, timedelta) else timedelta(seconds=float(v))
 
@@ -70,7 +71,8 @@ class MarketDurations:
             market_interval=to_td(market_interval),
             intervals_to_clear=int(intervals_to_clear),
             market_clearing_interval=to_td(market_clearing_interval),
-            delivery_anchor_time=time.fromisoformat(delivery_anchor_time) if delivery_anchor_time else None
+            delivery_anchor_time=(delivery_anchor_time if isinstance(delivery_anchor_time, time)
+                                  else time.fromisoformat(delivery_anchor_time) if delivery_anchor_time else None)
         )
 
     def get_timings(self, clearing_time: datetime | str) -> MarketTimings:

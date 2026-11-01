@@ -4,6 +4,7 @@ import weakref
 from abc import ABCMeta, abstractmethod
 from weakref import proxy
 
+from tent.config import ConfigModel, Configurable, NonNegativeSeconds, Setting
 from tent.local_asset import LocalAsset
 from tent.transactive_node import TransactiveNode
 from tent.utils.helpers import safe_weak_proxy_callback
@@ -13,36 +14,35 @@ from ..occupancy_manager import OccupancyManager
 _log = logging.getLogger(__name__)
 
 
-class ActuationManager(metaclass=ABCMeta):
-    def __init__(self,
-                 active_onstart: bool = True,
-                 control_interval: float = 60,
-                 # outputs: Dict[dict] = None,  # TODO: How is this handled in parent?
-                 parent: LocalAsset = None,
-                 occupancy_manager: OccupancyManager = None,
-                 transactive_node: TransactiveNode = None,
-                 **kwargs):
-        self.active_onstart = active_onstart
-        self.control_interval = control_interval
-        # self.outputs = outputs if outputs else []
+class ActuationManager(Configurable, metaclass=ABCMeta):
+    """
+    Writes an asset's cleared schedule to its devices. Configured in a ModelFrameAsset's ``actuation_manager`` block
+    (class_name and the settings of its Config); the asset supplies ``parent``, ``occupancy_manager`` and
+    ``transactive_node`` when it builds the manager.
+    """
+    class Config(ConfigModel):
+        active_onstart: bool = Setting(True, description='Whether actuation is allowed as soon as the node starts.')
+        control_interval: NonNegativeSeconds = Setting(60, description='[s] interval between control actions.')
+
+    def __init__(self, parent: LocalAsset = None, occupancy_manager: OccupancyManager = None,
+                 transactive_node: TransactiveNode = None, config: ConfigModel | None = None, **kwargs):
+        cfg = self._configure(config, kwargs)
+        self.active_onstart = cfg.active_onstart
+        self.control_interval = cfg.control_interval
         self.parent = parent if parent else LocalAsset(transactive_node)
         # Optional: without one, actuation is allowed whenever the manager is active (see actuate()).
-        self.occupancy_manager = (proxy(occupancy_manager, safe_weak_proxy_callback(self, 'occupancy_manager'))
-                                  if occupancy_manager is not None else None)
+        self.occupancy_manager = None
+        self.set_occupancy_manager(occupancy_manager)
         self.tn = transactive_node
 
         self.actuation_active = False
         self.actuation_allowed = True if self.active_onstart else False
         self.actuation_periodic = None
 
-        # if self.outputs:
-        #     if self.tn and self.tn():
-        #         tn = self.tn()
-        #         tn.vip.pubsub.subscribe(peer='pubsub', prefix=self.enable_topic, callback=self.update_actuation_state)
-        #     if self.active_onstart:
-        #         self.update_actuation_state(True)
-        # else:
-        #     _log.info(f"{self.parent.name} - cannot initialize actuation state, no configured outputs.")
+    def set_occupancy_manager(self, occupancy_manager: OccupancyManager | None) -> None:
+        """Use `occupancy_manager` (held weakly; the asset owns it) to decide when actuation is allowed."""
+        self.occupancy_manager = (proxy(occupancy_manager, safe_weak_proxy_callback(self, 'occupancy_manager'))
+                                  if occupancy_manager is not None else None)
 
     @abstractmethod
     def actuate(self, mkt):

@@ -25,8 +25,8 @@ def market_with_entities():
     tn = MockTN()
     market = make_market(tn)
     ti = market.time_intervals[0]
-    asset = LocalAsset(transactive_node=tn, cost_parameters=[])
-    neighbor = Neighbor(transactive_node=tn, cost_parameters=[])
+    asset = LocalAsset(transactive_node=tn)
+    neighbor = Neighbor(transactive_node=tn)
     tn.local_assets, tn.neighbors = [asset], [neighbor]
     neighbor.active_vertices.update(ti, curve(ti, [Vertex(0.02, 0, 0), Vertex(0.05, 0, 10)]))
     asset.active_vertices.update(ti, curve(ti, [Vertex(INF, 0, -4)]))
@@ -55,8 +55,8 @@ def test_balance_brackets_a_price_step_with_the_vertices_nearest_the_crossing():
     tn = MockTN()
     market = make_market(tn)
     ti = market.time_intervals[0]
-    load = LocalAsset(transactive_node=tn, cost_parameters=[])
-    supplier = Neighbor(transactive_node=tn, cost_parameters=[])
+    load = LocalAsset(transactive_node=tn, cost_parameters=[0.0, 0.0, 0.0])
+    supplier = Neighbor(transactive_node=tn, cost_parameters=[0.0, 0.0, 0.0])
     tn.local_assets, tn.neighbors = [load], [supplier]
     load.active_vertices.update(ti, curve(ti, [Vertex(0.04, 0, -100), Vertex(0.08, 0, -20)]))
     supplier.active_vertices.update(ti, curve(ti, [Vertex(0.10, 0, 0), Vertex(0.10, 0, 50)]))
@@ -86,11 +86,11 @@ class TestClearedPowers:
         tn = MockTN()
         market = make_market(tn)
         ti = market.time_intervals[0]
-        load = LocalAsset(transactive_node=tn, cost_parameters=[])
+        load = LocalAsset(transactive_node=tn, cost_parameters=[0.0, 0.0, 0.0])
         load.active_vertices.update(ti, curve(ti, [Vertex(INF, 0, load_quantity)]))
         suppliers = []
         for vertices in supplier_curves:
-            supplier = Neighbor(transactive_node=tn, cost_parameters=[])
+            supplier = Neighbor(transactive_node=tn, cost_parameters=[0.0, 0.0, 0.0])
             supplier.active_vertices.update(ti, curve(ti, vertices))
             suppliers.append(supplier)
         tn.local_assets, tn.neighbors = [load], suppliers
@@ -201,8 +201,8 @@ class TestSumVertices:
         tn = MockTN()
         market = make_market(tn)
         ti = market.time_intervals[0]
-        asset = LocalAsset(transactive_node=tn, cost_parameters=[])
-        neighbor = Neighbor(transactive_node=tn, cost_parameters=[])
+        asset = LocalAsset(transactive_node=tn)
+        neighbor = Neighbor(transactive_node=tn)
         tn.local_assets, tn.neighbors = [asset], [neighbor]
         asset.active_vertices.update(ti, curve(ti, [Vertex(0.2, 0, -110), Vertex(0.2, 0, -90)]))
         neighbor.active_vertices.update(ti, curve(ti, [Vertex(0.1, 0, 0), Vertex(0.3, 0, 200)]))
@@ -263,8 +263,8 @@ class TestRefreshPricesFromPriorMarket:
         tn = MockTN()
         prior = make_market(tn, clearing_time=self.T, intervals_to_clear=2)
         later = self.successor_of(tn, prior)
-        asset = LocalAsset(transactive_node=tn, cost_parameters=[])
-        neighbor = Neighbor(transactive_node=tn, cost_parameters=[])
+        asset = LocalAsset(transactive_node=tn, cost_parameters=[0.0, 0.0, 0.0])
+        neighbor = Neighbor(transactive_node=tn, cost_parameters=[0.0, 0.0, 0.0])
         tn.local_assets, tn.neighbors = [asset], [neighbor]
         for ti in later.time_intervals:
             neighbor.active_vertices.update(ti, curve(ti, [Vertex(0.02, 0, 0), Vertex(0.05, 0, 10)]))

@@ -33,14 +33,17 @@ and calls `market.on_local_change(self)`, so a `ConsensusMarket` rebalances and 
 """
 import logging
 import math
+from typing import Literal
 from datetime import datetime, timezone
 
+from pydantic import model_validator
 from sortedcontainers import SortedDict
 
 from tent.containers import SDCurve, Vertex
 from tent.enumerations import MarketState
 from tent.neighbor import Neighbor
 from tent.utils.helpers import require_aware
+from tent.config import ConfigModel, Setting
 
 _log = logging.getLogger(__name__)
 
@@ -57,33 +60,36 @@ _SETTLED_STATES = frozenset({MarketState.DeliveryLead, MarketState.Delivery, Mar
 class ResponseNeighbor(Neighbor):
     """A non-transactive neighbor that states only a price or only a quantity (see the module docstring)."""
 
-    def __init__(self, transactive_node, *, response_type: str, subscribe_key: str,
-                 curtailment_reward: float | None = None, transactive: bool = False, **kwargs):
-        if transactive:
-            raise ValueError(f'ResponseNeighbor {kwargs.get("name", "")!r} neither sends nor accepts transactive '
-                             f'signals; transactive must be false.')
-        if response_type not in RESPONSE_TYPES:
-            raise ValueError(f'ResponseNeighbor {kwargs.get("name", "")!r}: response_type must be one of '
-                             f'{RESPONSE_TYPES}, not {response_type!r}.')
-        if not isinstance(subscribe_key, str) or not subscribe_key:
-            raise ValueError(f'ResponseNeighbor {kwargs.get("name", "")!r}: subscribe_key must be a non-empty string, '
-                             f'not {subscribe_key!r}.')
-        super(ResponseNeighbor, self).__init__(transactive_node, transactive=False, **kwargs)
-        self.response_type: str = response_type
-        self.subscribe_key: str = subscribe_key
-        self.curtailment_reward: float | None = None
-        if curtailment_reward is not None:
-            if response_type != 'quantity':
-                raise ValueError(f'ResponseNeighbor {self.name}: curtailment_reward applies to the quantity form only.')
-            self.curtailment_reward = float(curtailment_reward)
-            if not math.isfinite(self.curtailment_reward) or self.curtailment_reward < 0:
-                raise ValueError(f'ResponseNeighbor {self.name}: curtailment_reward must be a finite non-negative '
-                                 f'$/kWh, not {curtailment_reward!r}.')
-        if (response_type == 'price' or self.curtailment_reward is not None) and not self.has_power_range:
-            what = 'the price form' if response_type == 'price' else 'a curtailment reward'
+    class Config(Neighbor.Config):
+        response_type: Literal['price', 'quantity'] = Setting(
+            ..., description="What the counterparty states: 'price' ($/kWh, a flat curve across the power range) or "
+                             "'quantity' (kW, an inelastic vertex).")
+        subscribe_key: str = Setting(..., min_length=1,
+                                     description='Subscription key on which the stated schedule arrives: a list of '
+                                                 '{"start_time", "value"} entries or a single number for every interval.')
+        curtailment_reward: float | None = Setting(None, ge=0, reconfigurable=True,
+                                                   description='$/kWh paid for curtailing to the stated quantity '
+                                                               '(quantity form only): a price step at the quantity.')
+
+        @model_validator(mode='after')
+        def _not_transactive(self):
+            if self.transactive:
+                raise ValueError('a ResponseNeighbor neither sends nor accepts transactive signals; transactive must '
+                                 'be false')
+            if self.curtailment_reward is not None and self.response_type != 'quantity':
+                raise ValueError('curtailment_reward applies to the quantity form only')
+            return self
+
+    def __init__(self, transactive_node, config: ConfigModel | None = None, **kwargs):
+        cfg = self._configure(config, kwargs)
+        super(ResponseNeighbor, self).__init__(transactive_node, config=cfg)
+        self.response_type: str = cfg.response_type
+        self.subscribe_key: str = cfg.subscribe_key
+        self.curtailment_reward: float | None = cfg.curtailment_reward
+        if (self.response_type == 'price' or self.curtailment_reward is not None) and not self.has_power_range:
+            what = 'the price form' if self.response_type == 'price' else 'a curtailment reward'
             raise ValueError(f'ResponseNeighbor {self.name}: {what} needs a power range, minimum_power below '
                              f'maximum_power; got {self.minimum_power} and {self.maximum_power}.')
-
         # The stated schedule: value by the aware start time from which it holds (see value_for).
         self.stated_values: SortedDict = SortedDict()
         # (market name, interval name) pairs whose missing value has been reported.

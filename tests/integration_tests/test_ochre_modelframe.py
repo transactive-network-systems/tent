@@ -191,7 +191,7 @@ def _build_node_config() -> dict:
                                 "c4": _C4,
                                 "nominal_setpoint": 22.8,
                                 "max_set_point_offset": 2.0,
-                                "actuation_topic": "hvac/cooling_sp",
+                                "actuation_key": "hvac/cooling_sp",
                             },
                         }
                     ],

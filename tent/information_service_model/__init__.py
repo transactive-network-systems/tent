@@ -43,9 +43,9 @@ under Contract DE-AC05-76RL01830
 import abc
 
 from datetime import datetime, timedelta
-from typing import Union
 
 from tent.base import Component
+from tent.config import ConfigModel, NamedConfig, Seconds, Setting, enum_by_name
 from tent.containers import Measurement
 from tent.enumerations import MeasurementType, MeasurementUnit
 
@@ -54,28 +54,20 @@ class InformationServiceModel(Component):
     """InformationServiceModel
         Manages an InformationService and predicts or interpolates the information it provides."""
 
-    def __init__(self,
-                 transactive_node,
-                 description='',
-                 information_type: Union[int, str, MeasurementType] = MeasurementType.Unknown,
-                 information_units: Union[int, str, MeasurementUnit] = MeasurementUnit.Unknown,
-                 update_period: Union[float, timedelta] = timedelta(hours=1),
-                 name='',
-                 update_interval: Union[float, timedelta] = timedelta(hours=1)
-                 ):
-        super(InformationServiceModel, self).__init__(description, name, transactive_node)
-        self.information_type: MeasurementType = (
-            information_type if isinstance(information_type, MeasurementType)
-            else MeasurementType(information_type) if isinstance(information_type, int)
-            else MeasurementType[information_type])
-        self.information_units: MeasurementUnit = (
-            information_units if isinstance(information_units, MeasurementUnit)
-            else MeasurementUnit(information_units) if isinstance(information_units, int)
-            else MeasurementUnit[information_units])
-        self.update_interval: timedelta = update_interval if isinstance(update_interval, timedelta) \
-            else timedelta(seconds=update_interval)  # [h]
-        self.update_period: timedelta = update_period if isinstance(update_period, timedelta)\
-            else timedelta(seconds=update_period) # [h]
+    class Config(NamedConfig):
+        information_type: enum_by_name(MeasurementType) = Setting(
+            'Unknown', description='Kind of information the service provides (consumers select a service by type).')
+        information_units: enum_by_name(MeasurementUnit) = Setting('Unknown', description='Units of the values.')
+        update_period: Seconds = Setting(3600, description='[s] period over which the information is reported.')
+        update_interval: Seconds = Setting(3600, description='[s] interval between updates of the information.')
+
+    def __init__(self, transactive_node, config: ConfigModel | None = None, **kwargs):
+        cfg = self._configure(config, kwargs)
+        super(InformationServiceModel, self).__init__(cfg.description, cfg.name, transactive_node, config=cfg)
+        self.information_type: MeasurementType = cfg.information_type
+        self.information_units: MeasurementUnit = cfg.information_units
+        self.update_interval: timedelta = cfg.update_interval
+        self.update_period: timedelta = cfg.update_period
 
         # These are dynamic properties that are assigned in code and should not be manually configured:
         self.last_modified: datetime | None = None

@@ -4,6 +4,7 @@ explicit module_name for classes from elsewhere, the tent.components entry point
 that read their configuration dictionaries without consuming them.
 """
 import importlib.metadata
+from datetime import timedelta
 from copy import deepcopy
 from unittest.mock import Mock, patch
 
@@ -245,7 +246,7 @@ def test_model_frame_asset_managers_default_to_the_simple_and_null_classes():
                             occupancy_manager={'schedule': {}}, actuation_manager={'control_interval': 30})
     assert isinstance(asset.occupancy_manager, SimpleOccupancyManager)
     assert isinstance(asset.actuation_manager, NullActuationManager)
-    assert asset.actuation_manager.control_interval == 30 and asset.actuation_manager.tn is tn
+    assert asset.actuation_manager.control_interval == timedelta(seconds=30) and asset.actuation_manager.tn is tn
     assert asset.actuation_manager.parent is asset
 
 

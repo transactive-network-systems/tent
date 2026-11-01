@@ -6,8 +6,7 @@ _log = logging.getLogger(__name__)
 
 
 class NullActuationManager(ActuationManager):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    Config = ActuationManager.Config
 
     def actuate(self, mkt):
         pass

@@ -4,22 +4,37 @@ from datetime import datetime
 
 from tent.utils.helpers import linspace
 
+from tent.config import Coefficients24, Setting
+
 from .base import Model
 
 _log = logging.getLogger(__name__)
 
 
 class Lighting(Model):
+    class Config(Model.Config):
+        rated_power: float = Setting(..., ge=0, reconfigurable=True, description='[kW] power at full output.')
+        max_set_point_offset: float = Setting(0.1, ge=0, reconfigurable=True,
+                                              description='[fraction of full output] largest dimming offset from the '
+                                                          'scheduled level offered.')
+        default_lighting_schedule: Coefficients24 = Setting(
+            [1.0] * 24, reconfigurable=True,
+            description='[fraction of full output] scheduled lighting level per hour of day.')
+        actuation_key: str | None = Setting(None, description='Point the actuation manager writes the level to.')
+
     def __init__(self, config, **kwargs):
-        self.rated_power = config["rated_power"]
-        self.max_set_point_offset = config.get('max_set_point_offset', 0.1)
-        self.n_points = config.get("demand_curve_points", 2)
-        self.actuation_key = config.get('actuation_key', None)
-        try:
-            self.lighting_schedule = config["default_lighting_schedule"]
-        except KeyError:
-            _log.warning("No no default lighting schedule!")
-            self.lighting_schedule = [1.0]*24
+        super(Lighting, self).__init__(config, **kwargs)
+        cfg = self.config
+        self.rated_power = cfg.rated_power
+        self.max_set_point_offset = cfg.max_set_point_offset
+        self.n_points = cfg.demand_curve_points
+        self.actuation_key = cfg.actuation_key
+        self.lighting_schedule = list(cfg.default_lighting_schedule)
+
+    def _apply_reconfiguration(self, cfg, changed: set[str]) -> None:
+        super()._apply_reconfiguration(cfg, changed - {'default_lighting_schedule'})
+        if 'default_lighting_schedule' in changed:
+            self.lighting_schedule = list(cfg.default_lighting_schedule)
 
     def predict_flexibility(self, params=None):
         interval_time: datetime = params.get('interval_time')

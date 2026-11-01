@@ -41,21 +41,28 @@ operated by BATTELLE for the UNITED STATES DEPARTMENT OF ENERGY
 under Contract DE-AC05-76RL01830
 """
 
+from tent.config import ConfigModel
 from tent.containers import Vertex
 from tent.local_asset import LocalAsset
 
 
 class SimpleBuilding(LocalAsset):
 
-    def __init__(self, *args, **kwargs):
+    Config = LocalAsset.Config
+
+    def __init__(self, transactive_node, config: ConfigModel | None = None, **kwargs):
         self.off_peak_vertex = Vertex(price=float('Inf'), quantity=-10, cost=0)
         self.on_peak_vertex0 = Vertex(price=0.03, quantity=-12, cost=0)
         self.on_peak_vertex1 = Vertex(price=0.05, quantity=-8, cost=0)
         # TODO: Does it actually make sense for these to be default vertices?
         #  That would imply they are a single SDCurve, no? They don't appear to be....
-        super(SimpleBuilding, self).__init__(
-            default_vertices=[self.off_peak_vertex, self.on_peak_vertex0, self.on_peak_vertex1],
-            *args, **kwargs)
+        if config is not None:
+            raise TypeError('SimpleBuilding builds its own default vertices and takes keyword settings only.')
+        if kwargs.get('default_vertices') is not None:
+            raise ValueError(f'{self.describe(kwargs)}: default_vertices are fixed by SimpleBuilding and cannot be '
+                             f'configured.')
+        kwargs = {**kwargs, 'default_vertices': [self.off_peak_vertex, self.on_peak_vertex0, self.on_peak_vertex1]}
+        super(SimpleBuilding, self).__init__(transactive_node, **kwargs)
 
     def schedule(self, market):
         self.schedule_power(market)

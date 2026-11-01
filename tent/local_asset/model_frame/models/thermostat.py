@@ -44,6 +44,8 @@ import logging
 
 from tent.utils.helpers import linspace
 
+from tent.config import Coefficients24, Setting
+
 from .base import Model
 
 _log = logging.getLogger(__name__)
@@ -56,25 +58,58 @@ TIN = "ZoneTemperature"
 
 
 class Thermostat(Model):
+    class Config(Model.Config):
+        c1: Coefficients24 = Setting(..., reconfigurable=True,
+                                     description='Regression coefficient of the cooling set point, per hour of day.')
+        c2: Coefficients24 = Setting(..., reconfigurable=True,
+                                     description='Regression coefficient of the room temperature, per hour of day.')
+        c3: Coefficients24 = Setting(..., reconfigurable=True,
+                                     description='Regression coefficient of the outdoor air temperature, per hour of '
+                                                 'day.')
+        c4: Coefficients24 = Setting(..., reconfigurable=True, description='Regression intercept, per hour of day.')
+        rated_power: float = Setting(..., ge=0, reconfigurable=True,
+                                     description='[kW] power of the unit at a duty cycle of 1.')
+        nominal_setpoint: float = Setting(22.8, reconfigurable=True,
+                                          description='[degC] cooling set point around which flexibility is offered.')
+        unoccupied_set_point: float | None = Setting(None, reconfigurable=True,
+                                                     description='[degC] set point while unoccupied; null means the '
+                                                                 'nominal set point.')
+        max_set_point_offset: float = Setting(2.0, ge=0, reconfigurable=True,
+                                              description='[degC] largest offset from the nominal set point offered.')
+        oat: float = Setting(0.0, description='[degC] outdoor air temperature before the first measurement.')
+        csp: float = Setting(22.8, description='[degC] cooling set point before the first measurement.')
+        room_temp: float = Setting(22.8, description='[degC] room temperature before the first measurement.')
+        actuation_key: str | None = Setting(None, description='Point the actuation manager writes the set point to.')
+
     def __init__(self, config, **kwargs):
+        super(Thermostat, self).__init__(config, **kwargs)
+        cfg = self.config
         self.name = "Thermostat"
-        self.c1 = config["c1"]
-        self.c2 = config["c2"]
-        self.c3 = config["c3"]
-        self.c4 = config["c4"]
-        self.nominal_set_point = config.get('nominal_setpoint', 22.8)
-        self.unoccupied_set_point = config.get('unoccupied_set_point', self.nominal_set_point)
-        self.max_set_point_offset = config.get('max_set_point_offset', 2.0)
-        self.oat = config.get("oat", 0.)
-        self.csp = config.get("csp", 22.8)
-        self.room_temp = config.get("room_temp", 22.8)
+        self.c1 = list(cfg.c1)
+        self.c2 = list(cfg.c2)
+        self.c3 = list(cfg.c3)
+        self.c4 = list(cfg.c4)
+        self.nominal_set_point = cfg.nominal_setpoint
+        self.unoccupied_set_point = (cfg.unoccupied_set_point if cfg.unoccupied_set_point is not None
+                                     else self.nominal_set_point)
+        self.max_set_point_offset = cfg.max_set_point_offset
+        self.oat = cfg.oat
+        self.csp = cfg.csp
+        self.room_temp = cfg.room_temp
         self.current_time = None
         self.coefficients = {"c1", "c2", "c3", "c4"}
-        self.rated_power = config["rated_power"]
-        self.n_points = config.get("demand_curve_points", 2)
-        self.subscribe_key = config.get("subscribe_key", None)
+        self.rated_power = cfg.rated_power
+        self.n_points = cfg.demand_curve_points
+        self.subscribe_key = cfg.subscribe_key
         self.error = False
-        self.actuation_key = config.get('actuation_key', None)
+        self.actuation_key = cfg.actuation_key
+
+    def _apply_reconfiguration(self, cfg, changed: set[str]) -> None:
+        super()._apply_reconfiguration(cfg, changed - {'nominal_setpoint', 'unoccupied_set_point'})
+        if changed & {'nominal_setpoint', 'unoccupied_set_point'}:
+            self.nominal_set_point = cfg.nominal_setpoint
+            self.unoccupied_set_point = (cfg.unoccupied_set_point if cfg.unoccupied_set_point is not None
+                                         else self.nominal_set_point)
 
     def predict_flexibility(self, params=None):
         params = params if params else {}

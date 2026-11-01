@@ -44,8 +44,9 @@ under Contract DE-AC05-76RL01830
 import logging
 
 from datetime import date, datetime
-from typing import Iterable
+from typing import Literal
 
+from tent.config import ConfigModel, Setting
 from tent.containers import SDCurve, Vertex
 from tent.enumerations import MarketState, MeasurementType
 from tent.neighbor import Neighbor
@@ -64,13 +65,20 @@ class BulkSupplierDC(Neighbor):
 
     HEAVY_LOAD_HOURS = range(6, 22)
 
-    def __init__(self, *args, holidays: Iterable[str] = (), **kwargs):
-        super(BulkSupplierDC, self).__init__(*args, **kwargs)
-        self.transactive = False
-        try:
-            self.holidays: frozenset[date] = frozenset(date.fromisoformat(str(day)) for day in holidays)
-        except ValueError as error:
-            raise ValueError(f'BulkSupplierDC {self.name}: holidays must be ISO dates (YYYY-MM-DD); {error}') from error
+    class Config(Neighbor.Config):
+        holidays: list[date] = Setting([], reconfigurable=True,
+                                       description='ISO dates (YYYY-MM-DD) that are not heavy-load days.')
+        transactive: Literal[False] = Setting(False, description='A bulk supplier is never transactive.')
+
+    def __init__(self, transactive_node, config: ConfigModel | None = None, **kwargs):
+        cfg = self._configure(config, kwargs)
+        super(BulkSupplierDC, self).__init__(transactive_node, config=cfg)
+        self.holidays: frozenset[date] = frozenset(cfg.holidays)
+
+    def _apply_reconfiguration(self, cfg, changed: set[str]) -> None:
+        super()._apply_reconfiguration(cfg, changed - {'holidays'})
+        if 'holidays' in changed:
+            self.holidays = frozenset(cfg.holidays)
 
     def is_heavy_load_hour(self, moment: datetime) -> bool:
         """True in a heavy-load hour: 06:00 to 21:59, not a Sunday, not a configured holiday."""

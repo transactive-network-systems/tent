@@ -46,6 +46,7 @@ import math
 from datetime import datetime
 from typing import Any
 
+from tent.config import ConfigModel, Setting
 from tent.local_asset import LocalAsset
 
 _log = logging.getLogger(__name__)
@@ -60,38 +61,46 @@ class SolarPvResource(LocalAsset):
     2. Lightweight cosine approximation (default when no pvlib site is configured).
     """
 
-    def __init__(
-        self,
-        cloud_factor: float = 1.0,
-        use_pvlib: bool = False,
-        site: dict[str, Any] | None = None,
-        system: dict[str, Any] | None = None,
-        weather: dict[str, Any] | None = None,
-        preset: str | None = None,
-        *args,
-        **kwargs,
-    ):
-        super(SolarPvResource, self).__init__(*args, **kwargs)
-        self.cloudFactor = float(cloud_factor)
-        self.use_pvlib = use_pvlib or (site is not None) or (preset is not None)
+    class Config(LocalAsset.Config):
+        cloud_factor: float = Setting(1.0, ge=0, le=1, reconfigurable=True,
+                                      description='[dimensionless] fraction of clear-sky output; 1.0 is clear sky.')
+        use_pvlib: bool = Setting(False, description='Model the array with pvlib (tent.flexibility) instead of the '
+                                                     'cosine approximation; implied by site or preset.')
+        site: dict[str, Any] | None = Setting(None, description='pvlib site: latitude, longitude, tz, altitude.')
+        system: dict[str, Any] | None = Setting(None, description='pvlib system: surface_tilt, surface_azimuth, ...')
+        weather: dict[str, Any] | None = Setting(None, description='pvlib weather source; default clear sky scaled '
+                                                                   'by cloud_factor.')
+        preset: str | None = Setting(None, description='Name of a tent.flexibility PV preset to build the adapter '
+                                                       'from.')
+
+    def __init__(self, transactive_node, config: ConfigModel | None = None, **kwargs):
+        cfg = self._configure(config, kwargs)
+        super(SolarPvResource, self).__init__(transactive_node, config=cfg)
+        self.cloudFactor = float(cfg.cloud_factor)
+        self.use_pvlib = cfg.use_pvlib or (cfg.site is not None) or (cfg.preset is not None)
         self.pv_adapter = None
 
         if self.use_pvlib:
             # A configured pvlib site that cannot be built is a configuration error: fail here, at configure time,
             # rather than silently running the cosine approximation in its place.
             from tent.flexibility import from_config as load_fmi_adapter
-            if preset:
-                self.pv_adapter = load_fmi_adapter(preset, rated_kw=self.maximum_power or 10.0)
+            if cfg.preset:
+                self.pv_adapter = load_fmi_adapter(cfg.preset, rated_kw=self.maximum_power or 10.0)
             else:
-                cfg = {
+                adapter_config = {
                     "model_type": "pvlib.pv",
                     "resource_id": self.name or "solar_pv",
                     "rated_kw": self.maximum_power or 10.0,
-                    "location": site,
-                    "system": system or {},
-                    "weather": weather or {"kind": "clearsky", "cloud_factor": self.cloudFactor},
+                    "location": cfg.site,
+                    "system": cfg.system or {},
+                    "weather": cfg.weather or {"kind": "clearsky", "cloud_factor": self.cloudFactor},
                 }
-                self.pv_adapter = load_fmi_adapter(cfg)
+                self.pv_adapter = load_fmi_adapter(adapter_config)
+
+    def _apply_reconfiguration(self, cfg, changed: set[str]) -> None:
+        super()._apply_reconfiguration(cfg, changed - {'cloud_factor'})
+        if 'cloud_factor' in changed:
+            self.cloudFactor = float(cfg.cloud_factor)
 
     def schedule_power(self, market):
         """Schedule power for active time intervals using pvlib physics or cosine model."""

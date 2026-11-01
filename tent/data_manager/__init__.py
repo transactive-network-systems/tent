@@ -13,6 +13,8 @@ from typing import Mapping, Sequence
 from sqlalchemy import Column, Enum, ForeignKey, ForeignKeyConstraint, Identity, Index, Table, types
 from sqlalchemy.orm import registry
 
+from tent.config import ConfigModel, Configurable, Setting
+
 _log = logging.getLogger(__name__)
 
 # The version of the set of table definitions TENT ships (known_archive_definitions()). It is incremented whenever any
@@ -79,15 +81,23 @@ class ArchiveSchemaMismatch(RuntimeError):
             f'{database_version}.')
 
 
-class DataManager:
-    def __init__(self, parent, archival_buffer_length: int = 10000, *args, **kwargs):
+class DataManager(Configurable):
+    """Where a node's archive records go. Configured in the node's ``data_manager`` block (class_name and the settings
+    of the class's Config); the node passes itself as `parent`."""
+    class Config(ConfigModel):
+        archival_buffer_length: int = Setting(10000, ge=1,
+                                              description='Number of queued records above which a warning is logged '
+                                                          'while the archive is not ready.')
+
+    def __init__(self, parent, config: ConfigModel | None = None, **kwargs):
+        cfg = self._configure(config, kwargs)
         self.parent = parent
 
         # State Variables:
         self.archive_ready = False
         # Unbounded: a bounded deque silently dropped the oldest records. The length is a warning threshold instead.
         self.archival_queue = deque()
-        self.archival_buffer_length = int(archival_buffer_length)
+        self.archival_buffer_length = int(cfg.archival_buffer_length)
         self._queue_warned = False
         self.definitions: dict[str, dict] = {}
         self.orm: dict = {}

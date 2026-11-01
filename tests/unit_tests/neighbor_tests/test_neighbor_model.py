@@ -1211,7 +1211,7 @@ def test_update_production_costs():
     test_market.time_intervals = [time_interval]
     
     # Create test neighbor
-    test_neighbor = Neighbor(transactive_node=dummy_tn, cost_parameters=[])
+    test_neighbor = Neighbor(transactive_node=dummy_tn)
     
     # Create and store a scheduled power value
     test_neighbor.scheduled_powers.update(time_interval, 50.0)
@@ -1319,7 +1319,7 @@ def test_update_vertices():
     test_market.time_intervals = [time_interval]
     
     # Create test neighbor
-    test_model = Neighbor(transactive_node=dummy_tn, cost_parameters=[])
+    test_model = Neighbor(transactive_node=dummy_tn)
     
     # Create and store a scheduled power value
     test_model.scheduled_powers.update(time_interval, 50.0)
@@ -1434,7 +1434,7 @@ def test_include_demand_charges():
                      Vertex(price=0.3, cost=0, quantity=90),  #4
                      Vertex(price=0.4, cost=0, quantity=100)]  #5
     threshold = 101
-    test_neighbor = Neighbor(transactive_node=tn, cost_parameters=[])
+    test_neighbor = Neighbor(transactive_node=tn)
     
     # Modern API: Create SDCurve from vertices
     from tent.containers.sd_curve import SDCurve
@@ -1559,7 +1559,7 @@ def test_include_marginal_losses():
     data_manager = DummyDataManager()
     tn = DummyTransactiveNode(data_manager)
 
-    test_neighbor = Neighbor(transactive_node=tn, cost_parameters=[])
+    test_neighbor = Neighbor(transactive_node=tn)
     test_neighbor.loss_factor = 0.01
     test_neighbor.maximum_power = 20
     test_vertices = [Vertex(price=-.1, cost=0, quantity=-10), Vertex(price=-0.1, cost=0, quantity=0), Vertex(price=-.1, cost=0, quantity=10),
@@ -1591,7 +1591,7 @@ def test_include_marginal_losses():
     assert all(v in sd_curve.vertices for v in new_vertices), 'every vertex is found under its own hash'
 
     # TEST 2
-    test_neighbor = Neighbor(transactive_node=tn, cost_parameters=[])
+    test_neighbor = Neighbor(transactive_node=tn)
     test_neighbor.loss_factor = 0.01
     test_neighbor.maximum_power = 10
     
@@ -1599,14 +1599,14 @@ def test_include_marginal_losses():
     # The SDCurve constructor will handle type validation
 
     # TEST 3
-    test_neighbor = Neighbor(transactive_node=tn, cost_parameters=[])
+    test_neighbor = Neighbor(transactive_node=tn)
     test_neighbor.maximum_power = None
     test_vertices = [Vertex(price=0, cost=0, quantity=0)]
     sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices)
 
     test_neighbor.include_marginal_losses(sd_curve=sd_curve)
     # TEST 4
-    test_neighbor = Neighbor(transactive_node=tn, cost_parameters=[])
+    test_neighbor = Neighbor(transactive_node=tn)
     test_neighbor.maximum_power = 1000
     test_neighbor.loss_factor = 'bad'
     test_vertices = [Vertex(price=0, cost=0, quantity=0)]
@@ -1646,7 +1646,7 @@ def test_remove_demand_charges():
                      Vertex(price=0.3, cost=0, quantity=0),  #4
                      Vertex(price=0.4, cost=0, quantity=10)]  #5
     threshold = -191
-    test_neighbor = Neighbor(transactive_node=tn, cost_parameters=[])
+    test_neighbor = Neighbor(transactive_node=tn)
     
     # Modern API: Create SDCurve and apply removal
     sd_curve = SDCurve(measurement=None, interval=None, vertices=test_vertices)
@@ -1763,7 +1763,7 @@ def test_remove_marginal_losses():
     # Test 1: Testing a range of load and supply vertices with positive and negative prices.
     
     tn = DummyTransactiveNode()
-    test_neighbor = Neighbor(transactive_node=tn, cost_parameters=[])
+    test_neighbor = Neighbor(transactive_node=tn)
     test_neighbor.loss_factor = 0.01
     test_neighbor.maximum_power = 20
     

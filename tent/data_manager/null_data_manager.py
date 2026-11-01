@@ -16,8 +16,10 @@ class NullDataManager(DataManager):
     (an unknown column type or enumeration, a redefinition that does not match) fails here as well.
     """
 
-    def __init__(self, parent, *args, **kwargs):
-        super(NullDataManager, self).__init__(parent, *args, **kwargs)
+    Config = DataManager.Config
+
+    def __init__(self, parent, config=None, **kwargs):
+        super(NullDataManager, self).__init__(parent, config=config, **kwargs)
         self.archive_ready = True  # nothing is ever queued
         self.discarded = 0  # records accepted so far, for diagnostics
 

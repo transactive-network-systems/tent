@@ -44,10 +44,11 @@ under Contract DE-AC05-76RL01830
 import logging
 
 from sortedcontainers import SortedList, SortedSet
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Mapping
 from weakref import proxy
 
 from tent.base import Component
+from tent.config import ConfigModel
 from tent.containers import IntervalSeries, MarketTimings, Measurement, SDCurve, SDMeasurement, Vertex
 from tent.enumerations import MarketState, MarketTypes, MeasurementType, MeasurementUnit
 from tent.market.price_models import HourlyAveragePriceModel
@@ -69,6 +70,21 @@ class Market(Component):
     # system curve stays a function; the cleared price then lands within that offset of the flat segment it sits on.
     FLAT_PRICE_TOLERANCE = 1e-8  # [$/kWh]
 
+    # Keyword arguments a MarketSeries supplies when it spawns a market; everything else a series is configured with
+    # beyond its own settings is a market setting, validated by the market class's Config.
+    RUNTIME_KEYWORDS = frozenset({'transactive_node', 'market_series', 'initial_market_state', 'transition_times',
+                                  'market_to_be_refined', 'prior_market_in_series', 'price_model'})
+
+    class Config(ConfigModel):
+        """The base market has no settings of its own; subclasses add theirs (Auction.actuate_assets, ...)."""
+
+    @classmethod
+    def split_keywords(cls, kwargs: Mapping) -> tuple[dict, dict]:
+        """(runtime keywords the series supplies, configured settings) from a market constructor's keywords."""
+        runtime = {key: value for key, value in kwargs.items() if key in cls.RUNTIME_KEYWORDS}
+        settings = {key: value for key, value in kwargs.items() if key not in cls.RUNTIME_KEYWORDS}
+        return runtime, settings
+
     def __init__(self,
                  transactive_node,
                  market_series,
@@ -76,11 +92,14 @@ class Market(Component):
                  transition_times: MarketTimings,
                  market_to_be_refined=None,
                  prior_market_in_series=None,
-                 price_model=None
+                 price_model=None,
+                 config: ConfigModel | None = None,
+                 **kwargs
                  ):
+        self._configure(config, kwargs)
         # Build market name BEFORE calling Component.__init__ (self.name not yet set)
         market_name = '_'.join((*market_series.name.split(' '), transition_times.delivery_lead.isoformat(timespec='seconds')))
-        super(Market, self).__init__(market_series.description, market_name, transactive_node)
+        super(Market, self).__init__(market_series.description, market_name, transactive_node, config=self.config)
 
         self.series: MarketSeries = proxy(market_series, safe_weak_proxy_callback(self, 'series'))
         self.transition_times: MarketTimings = transition_times

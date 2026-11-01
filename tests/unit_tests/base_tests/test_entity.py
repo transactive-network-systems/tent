@@ -289,15 +289,19 @@ class TestEntity:
         assert vertices_list[0].price == 50.0
         assert vertices_list[1].price == 60.0
 
-    def test_cost_parameters_type_conversion(self):
-        """Test that cost parameters are converted to floats"""
+    def test_cost_parameters_are_three_numbers(self):
+        """Cost parameters are three numbers, converted to floats; strings and other lengths are configuration errors"""
         params = self.entity_params.copy()
-        params['cost_parameters'] = ["15.5", "3.2", "0.05"]  # String inputs
-        
+        params['cost_parameters'] = [15, 3.2, 0]
         entity = ConcreteEntity(**params)
-        
-        assert entity.cost_parameters == [15.5, 3.2, 0.05]
+        assert entity.cost_parameters == [15.0, 3.2, 0.0]
         assert all(isinstance(cp, float) for cp in entity.cost_parameters)
+        params['cost_parameters'] = ["15.5", "3.2", "0.05"]
+        with pytest.raises(ValueError, match="cost_parameters: coefficients must be numbers; got '15.5'"):
+            ConcreteEntity(**params)
+        params['cost_parameters'] = [1.0, 2.0]
+        with pytest.raises(ValueError, match='cost_parameters: must have exactly three coefficients'):
+            ConcreteEntity(**params)
 
 
 if __name__ == "__main__":

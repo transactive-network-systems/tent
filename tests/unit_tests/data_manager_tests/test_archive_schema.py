@@ -21,7 +21,7 @@ from tent.data_manager.reader import known_archive_definitions
 # the new version with the fingerprint the failure prints here, and keep the old entries. Version 1 (every archive
 # before 2 November 2026) predates the fingerprint and has none.
 RECORDED_FINGERPRINTS = {
-    2: '6bf75a915dd6b71a18ad809f7c9be24b432735a2e7c43083c52bff9003faba29',  # every shipped class at 2 November 2026 (ResponseNeighbor included)
+    2: 'dd03e0ba4449f15391b5a84339639dd7284d113afd54bb75ba193fcd5aa10979',  # every shipped class at 2 November 2026 (ResponseNeighbor included)
 }
 
 

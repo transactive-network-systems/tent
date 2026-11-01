@@ -17,6 +17,11 @@ from tent.flexibility import (
     from_config as load_fmi_adapter,
 )
 
+from pydantic import ConfigDict
+from pydantic.json_schema import SkipJsonSchema
+
+from tent.config import ConfigModel, Setting
+
 from .base import Model
 
 _log = logging.getLogger(__name__)
@@ -34,23 +39,46 @@ class FlexibilityModelFrameAdapter(Model):
         This adapter transparently negates power values to maintain consistency with TENT.
     """
 
-    def __init__(self, config: Mapping[str, Any], parent: Any = None, **kwargs: Any) -> None:
-        self.name = config.get("name", "FlexibilityModelFrameAdapter")
-        self.topic = config.get("subscribe_key", config.get("resource_id", "fmi_model"))
-        self.actuation_topic = config.get("actuation_topic", self.topic)
-        self.parent = parent
-        self.n_points = int(config.get("demand_curve_points", 2))
-        self.interval_duration_s = int(config.get("interval_duration_s", 900))
+    class Config(Model.Config):
+        """The frame-level settings are declared; every other key is the FlexibilityModelInterface adapter
+        configuration (``preset``, ``model_type``, ``rated_kw``, ``location``, ...), read by tent.flexibility.from_config
+        and validated there. This is the one Config that allows undeclared keys, for that reason."""
+        model_config = ConfigDict(extra='allow', arbitrary_types_allowed=True, validate_default=True)
+
+        name: str = Setting('FlexibilityModelFrameAdapter', description='Name used in log messages.')
+        resource_id: str | None = Setting(None, description='Adapter resource id; the topic when subscribe_key is not '
+                                                            'given.')
+        actuation_topic: str | None = Setting(None, description='Topic dispatch commands are published to; the '
+                                                                'model\'s topic when null.')
+        interval_duration_s: int = Setting(900, gt=0, description='[s] length of the interval the adapter is asked '
+                                                                  'about.')
+        adapter: SkipJsonSchema[Any] = Setting(None, description='An adapter object built in code (tests, hosts); '
+                                                                 'when given, no adapter is built from the '
+                                                                 'configuration.')
+        fmi_config: dict[str, Any] | None = Setting(None, description='The adapter configuration as a nested dict; '
+                                                                      'the undeclared keys of this block when null.')
+
+    def __init__(self, config: Mapping[str, Any] | ConfigModel, parent: Any = None, **kwargs: Any) -> None:
+        super(FlexibilityModelFrameAdapter, self).__init__(config, parent=parent, **kwargs)
+        cfg = self.config
+        self.name = cfg.name
+        self.topic = cfg.subscribe_key if cfg.subscribe_key is not None else (cfg.resource_id or "fmi_model")
+        self.actuation_topic = cfg.actuation_topic if cfg.actuation_topic is not None else self.topic
+        self.n_points = int(cfg.demand_curve_points)
+        self.interval_duration_s = int(cfg.interval_duration_s)
         self.error = False
         self.last_update_time: datetime | None = None
 
-        adapter_obj = config.get("adapter")
-        if adapter_obj is not None:
-            self.adapter = adapter_obj
+        if cfg.adapter is not None:
+            self.adapter = cfg.adapter
         else:
             if load_fmi_adapter is None:
                 raise RuntimeError("der_interface / flexibility_model_interface package is required")
-            fmi_cfg = config.get("fmi_config", config)
+            fmi_cfg = cfg.fmi_config if cfg.fmi_config is not None else dict(cfg.__pydantic_extra__ or {})
+            if not fmi_cfg:
+                raise ValueError(f'{self.describe(name=cfg.subscribe_key)}: no adapter configuration was given; give '
+                                 f'fmi_config, the adapter keys (preset or model_type, ...) in this block, or an '
+                                 f'adapter object.')
             self.adapter = load_fmi_adapter(fmi_cfg)
 
         self.caps = capabilities_of(self.adapter)

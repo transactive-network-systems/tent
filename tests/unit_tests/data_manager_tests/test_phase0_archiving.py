@@ -195,9 +195,8 @@ def test_unknown_table_is_skipped_and_other_records_written(configured):
 def test_queue_before_archive_ready_is_unbounded_and_warns_once(caplog):  # audit T-INC-03
     from tent.data_manager import DataManager
     from tent.data_manager.local_data_manager import LocalDataManager
-    ldm = LocalDataManager.__new__(LocalDataManager)  # no database: only the pre-init_archive queueing is exercised
-    DataManager.__init__(ldm, parent=None, archival_buffer_length=3)
-    ldm.read_only = False
+    # No database is touched before init_archive: only the queueing is exercised.
+    ldm = LocalDataManager(None, {'url': 'sqlite://'}, archival_buffer_length=3)
     for i in range(5):
         ldm.archive_data({'table_name': 't', 'data': {'i': i}})
     assert len(ldm.archival_queue) == 5, 'nothing is dropped'

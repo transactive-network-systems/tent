@@ -21,8 +21,10 @@ class PullMeterPoint(MeterPoint):
     that returns None is a poll with nothing to record and is also retried on the next period.
     """
 
-    def __init__(self, *args, **kwargs):
-        super(PullMeterPoint, self).__init__(*args, **kwargs)
+    Config = MeterPoint.Config
+
+    def __init__(self, transactive_node, config=None, **kwargs):
+        super(PullMeterPoint, self).__init__(transactive_node, config=config, **kwargs)
         self.next_read_time: datetime | None = None  # None until the first poll, which reads at once
 
     @abc.abstractmethod

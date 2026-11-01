@@ -1,8 +1,10 @@
 from abc import ABC, abstractmethod
 from datetime import datetime
 
+from tent.config import Configurable
 
-class OccupancyManager(ABC):
+
+class OccupancyManager(Configurable, ABC):
     """Abstract base class for occupancy managers."""
 
     @abstractmethod

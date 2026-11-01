@@ -10,6 +10,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql.sqltypes import DateTime, Uuid, Boolean, Float, Time
 from typing import Mapping, Sequence
 
+from pydantic import field_validator
+
+from tent.config import ConfigModel, Setting
 from tent.data_manager import ARCHIVE_SCHEMA_TABLE, DataManager, archive_schema_definition
 from tent.data_manager.reader import ArchiveReader
 from tent.utils.helpers import parse_timedelta, require_aware
@@ -17,17 +20,34 @@ from tent.utils.helpers import parse_timedelta, require_aware
 _log = logging.getLogger(__name__)
 
 
+class DatabaseParameters(ConfigModel):
+    """The ``db_params`` block of a LocalDataManager."""
+    url: str = Setting(..., min_length=1,
+                       description='SQLAlchemy URL of the archive database, such as "sqlite:////home/user/db/node.sqlite" '
+                                   'or "postgresql://user:password@host/db". The archive location is always configured: '
+                                   'a default relative to the working directory put it wherever the agent was started.')
+
+
 class LocalDataManager(ArchiveReader, DataManager):
-    def __init__(self, parent, db_params: dict, *args, **kwargs):
-        super(LocalDataManager, self).__init__(parent, *args, **kwargs)
-        self.db_params = dict(db_params) if db_params else {}
-        # The archive location is always configured: a default relative to the process's working directory put the
-        # archive wherever the agent happened to be started, and a rebuilt container discarded it.
-        database_url = self.db_params.get('url')
-        if not database_url:
-            raise ValueError('LocalDataManager needs db_params["url"], a SQLAlchemy URL such as '
-                             '"sqlite:////home/user/db/node.sqlite" or "postgresql://user:password@host/db".')
-        self.engine = create_engine(database_url)
+    """Archives to a SQLAlchemy database (SQLite, PostgreSQL, ...) named by db_params.url."""
+    class Config(DataManager.Config):
+        db_params: DatabaseParameters = Setting(..., description='The database connection: url.')
+
+        @field_validator('db_params', mode='before')
+        @classmethod
+        def _needs_url(cls, value):
+            if value is None or (isinstance(value, Mapping) and not value.get('url')):
+                raise ValueError('LocalDataManager needs db_params["url"], a SQLAlchemy URL such as '
+                                 '"sqlite:////home/user/db/node.sqlite" or "postgresql://user:password@host/db".')
+            return value
+
+    def __init__(self, parent, db_params: Mapping | None = None, config: ConfigModel | None = None, **kwargs):
+        if config is None:
+            kwargs = {**kwargs, 'db_params': db_params}
+        cfg = self._configure(config, kwargs)
+        super(LocalDataManager, self).__init__(parent, config=cfg)
+        self.db_params = cfg.db_params.model_dump()
+        self.engine = create_engine(cfg.db_params.url)
 
     def init_archive(self):
         """

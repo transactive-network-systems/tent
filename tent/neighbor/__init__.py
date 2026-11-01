@@ -44,17 +44,18 @@ import logging
 from dataclasses import dataclass
 from copy import copy
 from datetime import datetime
-from typing import Union
 from weakref import WeakKeyDictionary
 
-from tent.base import Entity
 from pydantic import ValidationError
+
+from tent.base import Entity
+from tent.config import ConfigModel, Setting, enum_by_name
 
 from tent.containers import Measurement, SDCurve, TransactiveSignal, Vertex
 from tent.containers.transactive_signal_message import TransactiveSignalMessage
 from tent.enumerations import Direction, MeasurementType, MeasurementUnit, MarketState
 from tent.market import Market
-from tent.utils.helpers import require_aware, validate_bool
+from tent.utils.helpers import require_aware
 from tent.utils.timer import Timer
 
 _log = logging.getLogger(__name__)
@@ -71,50 +72,50 @@ class Neighbor(Entity):
     # The Neighbor class manages the interface with a Neighbor object and represents it for the computational agent.
     # Members of the transactive network must be indicated by setting the "transactive" property true.
 
-    def __init__(self,
-                 transactive_node,
-                 convergence_threshold=0.05,
-                 cost_parameters=None,
-                 default_vertices=None,
-                 demand_month: int | None = None,  # Defaults to the current (simulation) month.
-                 demand_rate=4.5,
-                 demand_threshold=1e9,
-                 demand_threshold_coef=1,
-                 description='',
-                 effective_impedance=0.0,
-                 friend=False,
-                 information_services=None,
-                 location='',
-                 loss_factor=0.01,
-                 maximum_power=0.0,
-                 mechanism='consensus',
-                 meter_points=None,
-                 minimum_power=0.0,
-                 name='',
-                 transactive=False,
-                 up_or_down: Union[Direction, int, str] = Direction.unknown):
+    class Config(Entity.Config):
+        convergence_threshold: float = Setting(
+            0.05, ge=0, reconfigurable=True,
+            description='[dimensionless fraction] relative change of the exchanged signal below which negotiation with '
+                        'this neighbor counts as converged.')
+        demand_month: int | None = Setting(
+            None, ge=1, le=12, reconfigurable=True,
+            description='[month number] month in which the demand-charge threshold applies; null means the current '
+                        '(simulated) month at configuration.')
+        demand_rate: float = Setting(4.5, ge=0, reconfigurable=True,
+                                     description='[$/kW per month] demand-charge rate.')
+        demand_threshold: float = Setting(1e9, ge=0, reconfigurable=True,
+                                          description='[kW] power above which demand charges accrue.')
+        demand_threshold_coef: float = Setting(
+            1.0, ge=0, reconfigurable=True,
+            description='[dimensionless] factor by which the demand threshold is reduced when a new month starts.')
+        effective_impedance: float = Setting(0.0, ge=0, reconfigurable=True,
+                                             description='[Ohm] effective impedance of the connection (future use).')
+        friend: bool = Setting(False, description='True for a collaborative neighbor that belongs to the same business '
+                                                  'entity (offered recovery cost rather than price).')
+        loss_factor: float = Setting(0.01, ge=0, lt=1, reconfigurable=True,
+                                     description='[dimensionless] full-load loss fraction of the connection; 0.01 is 1%.')
+        mechanism: str = Setting('consensus', description='Coordination mechanism (future use).')
+        transactive: bool = Setting(False, description='True when this neighbor exchanges transactive signals; False '
+                                                       'for a passive supplier or load described by its curve.')
+        up_or_down: enum_by_name(Direction) = Setting(
+            'unknown', description='Side of this node the neighbor is on: upstream (supply), downstream (load), '
+                                   'bidirectional or unknown.')
 
-        super(Neighbor, self).__init__(cost_parameters, default_vertices, description, information_services, location,
-                                       maximum_power, meter_points, minimum_power, name, transactive_node)
+    def __init__(self, transactive_node, config: ConfigModel | None = None, **kwargs):
+        cfg = self._configure(config, kwargs)
+        super(Neighbor, self).__init__(transactive_node, config=cfg)
 
-        self.convergence_threshold = float(convergence_threshold)      # [Small positive fraction]: May affect negotiations
-        self.demand_month = int(demand_month) if demand_month is not None else Timer.now().month  # [month number]: Used to reset demand charges
-        self.demand_rate = float(demand_rate)                          # [$ / kW (/h)]: rate determinant
-        self.demand_threshold = float(demand_threshold)                # [kW]; current power above which demand charges accrue
-        self.demand_threshold_coef = float(demand_threshold_coef)      # Factor by which threshold is reduced in new month
-        self.description = str(description)                            # [text]
-        self.effective_impedance = float(effective_impedance)          # [Ohms]: (future) may be used for loss effects
-        self.friend = validate_bool(friend, 'friend')                  # [boolean]: True for collaborative, friendly Neighbor
-        self.loss_factor = float(loss_factor)                          # [dimensionless] 0.01 = 1% full-load loss
-        self.mechanism = mechanism                                     # future, unused
-        self.name = str(name)                                          # [text]
-        self.transactive = validate_bool(transactive, 'transactive')   # [boolean]: True for transactive neighbor
-        if isinstance(up_or_down, Direction):                          # 'upstream' or 'downstream' direction of this neighbor
-            self.up_or_down = up_or_down
-        elif isinstance(up_or_down, int):
-            self.up_or_down = Direction(up_or_down)
-        else:
-            self.up_or_down = Direction[up_or_down]
+        self.convergence_threshold = float(cfg.convergence_threshold)  # [Small positive fraction]: May affect negotiations
+        self.demand_month = int(cfg.demand_month) if cfg.demand_month is not None else Timer.now().month  # [month number]: Used to reset demand charges
+        self.demand_rate = float(cfg.demand_rate)                      # [$ / kW (/h)]: rate determinant
+        self.demand_threshold = float(cfg.demand_threshold)            # [kW]; current power above which demand charges accrue
+        self.demand_threshold_coef = float(cfg.demand_threshold_coef)  # Factor by which threshold is reduced in new month
+        self.effective_impedance = float(cfg.effective_impedance)      # [Ohms]: (future) may be used for loss effects
+        self.friend = cfg.friend                                       # [boolean]: True for collaborative, friendly Neighbor
+        self.loss_factor = float(cfg.loss_factor)                      # [dimensionless] 0.01 = 1% full-load loss
+        self.mechanism = cfg.mechanism                                 # future, unused
+        self.transactive = cfg.transactive                             # [boolean]: True for transactive neighbor
+        self.up_or_down = cfg.up_or_down                               # 'upstream' or 'downstream' direction of this neighbor
 
         ##################################
         # Dynamically assigned attributes:
@@ -130,11 +131,16 @@ class Neighbor(Entity):
         # market name, newest only; replayed by on_market_spawned once the series creates the market.
         self.held_signals: dict[str, dict] = {}
         self.last_sent_signals: WeakKeyDictionary[Market, TransactiveSignal] = WeakKeyDictionary()  # Last records sent.
-    # Internal guards to avoid repeated noisy warnings
+        # Internal guards to avoid repeated noisy warnings
         self._loss_warning_reported = False
 
         transactive_node.register_subscription(subscribe_key=f'{self.name}_incoming_transactive_signal',
                                                callback=self.receive_transactive_signal)
+
+    def _apply_reconfiguration(self, cfg, changed: set[str]) -> None:
+        super()._apply_reconfiguration(cfg, changed - {'demand_month'})
+        if 'demand_month' in changed:
+            self.demand_month = int(cfg.demand_month) if cfg.demand_month is not None else Timer.now().month
 
     def check_for_convergence(self, market):
         """
