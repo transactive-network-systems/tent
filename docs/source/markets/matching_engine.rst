@@ -48,6 +48,45 @@ At the market-lead time ``MatchingEngine.settle`` turns the matched legs into th
 After settlement the market proceeds as any other: the price model is updated from the marginal prices and the assets
 are told to actuate on entering Delivery (unless the series has ``actuate_assets`` false).
 
+Between nodes: MatchingAuction
+------------------------------
+
+``MatchingAuction`` is an ``Auction`` whose clearing step is the order book. The signal exchange is the auction's,
+unchanged: in MarketLead a node collects its downstream neighbors' bids (their residual curves), schedules them,
+aggregates its own residual and sends it upstream as its bid (record 0 at the predicted price, as an auction's bid); in
+DeliveryLead, once the upstream signal is in, it clears and sends each downstream neighbor the result. Only the
+clearing differs: instead of interpolating on the summed curve, ``MatchingAuction.clear`` quotes every local asset's
+and every neighbor's current curve into the book (the upstream neighbor's from its signal, the downstream neighbors'
+from their bids), matches with the configured strategy, and settles, so the marginal prices, the cleared powers and the
+volume-weighted average price come from the fills. The downstream signals then carry each neighbor's matched quantity
+as record 0, at the residual curve's own price for that quantity, so the point lies on the curve the neighbor receives
+and the downstream node's clearing lands on the matched quantity. The book's own prices are those of the orders taken
+(an aggressive order pays the resting orders' prices; a sloped resting curve is filled at the ladder's rungs), so the
+market's marginal price, the last fill's, is in general not a price its residual curve passes through at the matched
+quantity: on the deployed hierarchy the city's last fill of the campus's bid is at 0.04025 $/kWh, a rung of the campus's
+own bid, while the campus clears onto the matched 6489 kW (6426 kW after the link's losses) at 0.03292, the city's
+residual curve's price there. The quantities agree on both sides of every link, to the link's losses; the two prices
+are different things, the book's discriminatory fill price and the uniform price of the curve, and both are archived.
+Intervals with no match keep their opening price and are logged once, as settlement does. The book is the ``OrderBook`` mixin that ``MatchingEngine`` uses; the three market classes share one
+implementation.
+
+Two deployments use the class, from the same code and differing only in configuration:
+
+- **One engine upstream** (the "exchange"): the top node runs a ``MatchingAuction`` and every node below it an
+  ``Auction``. One book clears the whole system; the top node's archive holds every order, match, remainder and expiry.
+  A downstream node clears against the top's residual curve with the matched point on it and lands on the matched
+  quantity at the cleared price.
+- **An engine on every node** (the "local books"): every node runs a ``MatchingAuction``, books its local assets and the
+  curves its neighbors last stated, clears when its upstream price arrives, and passes its residual up and its cleared
+  price down. The exchange with a neighbor is the match quantity against that neighbor's curve. The two books on either
+  side of a link clear independently against stated curves, so their match quantities need not agree until the
+  downstream node has cleared against the upstream price; the matched point in the downstream signal is what brings
+  them together, and a residual difference is the downstream book's own matching of its local assets against the
+  upstream curve at its rungs.
+
+The ``matching_auction`` table extends ``auction`` with ``matching_strategy``; the orders are rows of the ``order``
+table as for the single-node engine.
+
 Archive
 -------
 

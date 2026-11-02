@@ -780,6 +780,12 @@ class Order(SDCurve):
     def table_name(self):
         return 'order'
 
+    def _deferral_key(self):
+        """Every order is its own thing while archiving is deferred. Orders of one market share one measurement (the
+        market's order_measurement), so the curve key, measurement and interval, would make every order of an interval
+        the same thing and a deferred block would write only the last of them; the book must keep every order and leg."""
+        return ('order', self.id)
+
     def get_record(self) -> dict:
         record = super(Order, self).get_record()
         record.update({

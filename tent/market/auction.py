@@ -218,6 +218,11 @@ class Auction(Market):
             #  all needed signals have been received.
             self._stateIsCompleted = True
 
+    def clear(self) -> None:
+        """The clearing step, once every curve is in: find each interval's price and every entity's power at it. An
+        Auction interpolates on the summed curve (balance); MatchingAuction runs its order book instead."""
+        self.balance()
+
     def while_in_delivery_lead(self):
         """
         For activities that should happen while a market object is in its "DeliveryLead" market state. This method may
@@ -269,7 +274,7 @@ class Auction(Market):
 
             # Sum all the agent's active local asset and neighbor vertices and determine the LMP at which local power is
             # balanced.
-            self.balance()
+            self.clear()
 
             # Have the upstream agent neighbor model now schedule its power, based on the local agent's calculated LMPs.
             upstream_agent.schedule_power(self)

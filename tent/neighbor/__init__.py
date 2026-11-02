@@ -575,9 +575,13 @@ class Neighbor(Entity):
             self.prepared_signals[market].mark_balance_points_at_quantities(self.balance_points(market))
         elif market.BALANCE_POINT == 'predicted_price':
             self.prepared_signals[market].mark_balance_points_at_prices(market.marginal_prices)
+        elif market.BALANCE_POINT == 'matched_quantity':
+            # The quantity cleared with this neighbor (an order book's match, loss-translated like a scheduled power)
+            # at the residual curve's own price for it, so the point lies on the curve whatever the book's fill prices.
+            self.prepared_signals[market].mark_balance_points_at_quantities(self.balance_point_quantities(market))
         else:
             raise ValueError(f'{type(market).__name__}.BALANCE_POINT is {market.BALANCE_POINT!r}; it must be '
-                             f'"scheduled_power" or "predicted_price".')
+                             f'"scheduled_power", "predicted_price" or "matched_quantity".')
 
     def balance_point_quantities(self, market) -> dict:
         """

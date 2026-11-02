@@ -72,7 +72,10 @@ class Market(Component):
     # How Neighbor.prep_transactive_signal marks record 0 (the balance point) of a signal prepared for this market:
     # 'scheduled_power' places it at the power this node has scheduled with the neighbor (a negotiating market, whose
     # convergence check compares that point with the neighbor's); 'predicted_price' (Auction) places it at the residual
-    # curve's own quantity at the market's current price, since no power has been cleared with the neighbor yet.
+    # curve's own quantity at the market's current price, since no power has been cleared with the neighbor yet;
+    # 'matched_quantity' (MatchingAuction once its book has settled) places it at the quantity matched with the neighbor
+    # and the residual curve's own price for that quantity, since an order book's fill prices are those of the orders
+    # taken, not a price the residual curve passes through.
     BALANCE_POINT = 'scheduled_power'
     # Two vertex prices closer than this are one price. Market.sum_vertices offsets a duplicate price by 1e-10 so the
     # system curve stays a function; the cleared price then lands within that offset of the flat segment it sits on.

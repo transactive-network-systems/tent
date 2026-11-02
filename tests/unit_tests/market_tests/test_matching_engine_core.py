@@ -463,3 +463,26 @@ def test_orders_match_only_within_their_own_interval():
         'the second interval\'s supply stands untouched'
     assert market.get_counteroffers(SupplyOrDemand.SUPPLY, time_interval=second) == standing_second
     assert len(market.get_counteroffers(SupplyOrDemand.SUPPLY)) >= 1, 'without an interval the whole book is searched'
+
+
+def test_a_standing_curve_of_several_vertices_is_filled_at_the_ladder_rungs(market):
+    """Only vertices typed LIMIT_ORDER used to be taken from the standing side, so a resting curve of three or more
+    vertices (every quoted neighbor curve of a multi-node deployment) was never filled: the campus's book left its
+    offices' six-point demand curves standing against the city's three-point supply remainder. A standing curve now
+    offers at every rung of the ladder the quantity its segments reach there."""
+    tn = market.tn
+    gen = LocalAsset(transactive_node=tn, name='Gen')
+    load = Neighbor(transactive_node=tn, name='Load')
+    tn.local_assets, tn.neighbors = [gen], [load]
+    ti = market.time_intervals[0]
+    gen.active_vertices.update(ti, [Vertex(price=0.03156, quantity=0.0), Vertex(price=0.03292, quantity=43.0),
+                                    Vertex(price=0.03444, quantity=13000.0)])  # three vertices: a 'complex' order
+    load.active_vertices.update(ti, [Vertex(price=0.04105, quantity=-27.0), Vertex(price=0.04158, quantity=-25.7),
+                                     Vertex(price=0.04211, quantity=-24.3)])
+    market.while_in_negotiation()
+    legs = [l for l in market.matchList if l.actor is load]
+    assert legs, 'the load is filled against the resting supply curve'
+    assert sum(l.vertices[-1].quantity for l in legs) == pytest.approx(-27.0), 'all of it, at rungs the supply reaches'
+    assert all(l.vertices[-1].price == pytest.approx(0.03292) for l in legs), 'at the first rung with enough supply'
+    remainder = next(o for o in market.orderList if o.actor is gen)
+    assert max(v.quantity for v in remainder.vertices) == pytest.approx(13000.0 - 27.0)

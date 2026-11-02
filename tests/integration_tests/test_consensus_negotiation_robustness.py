@@ -308,12 +308,18 @@ def test_a_surplus_the_neighbor_cannot_absorb_is_out_of_consensus_without_spinni
         assert taker.scheduled_powers.get_by_interval(ti).value == pytest.approx(-100.0)
 
 
-def deployed_node_config(node: str, file_name: str, tmp_path):
-    """A deployed consensus container configuration made runnable here: host keys stripped, meter points and the data
-    manager removed, the host actuator replaced, the repository's weather file."""
+def deployed_node_config(node: str, file_name: str, tmp_path, variant: str = 'tent-consensus',
+                         market_class_name: str | None = None):
+    """A deployed container configuration (of the given variant directory) made runnable here: host keys stripped,
+    meter points and the data manager removed, the host actuator replaced, the repository's weather file; optionally
+    every series' market class replaced."""
     import glob
-    containers = Path(CONTAINER_CONFIGS[0]).parents[3] / 'tent-consensus'
+    containers = Path(CONTAINER_CONFIGS[0]).parents[3] / variant
     configs = _without_host_keys(json.load(open(containers / node / 'agent_configs' / file_name)))
+    if market_class_name is not None:
+        for series in configs['market_series']:
+            series['market_class_name'] = market_class_name
+            series.pop('market_module_name', None)
     configs.pop('meter_points', None)
     configs.pop('data_manager', None)
     for neighbor in configs['neighbors']:
