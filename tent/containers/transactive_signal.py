@@ -313,13 +313,15 @@ class TransactiveSignal(SDMeasurement):
         vertex's price (the quantity the curve gives there) and to the curve's point at the vertex's quantity (the price
         the curve gives there). One projection alone misjudges a curve that is nearly flat in one dimension: on a
         residual curve that is a near-horizontal line, the quantity at an exact price is ill-defined while the price at
-        the quantity is sharp, and the other way round on a near-vertical one.
+        the quantity is sharp, and the other way round on a near-vertical one. The projections are measurements, not
+        prices anyone acts on, so an ill-defined one (a vertex at a quantity where the curve is vertical, as at a balance
+        point added on a vertical segment) is taken quietly: the other projection decides.
         """
         at_price = Vertex(price=vertex.price, quantity=sd_curve.power_from_vertices(vertex.price))
         distance = cls._relative_distance(vertex, at_price, False, False)
         low, high = sd_curve.min_quantity(), sd_curve.max_quantity()
         if low <= vertex.quantity <= high and low < high:
-            at_quantity = Vertex(price=sd_curve.price_from_vertices(vertex.quantity), quantity=vertex.quantity)
+            at_quantity = Vertex(price=sd_curve.price_from_vertices(vertex.quantity, warn=False), quantity=vertex.quantity)
             distance = min(distance, cls._relative_distance(vertex, at_quantity, False, False))
         return distance
 

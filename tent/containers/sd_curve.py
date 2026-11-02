@@ -403,8 +403,13 @@ class SDCurve(Archivable):
         """True when quantity is within END_VERTEX_TOLERANCE (relative, at least 1 kW) of the end vertex's quantity."""
         return abs(quantity - end_vertex.quantity) <= cls.END_VERTEX_TOLERANCE * max(1.0, abs(end_vertex.quantity))
 
-    def price_from_vertices(self, quantity: float) -> float:
+    def price_from_vertices(self, quantity: float, warn: bool = True) -> float:
         """ Given a power [avg.kW], determine the corresponding marginal price [$/kWh] from the SDCurve.
+
+        Where the price is indeterminate (a quantity beyond the curve's ends by more than END_VERTEX_TOLERANCE, or one at
+        which the curve is vertical, several prices at one quantity) the nearest vertex's price is returned and, with
+        `warn`, a warning says so. A caller that only projects a point onto the curve to measure a distance, and takes a
+        sharper projection when this one is ill-defined, passes warn=False (see TransactiveSignal._distance_to_curve).
         """
         # TODO: This and power_from_vertices assume a rational curve (power monotonic with price). Is this actually guaranteed?
         if not self.vertices:
@@ -413,7 +418,7 @@ class SDCurve(Archivable):
         if quantity < first.quantity:
             # Below the first vertex: within END_VERTEX_TOLERANCE it is the first vertex; further out the marginal price
             # is indeterminate, the first vertex's price is returned and a warning says so.
-            if not self.is_at_end_vertex(quantity, first):
+            if warn and not self.is_at_end_vertex(quantity, first):
                 _log.warning(f'Indeterminate price: Quantity provided ({quantity})'
                              f' is lower than that of first vertex ({first.quantity}).')
             return first.price
@@ -421,7 +426,7 @@ class SDCurve(Archivable):
         elif quantity >= last.quantity:
             # At or above the last vertex: at it, or within END_VERTEX_TOLERANCE beyond it, the last vertex's price;
             # further out indeterminate, with the same price and a warning.
-            if not self.is_at_end_vertex(quantity, last):
+            if warn and not self.is_at_end_vertex(quantity, last):
                 _log.warning(f'Indeterminate price: Quantity provided ({quantity})'
                              f' is greater than that of last vertex ({last.quantity}).')
             return last.price
@@ -429,8 +434,10 @@ class SDCurve(Archivable):
         # # The marginal power lies among the active vertices.
         for lower, upper in zip(self.vertices, self.vertices[1:]):
             if lower.quantity == quantity == upper.quantity:
-                # The segment is horizontal. Marginal price is indefinite. Return the second vertex price and warn.
-                _log.warning('Indeterminate price due to horizontal segment of SDCurve. Returning second price.')
+                # Two vertices at this quantity (a price step: the curve is vertical here). The marginal price is
+                # indefinite; the second vertex's price is returned, with a warning unless the caller said not to.
+                if warn:
+                    _log.warning('Indeterminate price due to horizontal segment of SDCurve. Returning second price.')
                 return upper.price
             elif lower.quantity <= quantity < upper.quantity:
                 # The segment is not horizontal. Interpolate on the segment.

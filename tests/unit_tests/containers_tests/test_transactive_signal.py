@@ -268,3 +268,33 @@ class TestConditionsHaveChangedCompareCurvesAsFunctions:
         assert TransactiveSignal._distance_to_curve(on_the_line, curve) < 1e-3, 'at the quantity the price is sharp'
         off_the_line = Vertex(price=0.045, quantity=30.0)
         assert TransactiveSignal._distance_to_curve(off_the_line, curve) > 0.1
+
+
+    def test_comparing_near_horizontal_curves_with_balance_points_logs_nothing(self, market_and_interval, caplog):
+        """Each curve carries its balance point on a vertical segment (two vertices at one quantity), and projecting a
+        vertex of one curve onto the other at that quantity has no single price; the comparison takes the other
+        projection and must not warn (run 24 logged "Indeterminate price due to horizontal segment" 164 348 times on one
+        office)."""
+        tn, market, ti = market_and_interval
+        sent, prepared = self.signals(tn, market, ti, self.SENT, self.PREPARED,
+                                      balance=((50.020, 0.03900), (49.705, 0.03900)))
+        assert len(sent.get_by_interval(ti)) == 5 and len(prepared.get_by_interval(ti)) == 6, 'points added below the line'
+        with caplog.at_level('WARNING'):
+            changed = TransactiveSignal.conditions_have_changed(prepared, sent, ti, threshold=0.02)
+            TransactiveSignal.conditions_have_changed(sent, prepared, ti, threshold=0.02)
+            for v in sent.get_by_interval(ti).vertices:
+                TransactiveSignal._distance_to_curve(v, prepared.get_by_interval(ti))
+        assert changed is False
+        assert not caplog.records, [r.getMessage() for r in caplog.records]
+        # A caller that wants a price still hears about an indeterminate one: a price step, two adjacent vertices at
+        # one quantity, has no single price there.
+        from tent.containers.sd_curve import SDCurve
+        step = SDCurve(measurement=None, interval=None, archive=False,
+                       vertices=[Vertex(price=0.04, quantity=50.0), Vertex(price=0.05, quantity=50.0),
+                                 Vertex(price=0.06, quantity=60.0)])
+        with caplog.at_level('WARNING'):
+            assert step.price_from_vertices(50.0, warn=False) == 0.05
+        assert not caplog.records
+        with caplog.at_level('WARNING'):
+            assert step.price_from_vertices(50.0) == 0.05
+        assert any('horizontal segment' in r.getMessage() for r in caplog.records)
