@@ -1410,7 +1410,7 @@ A non-transactive neighbor that states only a price or only a quantity (see the 
 Market series
 -------------
 
-The market series, each with market_class_name. Registered classes: MarketSeries, MarketSeries, MarketSeries, MarketSeries.
+The market series, each with market_class_name. Registered classes: MarketSeries, MarketSeries, MarketSeries, MarketSeries, MarketSeries.
 
 MarketSeries of Market
 ~~~~~~~~~~~~~~~~~~~~~~
@@ -1979,11 +1979,159 @@ An object of this class contains all the critical timing and initialization prop
      - names of market_series
      - Name of the series whose markets this series refines.
      -  
+   * - ``matching_strategy``
+     - array of string
+     - ['ORDER_VOLUME']
+     -  
+     - Tie-break order for same-price orders, by name: NONE, ORDER_AGE, ORDER_VOLUME, PROPORTIONAL_VOLUME. A single name is accepted as a list of one.
+     -  
+   * - ``order_expiry``
+     - number or null
+     - None
+     -  
+     - [s] lifetime of the orders the engine quotes for local entities; null means they stand until the market clears.
+     - yes
    * - ``actuate_assets``
      - boolean
      - True
      -  
      - Whether a market of this series tells the local assets to actuate when it enters Delivery. False for a series whose delivery periods are refined by another series (a day-ahead market corrected by a real-time one), so that only the refining market actuates.
+     -  
+
+MarketSeries of MatchingAuction
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+An object of this class contains all the critical timing and initialization properties of the market objects in a series of similar market objects. These properties were initially owned by the market objects and had to be passed from existing to succeeding market objects. Now, many of the properties have been converted to protected properties that are owned jointly by the MarketSeries and Market objects. Eventually, all the properties should be owned by the MarketSeries and not Market objects. This is easy to do because the base Market class now allows a weak reference to its MarketSeries object. Additionally, a MarketSeries constructs its first "dummy" market that jump starts the market state machine for all future markets in the series.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 18 16 12 14 32 8
+
+   * - Field
+     - Type
+     - Default
+     - Bounds
+     - Description
+     - In place
+   * - ``name``
+     - string
+     - ""
+     -  
+     - Name of the component; unique among the node's components of its kind, and the name other components refer to it by.
+     -  
+   * - ``description``
+     - string
+     - ""
+     -  
+     - Free text.
+     -  
+   * - ``commitment``
+     - boolean
+     - False
+     -  
+     - Whether cleared powers and prices are commitments.
+     -  
+   * - ``default_price``
+     - number
+     - 0.05
+     - >= 0
+     - [$/kWh] price assumed where no market has cleared one.
+     - yes
+   * - ``delivery_anchor_time``
+     - string or null
+     - None
+     -  
+     - Time of day (HH:MM, node zone) at which a delivery period always starts; null means the first market starts at once.
+     -  
+   * - ``duality_gap_threshold``
+     - number
+     - 0.01
+     - > 0
+     - [dimensionless] relative duality gap below which a market counts as converged; 0.01 is 1%.
+     - yes
+   * - ``duration_active``
+     - number [seconds]
+     - 0.0
+     - >= 0
+     - [s] length of the Active period before negotiation.
+     -  
+   * - ``duration_delivery_lead``
+     - number [seconds]
+     - 0.0
+     - >= 0
+     - [s] time between clearing and delivery.
+     -  
+   * - ``duration_market_lead``
+     - number [seconds]
+     - 3600.0
+     - >= 0
+     - [s] length of the MarketLead period.
+     -  
+   * - ``duration_negotiation``
+     - number [seconds]
+     - 0.0
+     - >= 0
+     - [s] time allowed for negotiation.
+     -  
+   * - ``duration_reconciliation``
+     - number [seconds]
+     - 0.0
+     - >= 0
+     - [s] time allotted to reconciliation.
+     -  
+   * - ``future_horizon``
+     - number [seconds]
+     - 86400
+     - > 0
+     - [s] forward window of price-discovery relevance (future use).
+     -  
+   * - ``initial_market_state``
+     - one of "Initial", "Active", "Inactive", "Delivery", "DeliveryLead", "Expired", "Exploring", "MarketLead", "Negotiation", "Publish", "Reconcile", "Tender", "Transaction"
+     - "Inactive"
+     -  
+     - State a new market starts in.
+     -  
+   * - ``interval_duration``
+     - number [seconds]
+     - 3600
+     - > 0
+     - [s] length of one delivery interval.
+     -  
+   * - ``intervals_to_clear``
+     - integer
+     - 1
+     - >= 1
+     - Number of intervals each market clears.
+     -  
+   * - ``market_clearing_interval``
+     - number [seconds]
+     - 3600.0
+     - > 0
+     - [s] time between successive market clearings.
+     -  
+   * - ``market_order``
+     - integer
+     - 1
+     - >= 1
+     - Order of this series among the node's series.
+     -  
+   * - ``method``
+     - one of "Interpolation"
+     - "Interpolation"
+     -  
+     - Balancing method.
+     -  
+   * - ``price_model``
+     - PriceModel block
+     - None
+     -  
+     - The price model (class_name, default HourlyAveragePriceModel, and its settings); the series default_price is its default_price unless given here. Null means the default model.
+     -  
+   * - ``refined_series``
+     - string or null
+     - None
+     - names of market_series
+     - Name of the series whose markets this series refines.
      -  
    * - ``matching_strategy``
      - array of string
@@ -1997,6 +2145,12 @@ An object of this class contains all the critical timing and initialization prop
      -  
      - [s] lifetime of the orders the engine quotes for local entities; null means they stand until the market clears.
      - yes
+   * - ``actuate_assets``
+     - boolean
+     - True
+     -  
+     - Whether a market of this series tells the local assets to actuate when it enters Delivery. False for a series whose delivery periods are refined by another series (a day-ahead market corrected by a real-time one), so that only the refining market actuates.
+     -  
 
 Price models (market_series[].price_model)
 ------------------------------------------

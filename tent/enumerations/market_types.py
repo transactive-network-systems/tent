@@ -50,3 +50,5 @@ class MarketTypes(Enum):
     matching_engine = 3  # 240409DJH: Adding type "matching_engine"
     reconciliation = 4  # 211208DJH: Adding type "reconciliation"
     unknown = 5
+    matching_auction = 6     # the Auction's signal exchange with an order book as the clearing step (MatchingAuction)
+    matching_consensus = 7   # the consensus protocol with an order book as the balancing step (MatchingConsensusMarket)
