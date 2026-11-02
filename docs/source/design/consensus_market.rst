@@ -71,9 +71,13 @@ decides two things per interval from the prepared, last sent and last received s
 per-market ``CoordinationState`` (``is_converged(market)``, ``is_signal_due(market)``):
 
 - A signal is **due** when nothing has been sent yet; or local conditions have changed so that the prepared signal
-  differs from the sent one (``TransactiveSignal.conditions_have_changed``: a sent flexibility vertex has no
-  counterpart within ``convergence_threshold`` among the prepared ones, or the balance point moved); or the neighbor's
-  latest signal is revised and has not been answered. Answering a revised signal that changes nothing here resends the
+  differs from the sent one (``TransactiveSignal.conditions_have_changed``: some vertex of either curve lies farther
+  than ``convergence_threshold`` from the other curve, taken as a function, or the balance point moved; the vertices
+  themselves are not compared, because a residual curve is the sum of the other entities' curves cut to the neighbor's
+  power window and its vertices come and go as another entity's breakpoints drift into and out of the window while the
+  line through them does not change); or the neighbor's latest signal is revised and has not been answered; or the
+  neighbor disagrees at the balance point and the prepared point is nearer the neighbor's than the sent one (the sent
+  point is stale: the prepared signal goes once more, as the acknowledgement it is). Answering a revised signal that changes nothing here resends the
   same content with ``revised`` false, which the neighbor need not answer; that is what ends an exchange. A neighbor
   that disagrees at the balance point (``TransactiveSignal.balance_points_differ``, which flips the sign of the received
   quantity) while nothing has changed here is not answered again: resending the same content cannot move it, and
@@ -84,6 +88,16 @@ per-market ``CoordinationState`` (``is_converged(market)``, ``is_signal_due(mark
   changed. A neighbor that never replied is not in consensus, however settled this node's own position is.
 
 Because ordering comes from the sequence numbers, no comparison of clocks between nodes is involved.
+
+**Timing.** Every exchange costs the slower node's tick: a signal issued in one node's state-machine iteration is
+read by the peer in its next, and the reply comes back one more iteration later. On the deployed campus, city and two
+offices, with every signal arriving a tick late and the day-ahead market negotiating alongside, the real-time market
+reaches full consensus four ticks after Negotiation opens, the campus sending eleven signals (three or four per
+neighbor) and each leaf three; a campus that steps half as often as its neighbors needs correspondingly more wall-clock
+time. The negotiation window must therefore cover at least about six of the slowest node's iterations, with margin for
+the first signal to go out: at 2 to 4 seconds per campus iteration that is 15 to 25 real seconds, which a 600 simulated
+second window gives only at a simulation ratio of 24 or below. A faster ratio needs a longer ``duration_negotiation``
+on every node's consensus series (they must agree), or a node whose iteration is cheaper.
 
 **Full consensus** for an interval is the market having balanced and every transactive neighbor being converged there.
 It is recorded on every pass as ``MeasurementType.FullConsensus`` and is what the analysis tool's consensus strip plots.

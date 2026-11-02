@@ -112,3 +112,39 @@ def test_a_demand_charge_applied_here_is_taken_off_the_neighbors_price():
     assert supplier.balance_points(market)[ti] == (pytest.approx(-20.0), pytest.approx(0.05))
     supplier.scheduled_powers.update(ti, 5.0)  # below the threshold: no charge was applied
     assert supplier.balance_points(market)[ti] == (pytest.approx(-5.0), pytest.approx(4.55))
+
+
+def test_a_stale_balance_point_is_sent_once_more_when_the_prepared_point_is_nearer():
+    """Both sides can say "nothing has changed here" and still disagree: this node's prepared point moved towards the
+    neighbor's by less than the threshold (no local change) while its sent point lies beyond it. The prepared signal is
+    then sent once more; when the prepared point is no nearer, nothing is due."""
+    from tent.containers.transactive_signal import TransactiveSignal
+    from tent.enumerations import SignalDirection
+    tn = MockTN(name='office')
+    market = make_market(tn, T0)
+    ti = market.time_intervals[0]
+    campus = Neighbor(transactive_node=tn, name='campus', transactive=True, up_or_down='upstream',
+                      convergence_threshold=0.05, loss_factor=0.0, demand_rate=0.0, cost_parameters=[0.0, 0.0, 0.0])
+    tn.neighbors = [campus]
+
+    def signal(direction, points, balance, sequence, in_reply_to, revised):
+        sig = TransactiveSignal(market=market, neighbor=campus, direction=direction, sequence=sequence,
+                                in_reply_to=in_reply_to, revised=revised)
+        sig.update(ti, [Vertex(price=p, quantity=q) for p, q in points], archive=False)
+        sig.mark_balance_points_at_quantities({ti: balance})
+        return sig
+    curve = [(0.039, -60.0), (0.043, -40.0)]
+    campus.last_sent_signals[market] = signal(SignalDirection.sent, curve, (-47.0, 0.0395), 3, 2, True)
+    campus._sent_sequence[market], campus._revised_sequence[market] = 3, 3
+    # The neighbor answered signal 3 and says 49.5 kW: 5.2 percent from the sent 47.0, a disagreement.
+    campus.last_received_signals[market] = signal(SignalDirection.received, [(0.039, 0.0), (0.043, 120.0)],
+                                                  (49.5, 0.0395), 4, 3, False)
+    # The prepared point moved to 49.3 kW: 4.8 percent from the sent point, so not a local change, but nearer the
+    # neighbor's (0.4 percent) than the sent point was.
+    campus.prepared_signals[market] = signal(None, curve, (-49.3, 0.0395), None, None, None)
+    campus.check_for_convergence(market)
+    assert campus.is_signal_due(market) is True and campus.is_converged(market) is False
+    # With a prepared point no nearer the neighbor's than the sent one, nothing is due.
+    campus.prepared_signals[market] = signal(None, curve, (-46.9, 0.0395), None, None, None)
+    campus.check_for_convergence(market)
+    assert campus.is_signal_due(market) is False and campus.is_converged(market) is False

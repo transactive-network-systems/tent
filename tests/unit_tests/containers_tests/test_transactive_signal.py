@@ -210,3 +210,61 @@ class TestBalancePointWithAnExchangePrice:
         sig.update(ti, [Vertex(price=float('inf'), quantity=-100.0)], archive=False)
         sig.mark_balance_points_at_quantities({ti: (-100.0, 0.05)})
         assert len(sig.get_by_interval(ti)) == 1 and sig.balance_point(ti) is sig.get_by_interval(ti).vertices[0]
+
+
+class TestConditionsHaveChangedCompareCurvesAsFunctions:
+    """The campus's residual towards an office is a near-horizontal line (0.03953 to 0.03955 $/kWh over 0 to 120 kW)
+    whose interior vertices are the city's breakpoints that happen to fall inside the 120 kW window; they drift in and
+    out of the window between passes while the line does not move. Comparing vertex sets called every pass a change
+    and the campus revised its signal to every neighbor on every tick."""
+    SENT = [(0.03953, 0.0), (0.03954, 49.983), (0.03954, 50.020), (0.03955, 120.0)]            # sequence 25
+    PREPARED = [(0.03953, 0.0), (0.03953, 47.591), (0.03954, 49.705), (0.03954, 51.081), (0.03955, 120.0)]  # 26
+
+    def signals(self, tn, market, ti, sent_points, prepared_points, balance=None):
+        neighbor = Neighbor(transactive_node=tn, name='SMALL_OFFICE_DR', cost_parameters=[0, 0, 0])
+        sent = TransactiveSignal(market=market, neighbor=neighbor, direction=SignalDirection.sent)
+        sent.update(ti, [Vertex(price=p, quantity=q) for p, q in sent_points], archive=False)
+        prepared = TransactiveSignal(market=market, neighbor=neighbor)
+        prepared.update(ti, [Vertex(price=p, quantity=q) for p, q in prepared_points], archive=False)
+        if balance is not None:
+            sent.mark_balance_points_at_quantities({ti: balance[0]})
+            prepared.mark_balance_points_at_quantities({ti: balance[1]})
+        return sent, prepared
+
+    def test_vertices_drifting_along_the_same_line_are_not_a_change(self, market_and_interval):
+        tn, market, ti = market_and_interval
+        sent, prepared = self.signals(tn, market, ti, self.SENT, self.PREPARED, balance=((50.0, 0.03954), (49.7, 0.03954)))
+        assert TransactiveSignal.conditions_have_changed(prepared, sent, ti, threshold=0.02) is False
+        assert TransactiveSignal.conditions_have_changed(sent, prepared, ti, threshold=0.02) is False
+
+    def test_a_kink_the_sent_curve_did_not_have_is_a_change(self, market_and_interval):
+        tn, market, ti = market_and_interval
+        kinked = [(0.03953, 0.0), (0.03953, 60.0), (0.045, 60.0), (0.045, 120.0)]  # a step: 60 kW more only at 0.045
+        sent, prepared = self.signals(tn, market, ti, self.SENT, kinked)
+        assert TransactiveSignal.conditions_have_changed(prepared, sent, ti, threshold=0.02) is True
+
+    def test_a_moved_line_is_a_change(self, market_and_interval):
+        tn, market, ti = market_and_interval
+        moved = [(p + 0.002, q) for p, q in self.SENT]  # five percent dearer everywhere
+        sent, prepared = self.signals(tn, market, ti, self.SENT, moved)
+        assert TransactiveSignal.conditions_have_changed(prepared, sent, ti, threshold=0.02) is True
+        assert TransactiveSignal.conditions_have_changed(prepared, sent, ti, threshold=0.10) is False
+
+    def test_flexibility_appearing_or_vanishing_is_a_change(self, market_and_interval):
+        tn, market, ti = market_and_interval
+        sent, prepared = self.signals(tn, market, ti, [(float('inf'), 50.0)], self.PREPARED)
+        assert TransactiveSignal.conditions_have_changed(prepared, sent, ti, threshold=0.05) is True
+
+    def test_a_moved_balance_point_is_a_change(self, market_and_interval):
+        tn, market, ti = market_and_interval
+        sent, prepared = self.signals(tn, market, ti, self.SENT, self.PREPARED, balance=((50.0, 0.03954), (54.0, 0.03954)))
+        assert TransactiveSignal.conditions_have_changed(prepared, sent, ti, threshold=0.02) is True
+
+    def test_the_distance_to_a_curve_takes_the_sharper_projection(self, market_and_interval):
+        tn, market, ti = market_and_interval
+        sent, _ = self.signals(tn, market, ti, self.SENT, self.PREPARED)
+        curve = sent.get_by_interval(ti)
+        on_the_line = Vertex(price=0.039535, quantity=30.0)  # between the first two vertices of the near-flat line
+        assert TransactiveSignal._distance_to_curve(on_the_line, curve) < 1e-3, 'at the quantity the price is sharp'
+        off_the_line = Vertex(price=0.045, quantity=30.0)
+        assert TransactiveSignal._distance_to_curve(off_the_line, curve) > 0.1

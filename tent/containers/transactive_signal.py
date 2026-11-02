@@ -282,6 +282,13 @@ class TransactiveSignal(SDMeasurement):
         when both vertices express flexibility and have finite, non-zero prices (an inelastic vertex sits at an infinite
         price, where a price difference is meaningless).
         """
+        return TransactiveSignal._relative_distance(vertex_1, vertex_2, no_flexibility, mixed_direction) > threshold
+
+    @staticmethod
+    def _relative_distance(vertex_1, vertex_2, no_flexibility, mixed_direction) -> float:
+        """The dimensionless distance between two vertices: the quantity difference relative to the average quantity
+        (absolute, against a 1 kW scale, when the average is zero) and, when both express flexibility at finite prices,
+        the price difference relative to the average price, combined as a Euclidean distance."""
         sign = -1 if mixed_direction else 1
         q1, q2 = vertex_1.quantity, sign * vertex_2.quantity
         quantity_difference = abs(q2 - q1)  # [avg. kW]
@@ -297,9 +304,24 @@ class TransactiveSignal(SDMeasurement):
             average_marginal_price = 0.5 * abs(p1 + p2)  # [$/kWh]
             if isfinite(p1) and isfinite(p2) and average_marginal_price != 0:
                 price_term = abs(p2 - p1) / average_marginal_price
-        distance = sqrt(quantity_term ** 2 + price_term ** 2)  # dimensionless relative Euclidean distance
-        # If the distance (relative error) exceeds the threshold, the scheduled points are significantly different.
-        return distance > threshold
+        return sqrt(quantity_term ** 2 + price_term ** 2)  # dimensionless relative Euclidean distance
+
+    @classmethod
+    def _distance_to_curve(cls, vertex, sd_curve) -> float:
+        """
+        How far a vertex lies from a curve, as the smaller of two relative distances: to the curve's point at the
+        vertex's price (the quantity the curve gives there) and to the curve's point at the vertex's quantity (the price
+        the curve gives there). One projection alone misjudges a curve that is nearly flat in one dimension: on a
+        residual curve that is a near-horizontal line, the quantity at an exact price is ill-defined while the price at
+        the quantity is sharp, and the other way round on a near-vertical one.
+        """
+        at_price = Vertex(price=vertex.price, quantity=sd_curve.power_from_vertices(vertex.price))
+        distance = cls._relative_distance(vertex, at_price, False, False)
+        low, high = sd_curve.min_quantity(), sd_curve.max_quantity()
+        if low <= vertex.quantity <= high and low < high:
+            at_quantity = Vertex(price=sd_curve.price_from_vertices(vertex.quantity), quantity=vertex.quantity)
+            distance = min(distance, cls._relative_distance(vertex, at_quantity, False, False))
+        return distance
 
     # NOTE: This was previously called helpers.are_different1().
     @classmethod
@@ -354,8 +376,6 @@ class TransactiveSignal(SDMeasurement):
         prepared_curve = prepared_signal.get_by_interval(time_interval)
         if sent_curve is None or prepared_curve is None:
             return sent_curve is not prepared_curve  # one side has the interval and the other does not
-        if len(sent_curve) != len(prepared_curve):
-            return True
 
         # Get the scheduled values from the prepared and sent records.
         sent_balance_vertex: Vertex | None = sent_signal.balance_point(time_interval)
@@ -365,22 +385,41 @@ class TransactiveSignal(SDMeasurement):
 
         # If either signal is constant (one vertex), only its quantity is meaningful, not its marginal price.
         if no_flexibility:
+            if len(sent_curve) != len(prepared_curve):
+                return True  # flexibility appeared or vanished
             sent_vertex = sent_balance_vertex or list(sent_curve.vertices)[0]
             calculated_vertex = calculated_balance_vertex or list(prepared_curve.vertices)[0]
             return cls._diff_exceeds_threshold(sent_vertex, calculated_vertex, threshold, True, False)
 
-        # There are multiple records, meaning that the neighbor is offered price responsiveness. Local convergence of
-        # the coordination sub-problem does not require the exact balance point to be determined, but the flexibility
-        # must be conveyed accurately: conditions have changed if any sent flexibility vertex no longer has a
-        # counterpart among the prepared ones, or if the scheduled balance point itself has moved.
-        prepared_vertices = prepared_signal.flexibility_vertices(time_interval)
+        # Both signals express flexibility. The curves are compared as functions, not as sets of vertices: a residual
+        # curve is the sum of the other entities' curves cut to the neighbor's power window, so its vertices come and go
+        # as another entity's breakpoints drift into and out of the window while the curve itself, a line through them,
+        # does not change. Conditions have changed when some vertex of either curve lies farther than the threshold from
+        # the other curve, or when the scheduled balance point itself has moved.
         for sent_vertex in sent_signal.flexibility_vertices(time_interval):
-            if not any(not cls._diff_exceeds_threshold(sent_vertex, calculated_vertex, threshold, False, False)
-                       for calculated_vertex in prepared_vertices):
+            if cls._distance_to_curve(sent_vertex, prepared_curve) > threshold:
+                return True
+        for calculated_vertex in prepared_signal.flexibility_vertices(time_interval):
+            if cls._distance_to_curve(calculated_vertex, sent_curve) > threshold:
                 return True
         if sent_balance_vertex is not None and calculated_balance_vertex is not None:
             return cls._diff_exceeds_threshold(sent_balance_vertex, calculated_balance_vertex, threshold, False, False)
         return False
+
+    @classmethod
+    def balance_point_distance(cls, signal_a: Self, signal_b: Self, time_interval: TimeInterval) -> float | None:
+        """The relative distance between two signals' balance points in the interval (one of them received, so its
+        quantity is sign-flipped; see balance_points_differ), or None when either has no point to compare."""
+        curve_a, curve_b = signal_a.get_by_interval(time_interval), signal_b.get_by_interval(time_interval)
+        if curve_a is None or curve_b is None or len(curve_a) == 0 or len(curve_b) == 0:
+            return None
+        point_a = signal_a.balance_point(time_interval) or (list(curve_a.vertices)[0] if len(curve_a) == 1 else None)
+        point_b = signal_b.balance_point(time_interval) or (list(curve_b.vertices)[0] if len(curve_b) == 1 else None)
+        if point_a is None or point_b is None:
+            return None
+        no_flexibility = len(curve_a) == 1 or len(curve_b) == 1
+        are_received = [s.direction is SignalDirection.received for s in (signal_a, signal_b)]
+        return cls._relative_distance(point_b, point_a, no_flexibility, any(are_received) and not all(are_received))
 
     def curve_lineage(self, time_interval: TimeInterval):
         """A signal's curve stands for the exchange with its neighbor in one direction (the interval names the market):

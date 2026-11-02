@@ -195,7 +195,18 @@ class Neighbor(Entity):
             disagree = (heard and acknowledged
                         and TransactiveSignal.balance_points_differ(sent_signal, received_signal, time_interval,
                                                                     self.convergence_threshold))
-            due = never_sent or local_change or unanswered
+            # A disagreement nothing here changed cannot be argued away by resending the same content. But the point
+            # sent may be stale: the prepared point can have moved towards the neighbor's by less than the threshold
+            # (so it does not count as a local change) while the sent point lies beyond it. Then the prepared signal is
+            # sent once more, as the acknowledgement it is, so the neighbor compares against the current point.
+            stale = False
+            if disagree and not local_change and prepared_signal is not None:
+                sent_distance = TransactiveSignal.balance_point_distance(sent_signal, received_signal, time_interval)
+                prepared_distance = TransactiveSignal.balance_point_distance(prepared_signal, received_signal,
+                                                                             time_interval)
+                stale = (sent_distance is not None and prepared_distance is not None
+                         and prepared_distance < sent_distance - 1e-9)
+            due = never_sent or local_change or unanswered or stale
             if never_sent:
                 _log.debug(f"No signal sent yet for time interval {time_interval.name}.")
             elif local_change:
@@ -203,8 +214,13 @@ class Neighbor(Entity):
             elif unanswered:
                 _log.debug(f"{self.name}'s revised signal {received_signal.sequence} has not been answered.")
             elif disagree:
-                _log.debug(f"{self.name} disagrees at the balance point for time interval {time_interval.name}; nothing "
-                           f"has changed here, so no signal is due.")
+                sent_point = sent_signal.balance_point(time_interval)
+                received_point = received_signal.balance_point(time_interval)
+                _log.debug(f"{self.name} disagrees at the balance point for time interval {time_interval.name}: sent "
+                           f"{(sent_point.quantity, sent_point.price) if sent_point else None}, received "
+                           f"{(received_point.quantity, received_point.price) if received_point else None}; "
+                           + ("the prepared point is nearer the neighbor's, so it is sent once more."
+                              if stale else "nothing has changed here, so no signal is due."))
             due_flags.append(due)
             self.convergence_flags.update(time_interval, bool(heard and acknowledged and not disagree and not local_change))
 

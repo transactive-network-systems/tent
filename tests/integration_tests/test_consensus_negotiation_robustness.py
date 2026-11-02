@@ -15,6 +15,7 @@ from unittest.mock import patch
 
 import pytest
 
+from tent.enumerations import MarketState
 from tent.local_asset import LocalAsset
 from tent.market.consensus_market import ConsensusMarket
 from tent.market.market_series import MarketSeries
@@ -386,3 +387,85 @@ def test_the_deployed_hierarchy_reaches_full_consensus_in_a_few_exchanges(tmp_pa
     assert {f'{tn.name}->{n.name}': n.last_sent_signals[markets[tn.name]].sequence
             for tn in nodes.values() for n in tn.neighbors if n.transactive and markets[tn.name] in n.last_sent_signals} == sequences
     assert all(m.in_consensus for m in markets.values())
+
+
+@pytest.mark.skipif(deployed_office_config() is None, reason='the deployed consensus container configurations are not '
+                                                             'beside this repository')
+def test_the_deployed_hierarchy_converges_with_signals_arriving_a_tick_late(tmp_path):
+    """As the message bus delivers them: every signal reaches its peer at the peer's next step but one, the nodes step
+    in a different order each tick, and the day-ahead market negotiates alongside the real-time one. Before the change
+    rule compared curves as functions, the campus revised its signal to every neighbor on every tick and needed seven
+    ticks and seventeen signals per real-time market here (and never settled in the containers' six); now four ticks
+    and eleven signals, the leaves three each."""
+    import random
+    clock_at(datetime(2017, 7, 3, 0, 40, tzinfo=timezone.utc))
+    nodes = {}
+    for node, file_name in (('campus', 'tn.campus.json'), ('city', 'tn.city.json'),
+                            ('small_office_dr', 'tn.so.dr.json'), ('small_office_ilc', 'tn.so.ilc.json')):
+        tn = MockTN()
+        tn.configure_node(deployed_node_config(node, file_name, tmp_path))
+        nodes[tn.name] = tn
+    campus = nodes['PNNL_Campus']
+    queue, tick, sent = [], [0], {name: 0 for name in nodes}
+
+    def wire(sender, receiver):
+        mine = next(n for n in sender.neighbors if n.name == receiver.name)
+        theirs = next(n for n in receiver.neighbors if n.name == sender.name)
+
+        def issue(message, _theirs=theirs, _receiver=receiver.name, _sender=sender.name):
+            sent[_sender] += 1
+            queue.append((tick[0] + 1, _receiver, _theirs, message))
+        sender.register_recipient(mine.name, issue)
+
+    for tn in nodes.values():
+        if tn is not campus:
+            wire(campus, tn)
+            wire(tn, campus)
+    rng = random.Random(7)
+
+    def step_all(now):
+        tick[0] += 1
+        clock_at(now)
+        order = list(nodes.values())
+        rng.shuffle(order)
+        for tn in order:
+            due = [q for q in queue if q[1] == tn.name and q[0] <= tick[0]]
+            for q in due:
+                queue.remove(q)
+                q[2].receive_transactive_signal(None, None, q[3])
+            tn.step()
+
+    def real_time_markets():
+        return {name: next(m for s in tn.market_series if s.name == 'Real-Time_Auction' for m in s
+                           if m.market_state is MarketState.Negotiation)
+                for name, tn in nodes.items()}
+
+    # Run until every node has a real-time market in Negotiation (the day-ahead one is negotiating too by then).
+    now = datetime(2017, 7, 3, 0, 40, tzinfo=timezone.utc)
+    while True:
+        now += timedelta(seconds=3)
+        step_all(now)
+        try:
+            markets = real_time_markets()
+        except StopIteration:
+            continue
+        if len({m.name for m in markets.values()}) == 1:
+            break
+    day_ahead = {name: next(m for s in tn.market_series if s.name == 'Day-Ahead_Auction' for m in s) for name, tn in nodes.items()}
+    assert all(m.market_state is MarketState.Negotiation for m in day_ahead.values()), 'the day-ahead negotiates alongside'
+    market_name = next(iter(markets.values())).name
+    first_tick, sent_before = tick[0], dict(sent)
+    for _ in range(12):
+        now += timedelta(seconds=3)
+        step_all(now)
+        if all(m.in_consensus for m in markets.values()):
+            break
+    else:
+        pytest.fail({name: (m.in_consensus, m.converged) for name, m in markets.items()})
+    ticks = tick[0] - first_tick
+    assert ticks <= 6, f'{market_name}: full consensus took {ticks} ticks with one-tick-late delivery'
+    campus_signals = sum(n.last_sent_signals[markets['PNNL_Campus']].sequence for n in campus.neighbors if n.transactive)
+    assert campus_signals <= 15, f'the campus sent {campus_signals} signals for one market'
+    for name, tn in nodes.items():
+        if tn is not campus:
+            assert tn.neighbors[0].last_sent_signals[markets[name]].sequence <= 5
