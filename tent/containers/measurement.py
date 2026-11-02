@@ -302,6 +302,13 @@ class Measurement(Archivable):
     def total(self, market=None):
         return sum(mv.value for ti, mv in self._data.items() if ti.market == market) if market else sum(self.values)
 
+    def curve_lineage(self, time_interval: TimeInterval):
+        """What a curve of this measurement in `time_interval` stands for, as a hashable key: a new version of the same
+        thing is archived only when it differs from the last version archived under this key (see
+        tent.base.archiving.curve_version_due). For a measurement that is the curve's own: itself. A signal, which is a
+        new measurement each time it is sent or received, names its neighbor and direction instead."""
+        return ('measurement', self.id)
+
     def update(self, time_interval: TimeInterval, value: Any, archive: bool = True, replace: bool = False):
         # TODO: Is replace used and/or necessary?
         # TODO: create batch_update method which uses the same record time for all values to archive all values. 

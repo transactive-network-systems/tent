@@ -347,8 +347,17 @@ class TransactiveSignal(SDMeasurement):
             return cls._diff_exceeds_threshold(sent_balance_vertex, calculated_balance_vertex, threshold, False, False)
         return False
 
+    def curve_lineage(self, time_interval: TimeInterval):
+        """A signal's curve stands for the exchange with its neighbor in one direction (the interval names the market):
+        every signal is a new measurement, so the lineage is the neighbor and the direction, not the signal's id, and a
+        re-sent curve that did not change is not archived again."""
+        direction = self.direction.name if self.direction is not None else None
+        return ('signal', self.neighbor.id, direction)
+
     def archive(self, records: list[dict] = None):
-        """Archive the signal header and, with it, every interval's curve (sd_curve + vertex rows) as one version."""
+        """Archive the signal header and, with it, every interval's curve (sd_curve + vertex rows) as one version. A
+        curve that is the same as the last one archived for this neighbor, market, direction and interval is not written
+        again (see tent.base.archiving): the header row alone says the signal was exchanged."""
         super(TransactiveSignal, self).archive(records)
         for _, curve in self.all:
             curve.archive()

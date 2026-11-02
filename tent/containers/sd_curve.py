@@ -534,14 +534,51 @@ class SDCurve(Archivable):
         record_time. Timer.now() is the canonical clock everywhere (simulation time when simulating); real time is
         recoverable from the run's anchor and ratio.
         """
+        if archiving.in_final_curves():
+            self._final_version = True  # a final version even if the deferred write happens after the block closed
         if archiving.defer(self, self._deferral_key(), records):
             return  # written once when the enclosing deferred_archiving block ends, the latest curve for its interval
+        if not self.version_due():
+            return  # the same curve as the last version archived, or a level that does not archive it (see archiving)
         super(SDCurve, self).archive(self._version_records(records))
 
     def archive_records(self, records: list[dict] | None = None) -> list[dict]:
         """One version of this curve as archive rows (`records`, the vertex rows and the curve row), marked as archived,
-        for a caller that writes them in a batch (see tent.base.archiving)."""
+        for a caller that writes them in a batch (see tent.base.archiving); no rows when no version is due."""
+        if not self.version_due():
+            return list(records) if records else []
         return [*self._version_records(records), self.archive_record()]
+
+    VERSION_IDENTITY = frozenset({'id', 'record_time', 'measurement_id'})  # row columns that name a version, not content
+
+    def fingerprint(self) -> tuple:
+        """What a version of this curve says: the vertices as (price, quantity, cost, continuity) tuples, in curve order,
+        and the curve's own row apart from what identifies the version rather than its content (the curve's id and
+        record time, its measurement's id: a replaced curve and a re-sent signal are new objects standing for the same
+        thing, see Measurement.curve_lineage). An order's status is part of it. Two curves with the same fingerprint are
+        the same version to the archive and the second is not written."""
+        row = tuple(sorted(((k, v) for k, v in self.get_record().items() if k not in self.VERSION_IDENTITY),
+                           key=lambda kv: kv[0]))
+        return tuple((v.price, v.quantity, v.cost, v.continuity) for v in self.vertices), row
+
+    def version_due(self) -> bool:
+        """Whether archiving this curve now writes a version: the node archives curves at this point (its curve_archiving
+        level) and the curve differs from the last version archived for what it stands for (its measurement's lineage in
+        its interval). Noting the version as archived is part of asking, so ask once per write."""
+        try:
+            measurement, interval = self.__measurement, self.__interval
+            if interval is not None:
+                interval = getattr(interval, 'referent', interval)  # the interval itself, not the proxy, as a key
+            if measurement is None or interval is None:
+                lineage = None
+            elif hasattr(measurement, 'curve_lineage'):
+                lineage = measurement.curve_lineage(interval)
+            else:  # a stand-in measurement (tests): the curve stands for that object's curve in the interval
+                lineage = ('measurement', getattr(measurement, 'id', id(measurement)))
+        except ReferenceError:
+            lineage, interval = None, None
+        final, self._final_version = getattr(self, '_final_version', False), False
+        return archiving.curve_version_due(interval, lineage, self.fingerprint(), final=final)
 
     def _version_records(self, records: list[dict] | None) -> list[dict]:
         self.last_record_time = Timer.now()

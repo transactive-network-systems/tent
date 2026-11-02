@@ -195,7 +195,21 @@ table (`version`, `fingerprint`, `application`, `application_version`, `created`
 creates it. Opening an existing database written with another version raises `ArchiveSchemaMismatch` naming both
 versions; nothing is migrated, the database is recreated or read with a TENT of its own version.
 `open_archive(url).schema_version` reports the version of an archive (`None` for a database without the table, meaning
-version 1). Archive rows carry infinities (an inelastic vertex's price) and NaN (a degenerate curve's cost); written
+version 1).
+
+Curves (the `sd_curve` and `vertex` tables: a market's system curve, the curves of each sent and received
+transactive signal, an entity's active vertices) are the bulk of an archive, and a negotiation rebuilds them on every
+tick. Two rules in `tent.base.archiving` bound them. A curve version is written only when it differs from the last
+version archived for the same thing: the same measurement and interval, or for a signal the same neighbor, market,
+direction and interval (`Measurement.curve_lineage`); the same vertices with the same price, quantity, cost and
+continuity are never written twice. A signal re-sent unchanged still writes its `transactive_signal` row, with no curves
+of its own: a reader takes, per interval, the latest curve archived for that neighbor, market and direction at or before
+the signal's time, as it takes the latest version of any value. The node setting `curve_archiving` (reconfigurable in
+place) then says which versions are kept at all: `all` (every changed version, the default), `final` (only the versions
+a market archives when it leaves Negotiation and when it clears, `Market.archive_final_curves`: the last system curve
+and the last signal exchanged with each neighbor per interval) or `none` (no curve rows; measurement and signal headers
+are still written). Everything a market tick archives is written in one batch when the tick ends
+(`tent.base.archiving.deferred_archiving`). Archive rows carry infinities (an inelastic vertex's price) and NaN (a degenerate curve's cost); written
 straight to a database they are the Float column's infinity, except that SQLite has no NaN and keeps NULL; sent over a
 JSON wire (the VOLTTRON agent to the historian) they travel as the library's `{"$float": "inf" | "-inf" | "nan"}` token
 and the receiving data manager decodes them. `archive_schema_fingerprint()` is a SHA-256 of the canonical JSON of the shipped definitions and

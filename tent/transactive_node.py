@@ -47,7 +47,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from itertools import chain
 from sortedcontainers import SortedList
-from typing import Annotated, Any, Callable, Mapping
+from typing import Annotated, Any, Callable, Literal, Mapping
 from uuid import UUID
 from zoneinfo import ZoneInfo, available_timezones
 
@@ -57,7 +57,7 @@ from tent import registry
 from archivable import DataManager, NullDataManager
 
 from tent import data_manager as tent_archive
-from tent.base import Archivable  # before tent.containers: the base package completes before the containers need it
+from tent.base import Archivable, archiving  # before tent.containers: the base package completes before the containers need it
 from tent.config import ClassSpec, ConfigModel, Configurable, ConfigurationError, ReconfigurationError, Setting
 import tent.containers as containers
 from tent.information_service_model import InformationServiceModel
@@ -133,6 +133,14 @@ class TransactiveNode(Configurable, Archivable):
         data_manager: ClassSpec | None = Setting(None, spec_of='DataManager',
                                                  description='The archive (class_name and its settings); null means '
                                                              'nothing is archived.')
+        curve_archiving: Literal['all', 'final', 'none'] = Setting(
+            'all', reconfigurable=True,
+            description='Which curve versions (sd_curve and vertex rows: system curves, signal curves, active vertices) '
+                        'the archive keeps. "all": every version that differs from the last one archived for the same '
+                        'measurement and interval (an unchanged curve is never written twice). "final": only the '
+                        'versions a market archives when it leaves Negotiation and when it clears, the last system '
+                        'curve and the last signal exchanged with each neighbor per interval. "none": no curve rows; '
+                        'measurement and signal headers are still written.')
         meter_points: list[ClassSpec] = Setting([], spec_of='MeterPoint', description='The meter points.')
         information_service_models: list[ClassSpec] = Setting([], spec_of='InformationServiceModel',
                                                               description='The information services (forecasts).')
@@ -283,6 +291,8 @@ class TransactiveNode(Configurable, Archivable):
         cfg = self.config if self.config is not None else self.Config.validate_for(type(self).__name__, configs)
 
         # TransactiveNode Configurations:
+        archiving.set_curve_archiving(cfg.curve_archiving)  # process-wide: the archive is (see tent.base.archiving)
+        self.curve_archiving = cfg.curve_archiving
         self.description = cfg.description
         self.loop_sleep_duration = cfg.loop_sleep_duration
         self.mechanism = cfg.mechanism
@@ -408,12 +418,22 @@ class TransactiveNode(Configurable, Archivable):
         if plan is None:
             return False
         for component, changes in plan:
-            component.reconfigure(changes)
+            if component is self:
+                self._apply_reconfiguration(new_cfg, set(changes))
+            else:
+                component.reconfigure(changes)
         self.config = new_cfg
         self.configuration = deepcopy(dict(new_config))
         _log.info(f'Node {self.name!r} took the new configuration in place: '
                   f'{[(c.name, sorted(changes)) for c, changes in plan] or "no component changed"}.')
         return True
+
+    def _apply_reconfiguration(self, cfg, changed: set[str]) -> None:
+        """Apply the node's own reconfigurable settings (curve_archiving reaches the archiving module, which decides
+        for every curve in the process)."""
+        super(TransactiveNode, self)._apply_reconfiguration(cfg, changed)
+        if 'curve_archiving' in changed:
+            archiving.set_curve_archiving(cfg.curve_archiving)
 
     def _reconfiguration_plan(self, new_cfg: 'TransactiveNode.Config') -> list[tuple] | None:
         """(component, changes) pairs that take the node from its configuration to `new_cfg` in place, or None (with
@@ -426,9 +446,13 @@ class TransactiveNode(Configurable, Archivable):
         current_node = self.config.model_dump(exclude=component_lists)
         new_node = new_cfg.model_dump(exclude=component_lists)
         changed_node_fields = sorted(key for key in current_node if current_node[key] != new_node[key])
-        if changed_node_fields:
-            return rebuild(f'node settings {changed_node_fields} changed.')
+        fixed_node_fields = sorted(set(changed_node_fields) - self.Config.reconfigurable_fields())
+        if fixed_node_fields:
+            return rebuild(f'node settings {fixed_node_fields} changed.')
         plan = []
+        if changed_node_fields:
+            # The node's own reconfigurable settings (curve_archiving) are applied to the node itself.
+            plan.append((self, {key: getattr(new_cfg, key) for key in changed_node_fields}))
         for list_name in registry.NODE_LISTS:
             current_specs = {spec.settings().get('name', ''): spec for spec in getattr(self.config, list_name)}
             new_specs = {spec.settings().get('name', ''): spec for spec in getattr(new_cfg, list_name)}
