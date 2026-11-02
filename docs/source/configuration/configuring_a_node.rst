@@ -1056,6 +1056,18 @@ Neighbor
      -  
      - Coordination mechanism (future use).
      -  
+   * - ``signal_simplification_tolerance``
+     - number
+     - 0.0
+     - >= 0
+     - [fraction of the curve's price and quantity spans] interior vertices of each curve of a prepared transactive signal that lie within this distance of the simplified curve are dropped before the signal is sent and archived (see tent.containers.curve_simplification); 0 sends every vertex. 0.01 is one percent.
+     - yes
+   * - ``signal_max_vertices``
+     - integer or null
+     - None
+     -  
+     - Most vertices a curve of a sent transactive signal may carry; the simplification tolerance is doubled until a curve fits. Null means no cap.
+     - yes
    * - ``transactive``
      - boolean
      - False
@@ -1192,6 +1204,18 @@ A non-transactive bulk electricity supplier (modelled on BPA's relationship to a
      -  
      - Coordination mechanism (future use).
      -  
+   * - ``signal_simplification_tolerance``
+     - number
+     - 0.0
+     - >= 0
+     - [fraction of the curve's price and quantity spans] interior vertices of each curve of a prepared transactive signal that lie within this distance of the simplified curve are dropped before the signal is sent and archived (see tent.containers.curve_simplification); 0 sends every vertex. 0.01 is one percent.
+     - yes
+   * - ``signal_max_vertices``
+     - integer or null
+     - None
+     -  
+     - Most vertices a curve of a sent transactive signal may carry; the simplification tolerance is doubled until a curve fits. Null means no cap.
+     - yes
    * - ``transactive``
      - constant False
      - False
@@ -1334,6 +1358,18 @@ A non-transactive neighbor that states only a price or only a quantity (see the 
      -  
      - Coordination mechanism (future use).
      -  
+   * - ``signal_simplification_tolerance``
+     - number
+     - 0.0
+     - >= 0
+     - [fraction of the curve's price and quantity spans] interior vertices of each curve of a prepared transactive signal that lie within this distance of the simplified curve are dropped before the signal is sent and archived (see tent.containers.curve_simplification); 0 sends every vertex. 0.01 is one percent.
+     - yes
+   * - ``signal_max_vertices``
+     - integer or null
+     - None
+     -  
+     - Most vertices a curve of a sent transactive signal may carry; the simplification tolerance is doubled until a curve fits. Null means no cap.
+     - yes
    * - ``transactive``
      - boolean
      - False

@@ -70,6 +70,30 @@ Because ordering comes from the sequence numbers, no comparison of clocks betwee
 **Full consensus** for an interval is the market having balanced and every transactive neighbor being converged there.
 It is recorded on every pass as ``MeasurementType.FullConsensus`` and is what the analysis tool's consensus strip plots.
 
+Simplifying the curves a signal carries
+---------------------------------------
+
+A summed curve has one vertex per distinct price among the participants, so a node with many actors would send and
+archive long piece-wise linear curves that the neighbor interpolates to the same powers as a much shorter one. Two
+neighbor settings, both reconfigurable, simplify each curve of the prepared signal in ``prep_transactive_signal`` after
+the loss and demand-charge corrections and before the balance point is marked, so the prepared, sent and archived
+signal is the simplified one and the convergence check compares like with like:
+
+- ``signal_simplification_tolerance`` (default 0, off): interior vertices within this fraction of the curve's price and
+  quantity spans of the simplified curve are dropped (``SDCurve.simplified``, the Douglas-Peucker algorithm on the
+  (price, quantity) polyline with both axes scaled by their spans; the distance is the larger of the quantity deviation
+  at the vertex's price and the price deviation at its quantity, so reading the simplified curve at any original price
+  gives a power within tolerance times the quantity span of the original). The first and last vertex and vertices at an
+  infinite price are always kept. The costs of the kept vertices are recomputed as the integral of the marginal price
+  along the simplified polyline from the first vertex, consistently with ``SDCurve.prod_cost_from_vertices``; the
+  first vertex, and the price and quantity of every kept vertex, are preserved.
+- ``signal_max_vertices`` (default null, no cap): the tolerance is doubled (from the configured one, or from 1e-4 when
+  it is 0) until every curve of the signal fits.
+
+One DEBUG line per prepared signal gives the vertex counts before and after, per interval, and the tolerance applied.
+Nothing changes on the receiving side: ``receive_transactive_signal`` stores whatever the neighbor sent. The rules and
+what is preserved are stated in ``tent.containers.curve_simplification``.
+
 Under the state machine
 -----------------------
 
