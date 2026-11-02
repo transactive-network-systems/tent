@@ -146,7 +146,7 @@ class SolarPvResource(LocalAsset):
         self.schedule_calculated = True
         if _log.isEnabledFor(logging.DEBUG):  # the report spans every market's intervals; build it only when shown
             _log.debug(f'Scheduled_powers for market: {market.name} --- '
-                       f'{ {ti.name: p for ti, p in self.scheduled_powers.log_report.items() if ti.startswith(market.name)} }')
+                       f'{ {name: p for name, p in self.scheduled_powers.log_report.items() if name.startswith(market.name)} }')
 
     @property
     def table_name(self):

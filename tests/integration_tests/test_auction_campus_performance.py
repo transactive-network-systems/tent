@@ -67,3 +67,22 @@ def test_a_clearing_step_archives_in_one_batch_per_market(campus, clock):
     markets_ticked = sum(len(series.markets) for series in tn.market_series)
     assert manager.records > 200, 'the step scheduled two assets and two neighbors over 24 intervals'
     assert manager.calls <= markets_ticked, f'{manager.calls} archive_data calls for {manager.records} records'
+
+
+def test_a_campus_clearing_runs_with_debug_logging_enabled(campus, clock, caplog):
+    """The deployment logs at DEBUG. The dumps that are built only at that level (final prices, the solar array's
+    scheduled powers) must not fail when they are built: this run of a real-time clearing with every tent logger at
+    DEBUG would raise from the state machine if one did, and the solar dump must name this market's intervals only."""
+    import logging
+    caplog.set_level(logging.DEBUG, logger='tent')
+    tn = campus
+    market = tn.get_market_series_by_attribute('name', 'Real-Time_Auction', first_only=True).newest_market
+    deliver_neighbor_signals(tn, market)
+    step_to(tn, clock, market.transition_times.active)
+    step_to(tn, clock, market.transition_times.delivery_lead)
+    assert market.market_state is MarketState.DeliveryLead and market._stateIsCompleted
+    solar_dumps = [r.getMessage() for r in caplog.records if r.getMessage().startswith('Scheduled_powers for market')]
+    assert solar_dumps, 'the solar array reported its schedule at DEBUG'
+    for dump in solar_dumps:
+        named = dump.split(' --- ', 1)[0].rsplit(': ', 1)[1]
+        assert named in dump.split(' --- ', 1)[1], 'the dump lists this market\'s own intervals'
