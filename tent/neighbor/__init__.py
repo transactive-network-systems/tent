@@ -383,6 +383,14 @@ class Neighbor(Entity):
                 # Check for and correct treatment of a lone default vertex marginal price.
                 if received_sd_curve and len(received_sd_curve) == 1:
                     received_sd_curve.replace_vertex(received_sd_curve.vertices[0], price=float('inf'))
+                # A received curve may extend past what this link can carry (a supplier offering 30 MW on a 20 MW
+                # connection). Bound it to the configured limits, interpolating the price at the limit, as the bid sent
+                # the other way is bounded in prep_transactive_signal; include_marginal_losses would otherwise clamp the
+                # quantity and keep the vertex's own price, pricing the limit at the offer's top. The 0.0 defaults
+                # (no range configured) leave the curve as received.
+                if self.minimum_power < self.maximum_power:
+                    received_sd_curve.apply_constraints_and_bounds(minimum_power=self.minimum_power,
+                                                                   maximum_power=self.maximum_power)
                 self.active_vertices.update(time_interval, received_sd_curve, archive=False, replace=True)
 
             # At this point, active vertices have been created, regardless whether the neighbor is transactive.
