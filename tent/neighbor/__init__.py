@@ -671,8 +671,14 @@ class Neighbor(Entity):
         prepared_signal.sequence = sequence
         prepared_signal.in_reply_to = received.sequence if received is not None else None
         prepared_signal.revised = revised
-        self.tn.issue_signal(self.name, prepared_signal.generate_signal(
-            self.balance_points(market) if include_schedule else None))
+        # With the schedule, the balance points are marked as prep_transactive_signal marks them (Market.BALANCE_POINT):
+        # a negotiating market's at the scheduled power with the price of the exchange, a book's at the matched quantity
+        # alone, so the point stays on the curve rather than at the book's own price for it.
+        schedule = None
+        if include_schedule:
+            schedule = (self.balance_point_quantities(market) if market.BALANCE_POINT == 'matched_quantity'
+                        else self.balance_points(market))
+        self.tn.issue_signal(self.name, prepared_signal.generate_signal(schedule))
 
         # Keep a snapshot of what was sent. The prepared signal is revised in place on every negotiation pass, so the
         # sent signal must be an independent copy or the convergence check would compare a signal with itself.

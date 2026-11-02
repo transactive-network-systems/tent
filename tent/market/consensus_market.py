@@ -153,30 +153,18 @@ class ConsensusMarket(Market):
                 # Every asset and neighbor refreshes its active vertices (neighbors from their last received signal) and
                 # schedules against the current marginal prices.
                 self.schedule()
-                # Sum the system curve and solve for the marginal price. balance() sets converged False and returns on
-                # failure (e.g. there is no supply at all), in which case there is nothing more to do this tick.
-                self.balance()
-                prices = [self.marginal_prices.get_by_interval(ti) for ti in self.time_intervals]
-                if any(p is None or p.value is None for p in prices):
-                    _log.warning(f'{self.name}: no marginal price could be found in at least one interval.')
+                # Find each interval's price and every entity's power at it from the current curves. The solve step
+                # sets converged False and returns False when some interval cannot be priced (e.g. there is no supply
+                # at all), in which case there is nothing more to do this tick.
+                if not self._solve_locally():
                     self._mark_signals_seen()
                     return False
                 # Reschedule powers at the cleared prices (held within each entity's limits, as the schedule the curves
                 # were built from was), then measure the duality gap and the power balance.
-                for entity in self._entities():
-                    entity.schedule_power(self)
-                    entity.clamp_scheduled_powers(self)
+                self._reschedule_entities()
                 self.update_costs()
                 self.update_supply_demand()
-                if self.total_production_cost == 0 or self.unbalanceable:
-                    # Nothing costs anything, or some interval has no crossing (its costs cannot close either way):
-                    # balance is judged on the net power of the intervals that can balance.
-                    self.duality_gap = max((abs(self.net_powers.get_by_interval(ti).value) for ti in self.time_intervals
-                                            if ti.name not in self.unbalanceable), default=0.0)
-                    gap_ok = self.duality_gap <= self.series.duality_gap_threshold
-                else:
-                    self.duality_gap = (self.total_production_cost - self.total_dual_cost) / self.total_production_cost
-                    gap_ok = abs(self.duality_gap) <= self.series.duality_gap_threshold
+                gap_ok = self._gap_closes()
                 _log.debug(f'{self.name} balance iteration {k}: production {self.total_production_cost:.4f}, '
                            f'dual {self.total_dual_cost:.4f}, gap {self.duality_gap:.5f}')
                 if gap_ok and self.is_power_balanced():
@@ -200,6 +188,40 @@ class ConsensusMarket(Market):
                 self.converged = self.is_power_balanced()
         self._mark_signals_seen()
         return self.converged
+
+    # The three steps of one balancing iteration. ConsensusMarket solves by interpolation on the summed curve; a market
+    # that clears another way (MatchingConsensusMarket: an order book) replaces them and keeps the loop, the convergence
+    # bookkeeping and the coordination with the neighbors.
+    def _solve_locally(self) -> bool:
+        """Price every interval and assign every entity its power at that price from the current curves: interpolation
+        on the summed curve (balance). Returns False when some interval has no price afterwards."""
+        self.balance()
+        prices = [self.marginal_prices.get_by_interval(ti) for ti in self.time_intervals]
+        if any(p is None or p.value is None for p in prices):
+            _log.warning(f'{self.name}: no marginal price could be found in at least one interval.')
+            return False
+        return True
+
+    def _reschedule_entities(self) -> None:
+        """Every entity schedules its power at the prices just found, within its limits."""
+        for entity in self._entities():
+            entity.schedule_power(self)
+            entity.clamp_scheduled_powers(self)
+
+    def _gap_closes(self) -> bool:
+        """Measure the duality gap of the solution just found (self.duality_gap) and say whether it is within the
+        series' threshold. When nothing costs anything, or some interval has no crossing (its costs cannot close either
+        way), balance is judged on the net power of the intervals that can balance."""
+        if self.total_production_cost == 0 or self.unbalanceable:
+            self.duality_gap = self._largest_imbalance()
+            return self.duality_gap <= self.series.duality_gap_threshold
+        self.duality_gap = (self.total_production_cost - self.total_dual_cost) / self.total_production_cost
+        return abs(self.duality_gap) <= self.series.duality_gap_threshold
+
+    def _largest_imbalance(self) -> float:
+        """The largest absolute net power [kW] among the intervals that can balance."""
+        return max((abs(self.net_powers.get_by_interval(ti).value) for ti in self.time_intervals
+                    if ti.name not in self.unbalanceable), default=0.0)
 
     def _price_vector(self) -> tuple:
         """The marginal price of every interval, for telling whether an iteration moved anything."""

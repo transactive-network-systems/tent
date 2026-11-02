@@ -342,7 +342,8 @@ class TransactiveSignal(SDMeasurement):
         received_curve = received_signal.get_by_interval(time_interval)
         if sent_curve is None or received_curve is None or len(sent_curve) == 0 or len(received_curve) == 0:
             return True  # one side has nothing for this interval: they cannot agree
-        no_flexibility = len(sent_curve) == 1 or len(received_curve) == 1
+        no_flexibility = (len(sent_curve) == 1 or len(received_curve) == 1
+                          or cls._agreement_is_on_quantity_alone(sent_signal))
         # A lone vertex is its own balance point; otherwise a signal without a marked balance point cannot be compared.
         sent: Vertex | None = sent_signal.balance_point(time_interval) or (list(sent_curve.vertices)[0]
                                                                             if len(sent_curve) == 1 else None)
@@ -419,9 +420,16 @@ class TransactiveSignal(SDMeasurement):
         point_b = signal_b.balance_point(time_interval) or (list(curve_b.vertices)[0] if len(curve_b) == 1 else None)
         if point_a is None or point_b is None:
             return None
-        no_flexibility = len(curve_a) == 1 or len(curve_b) == 1
+        no_flexibility = len(curve_a) == 1 or len(curve_b) == 1 or cls._agreement_is_on_quantity_alone(signal_a)
         are_received = [s.direction is SignalDirection.received for s in (signal_a, signal_b)]
         return cls._relative_distance(point_b, point_a, no_flexibility, any(are_received) and not all(are_received))
+
+    @staticmethod
+    def _agreement_is_on_quantity_alone(signal) -> bool:
+        """True when the signal's market asks its neighbors to agree on the exchanged quantity alone, its prices being
+        its own (Market.BALANCE_POINT_AGREEMENT == 'quantity'); the price term then stays out of the comparison, as it
+        does for an inelastic vertex."""
+        return getattr(getattr(signal, 'market', None), 'BALANCE_POINT_AGREEMENT', None) == 'quantity'
 
     def curve_lineage(self, time_interval: TimeInterval):
         """A signal's curve stands for the exchange with its neighbor in one direction (the interval names the market):

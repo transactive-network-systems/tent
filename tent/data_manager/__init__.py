@@ -24,9 +24,11 @@ _log = logging.getLogger(__name__)
 # what it is reading. Version 1 is every archive written before 2 November 2026; those databases have no archive_schema
 # table. Version 2 (2 November 2026) is the first to carry the table, with a tent_version column. Version 3 (2 November
 # 2026) is the library's archive_schema table (one row per application: application, version, fingerprint,
-# application_version, created) and a fingerprint that covers the enumerations. The fingerprint of each version is recorded in
+# application_version, created) and a fingerprint that covers the enumerations. Version 4 (2 November 2026) adds the
+# matching_auction table and the market types matching_auction and matching_consensus; version 5 (2 November 2026) adds
+# the matching_consensus table. The fingerprint of each version is recorded in
 # tests/unit_tests/data_manager_tests/test_archive_schema.py; that test fails when a definition changes without a bump.
-ARCHIVE_SCHEMA_VERSION = 4
+ARCHIVE_SCHEMA_VERSION = 5
 APPLICATION = 'TENT'
 
 

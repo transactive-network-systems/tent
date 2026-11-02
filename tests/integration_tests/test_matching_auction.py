@@ -146,16 +146,15 @@ def test_a_city_book_clears_a_campus_auction_bid(clock):
     for ti in m_city.time_intervals:
         legs = [l for l in m_city.matchList if l.interval.name == ti.name]
         assert sum(abs(l.vertices[-1].quantity) for l in legs) / 2 == pytest.approx(40.0), 'one 40 kW trade'
-        # The campus's market order rested in the book and the plant's offer hit it at the first rung with enough
-        # supply, 0.08: the book's price.
-        assert m_city.marginal_prices.get_by_interval(ti).value == pytest.approx(0.08)
+        # The campus's market order rested in the book; the plant's offer is the aggressive side and 40 kW of its curve
+        # (0 kW at 0.04 to 100 kW at 0.08) is priced from the curve, 0.056: the book's price, and the curve's.
+        assert m_city.marginal_prices.get_by_interval(ti).value == pytest.approx(0.056)
         assert m_city.cleared_power(city.neighbors[0], ti) == pytest.approx(-40.0)
         assert city.local_assets[0].scheduled_powers.get_by_interval(ti).value == pytest.approx(40.0)
         assert city.neighbors[0].scheduled_powers.get_by_interval(ti).value == pytest.approx(-40.0)
     # The downstream signal carries the matched quantity at the city's residual curve's own price for it, 0.056 (the
     # plant's offer at 40 kW): the point lies on the curve the campus receives, so the campus clears onto the matched
-    # quantity. The book's fill price, 0.08, is the resting order's rung (the campus's market order took any price), a
-    # pay-as-bid price that is the city's marginal price but not a point of its residual curve.
+    # quantity, and the book's fill price is the same price, since the fill was priced from that curve.
     sent = city.neighbors[0].last_sent_signals[m_city]
     for ti in m_city.time_intervals:
         point = sent.balance_point(ti)
@@ -264,7 +263,9 @@ def test_design_b_a_book_on_the_city_and_the_campus_clears_the_deployed_hierarch
     # every link agree, to the link's losses.
     city_sends, campus_imports = check_exchanges(nodes, markets)
     assert city_sends[0] == pytest.approx(-6489.48, abs=0.01) and campus_imports[0] == pytest.approx(6426.31, abs=0.01)
-    # Each book's own last fill sets its marginal price: the city's at the campus bid's rung, the campus's at the city
-    # remainder's rung its offices were filled at.
+    # Each book's own last fill sets its marginal price: the city's at the campus bid's rung (the campus's bid rests and
+    # the city's supply takes all of it at each rung), the campus's inside the city remainder's segment at that curve's
+    # own price for the quantity its offices took (the linear standing-order case), which is the price the campus clears
+    # onto in design A, 0.03292: both deployments give the campus the same price.
     assert m_city.marginal_prices.get_by_interval(m_city.time_intervals[0]).value == pytest.approx(0.04025, abs=1e-5)
-    assert m_campus.marginal_prices.get_by_interval(m_campus.time_intervals[0]).value == pytest.approx(0.03444, abs=1e-5)
+    assert m_campus.marginal_prices.get_by_interval(m_campus.time_intervals[0]).value == pytest.approx(0.03292, abs=1e-5)

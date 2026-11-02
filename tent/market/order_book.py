@@ -105,7 +105,16 @@ class OrderBook:
         self.matchList: list[Order] = []  # List of orders successfully matched
         self.order_expiry: timedelta | None = cfg.order_expiry
         self.quotes: dict[tuple, Quote] = {}
-        self._unpriced_fills_reported: set[str] = set()  # intervals where market orders met market orders (see _fill_price)
+        # Fills made at the infinite level in this pass, by interval: (aggressive actor, resting actors); reported in one
+        # line by report_unpriced_fills, each (interval, actors) once per market (see _fill_price).
+        self._unpriced_fills: dict[str, tuple[str, tuple[str, ...]]] = {}
+        self._unpriced_fills_reported: set[tuple] = set()
+        self._settlement_reported: set[tuple[str, str]] = set()  # (kind, interval) settle() has warned about
+        # A negotiating market rebuilds its book on every balancing pass (reset_book) and archives only the pass's final
+        # book: while this is False the orders _archive_orders is given are held, by identity, and written by
+        # flush_held_orders in their state at that time.
+        self._book_archiving: bool = True
+        self._held_orders: dict[int, Order] = {}
 
     def book_record(self) -> dict:
         """The book's columns of the market row."""
@@ -137,6 +146,43 @@ class OrderBook:
         # that cancelled itself for having no quantity) is dropped here.
         self.orderList = [x for x in self.orderList
                           if x.status in (OrderStatus.STANDING_ORDER, OrderStatus.REVISED_STANDING_ORDER)]
+        self.report_unpriced_fills()
+
+    def reset_book(self) -> None:
+        """Empty the book for a fresh clearing of the current curves: a negotiating market's balancing pass quotes
+        everything anew rather than revising a book whose matches were made against curves the neighbors have since
+        replaced. Orders held for archiving are dropped with it; the pass that stands at the end is what is written."""
+        self.orderList = []
+        self.matchList = []
+        self.quotes = {}
+        self._unpriced_fills = {}
+        self._held_orders = {}
+
+    def hold_order_archiving(self) -> None:
+        """Hold the orders given to _archive_orders instead of writing them (see _init_book)."""
+        self._book_archiving = False
+
+    def flush_held_orders(self) -> None:
+        """Write every held order once, in its current state, and resume archiving as orders are booked."""
+        held, self._held_orders = list(self._held_orders.values()), {}
+        self._book_archiving = True
+        self._archive_orders(held)
+
+    def report_unpriced_fills(self) -> None:
+        """One line for the fills of this pass that had no price-forming side (market orders meeting market orders),
+        each interval and pair of actors reported once per market; the per-fill detail is logged at DEBUG as it
+        happens (see _fill_price). Nothing is lost by the fill: settlement prices the interval from its priced legs,
+        and the matched quantities are scheduled."""
+        new = {interval: actors for interval, actors in self._unpriced_fills.items()
+               if (interval, *actors) not in self._unpriced_fills_reported}
+        self._unpriced_fills = {}
+        if not new:
+            return
+        self._unpriced_fills_reported.update((interval, *actors) for interval, actors in new.items())
+        pairs = sorted({f'{aggressor} by {", ".join(resting)}' for aggressor, resting in new.values()})
+        _log.warning(f'MARKET: {self.name}: in {len(new)} of {len(self.time_intervals)} intervals the market order of '
+                     f'{"; ".join(pairs)} was filled by market orders; neither side names a price, so those fills have '
+                     f'none and the interval is priced by its priced legs (first {min(new)}).')
 
     def submit_order(self, order: Order) -> None:
         """
@@ -218,8 +264,12 @@ class OrderBook:
 
     def _archive_orders(self, orders) -> None:
         for order in orders:
-            if order is not None and order.measurement is not None:
+            if order is None or order.measurement is None:
+                continue
+            if self._book_archiving:
                 order.archive()
+            else:
+                self._held_orders[id(order)] = order
 
     def match(self, new_order: Order or None = None):
         """
@@ -272,6 +322,11 @@ class OrderBook:
         else:
             raise RuntimeError("There should be no case where the new order is neither supply nor demand.")
 
+        # The last rung visited and the aggressive order's quantity there (what it still wanted after that rung's
+        # fills), for the balance price between two rungs.
+        previous_price: float | None = None
+        previous_ao_quantity: float = 0.0
+
         # index through prices
         for price in prices:
 
@@ -298,10 +353,11 @@ class OrderBook:
             #  <STANDING ORDER CASE> *********************************************************************************
             #  Every standing order on the other side offers a definite quantity at this rung of the price ladder: a
             #  market or limit order its whole quantity, a piece-wise linear or complex curve the quantity its segments
-            #  reach at this price. All of them can be taken here; the linear case of the pseudo-code above (a balance
-            #  price inside a segment) is not done separately, a sloped standing order is filled at the ladder's rungs,
-            #  which are every breakpoint price in play. Before this, only vertices typed LIMIT_ORDER were taken, so a
-            #  standing curve of three or more vertices was never filled.
+            #  reach at this price. All of them can be taken here. When the standing side offers more at this rung than
+            #  the aggressive order wants, and both sides are continuous between the previous rung and this one, the
+            #  linear case of the pseudo-code above applies: the balance price inside the segment is found
+            #  (_balance_price) and the fill made there, so a sloped standing curve is filled at its own price for the
+            #  quantity taken, not at the rung above it. Otherwise the fill is made at the rung.
 
             #  Get the standing-order quantities at this price
             if new_order and new_order.supply_or_demand == SupplyOrDemand.DEMAND:
@@ -335,6 +391,7 @@ class OrderBook:
             #  CASE: total limit so quantity = 0
             #  There is nothing else to do at this price, but standing order quantity might increase at later prices.
             elif total_limit_order_quantity == 0.0:
+                previous_price, previous_ao_quantity = price, ao.quantity
                 continue
 
             #  CASE: ao quantity >= total limit so quantity
@@ -342,17 +399,28 @@ class OrderBook:
                 # Every standing limit order at this price can be taken in full. _apply_fills commits nothing if the
                 # aggressive order is all-or-nothing here and would be left with a remainder.
                 new_order = self._apply_fills(new_order, ao, [(so, so.quantity) for so in limit_orders], price)
+                previous_price = price
+                previous_ao_quantity = (new_order.get_quantity_from_price(test_price=price).quantity
+                                        if new_order is not None else 0.0)
 
             #  CASE: ao quantity < total limit so quantity
             elif abs(ao.quantity) < abs(total_limit_order_quantity):
-                # The standing limit orders at this price can more than fill the aggressive order: the matching strategy
-                # decides which of them (and how much of each) are taken.
-                limit_orders.sort(key=self._priority_key())
-                if self.matching_strategy and self.matching_strategy[0] is MatchingStrategy.PROPORTIONAL_VOLUME:
-                    fills = self._proportional_fills(ao.quantity, limit_orders)
+                balance = self._balance_price(new_order, ao, limit_orders, previous_price, previous_ao_quantity, price)
+                if balance is not None:
+                    # <LINEAR SO CASE>: both sides are continuous between the previous rung and this one, so the
+                    # standing side's quantity meets the aggressive order's at a price inside the segment; every
+                    # standing order is filled by its own quantity at that price and the aggressive order in full.
+                    balance_price, balance_ao, fills = balance
+                    new_order = self._apply_fills(new_order, balance_ao, fills, balance_price)
                 else:
-                    fills = self._sequential_fills(ao.quantity, limit_orders)
-                new_order = self._apply_fills(new_order, ao, fills, price)
+                    # The standing limit orders at this price can more than fill the aggressive order: the matching
+                    # strategy decides which of them (and how much of each) are taken, at this rung.
+                    limit_orders.sort(key=self._priority_key())
+                    if self.matching_strategy and self.matching_strategy[0] is MatchingStrategy.PROPORTIONAL_VOLUME:
+                        fills = self._proportional_fills(ao.quantity, limit_orders)
+                    else:
+                        fills = self._sequential_fills(ao.quantity, limit_orders)
+                    new_order = self._apply_fills(new_order, ao, fills, price)
 
             else:
                 raise RuntimeError("Code logic should not have reached this line.")
@@ -361,6 +429,48 @@ class OrderBook:
             new_order.status = OrderStatus.STANDING_ORDER
             if not any(x is new_order for x in self.orderList):  # An untouched submission is already in the book.
                 self.orderList.append(new_order)
+
+    def _balance_price(self, aggressive_order: Order, ao: Vertex, standing: list, previous_price: float | None,
+                       previous_ao_quantity: float, price: float):
+        """
+        The price between the previous rung of the ladder and this one at which the standing side's quantity equals the
+        aggressive order's (the "linear standing order case"), with the fills to make there, or None when the fill
+        belongs at this rung: there is no previous finite rung, some vertex taking part is all-or-nothing (its quantity
+        does not run linearly between the rungs), or the two sides do not cross inside the segment.
+
+        The ladder holds every breakpoint price in play, so between two consecutive rungs every continuous order is a
+        straight line: the standing side's total runs from what it offered at the previous rung (nothing, everything
+        there having been taken) to what it offers here, the aggressive order's from what it still wanted there to what
+        it wants here, and the net of the two crosses zero at one price. Filling there gives each standing order its own
+        curve's price for the quantity taken, which is the price its owner stated for it, and leaves the cleared
+        quantities on the curves at the match price, as interpolation does. Returns (price, the aggressive order's
+        vertex at it, [(standing vertex at it, its quantity)]).
+        """
+        if previous_price is None or not math.isfinite(previous_price) or not math.isfinite(price):
+            return None
+        if not ao.continuity or not all(so.continuity for so in standing):
+            return None
+        side = SupplyOrDemand.SUPPLY if ao.quantity < 0 else SupplyOrDemand.DEMAND
+        interval = aggressive_order.interval
+        standing_before = sum(so.quantity for so in self.get_counteroffer_vertices(price=previous_price,
+                                                                                   supply_or_demand=side,
+                                                                                   time_interval=interval))
+        net_before = standing_before + previous_ao_quantity
+        net_here = sum(so.quantity for so in standing) + ao.quantity
+        if net_before == 0.0 or net_here == 0.0 or (net_before > 0) == (net_here > 0):
+            return None  # no crossing strictly inside the segment: the rung is the price
+        balance_price = previous_price + (price - previous_price) * net_before / (net_before - net_here)
+        fills_at = self.get_counteroffer_vertices(price=balance_price, supply_or_demand=side, time_interval=interval)
+        balance_ao = aggressive_order.get_quantity_from_price(test_price=balance_price)
+        total = sum(so.quantity for so in fills_at)
+        if not fills_at or abs(total + balance_ao.quantity) > 1e-9 * max(1.0, abs(total)):
+            return None  # the sides are not linear here after all; fall back to the rung
+        # The two sides meet exactly: the aggressive order keeps its own quantity at the balance price (a market
+        # order's is exact) and the largest standing fill absorbs the rounding residual, so no dust remains on either side.
+        fills = [(so, so.quantity) for so in fills_at]
+        largest = max(range(len(fills)), key=lambda i: abs(fills[i][1]))
+        fills[largest] = (fills[largest][0], fills[largest][1] - (total + balance_ao.quantity))
+        return balance_price, balance_ao, fills
 
     def get_order_by_id(self, an_id: int or None = None):
         """
@@ -438,6 +548,11 @@ class OrderBook:
                 self._cleared_powers[(entity.id, time_interval.name)] = (sd_curve, power)
             _log.debug(f'MARKET: {self.name} settled {time_interval.name}: {len(legs)} legs, {volume / 2:.4g} kW traded, '
                        f'marginal price {marginal_price:.6g}, average {average:.6g} $/kWh.')
+        # Said once per interval and kind: a negotiating market settles on every balancing pass.
+        unmatched = [name for name in unmatched if ('unmatched', name) not in self._settlement_reported]
+        unpriced = [name for name in unpriced if ('unpriced', name) not in self._settlement_reported]
+        self._settlement_reported.update(('unmatched', name) for name in unmatched)
+        self._settlement_reported.update(('unpriced', name) for name in unpriced)
         if unmatched:
             _log.warning(f'MARKET: {self.name} had no match in {len(unmatched)} of {len(self.time_intervals)} '
                          f'intervals; they keep their opening prices: {unmatched}.')
@@ -454,6 +569,12 @@ class OrderBook:
                     local_asset.scheduled_powers.update(time_interval, local_asset.market_power(self, time_interval))
         for neighbor in self.tn.neighbors:
             neighbor.schedule_power(self)
+
+    def standing_market_orders(self, time_interval) -> list[Order]:
+        """The standing orders of the interval that take any price (every vertex at an infinite price): inelastic
+        quantities the book could not fill, which no price would have cleared."""
+        return [order for order in self.orderList if order.interval.name == time_interval.name
+                and order.vertices and all(not math.isfinite(v.price) for v in order.vertices)]
 
     def get_counteroffers(self, supply_or_demand: SupplyOrDemand or bool or None = SupplyOrDemand.SUPPLY,
                           time_interval=None):
@@ -611,8 +732,10 @@ class OrderBook:
         infinite level is where market orders rest (they take any price), and a fill made there is priced by the side
         that has a curve: the aggressive order's price for the matched quantity (the infinite level is the first rung,
         so nothing of it has matched before). When the aggressive order is a market order too, no participant forms a
-        price: the fill keeps the infinite level, which settlement treats as an unpriced match, and the orders are
-        named in a warning once per interval.
+        price: the fill keeps the infinite level, which settlement treats as an unpriced match. The fill is logged at
+        DEBUG here and the pass's unpriced fills are reported in one line by report_unpriced_fills (a node whose local
+        assets are all inelastic matches them against each other in every interval of every market, so a warning per
+        interval said the same thing hundreds of times).
         """
         if math.isfinite(level):
             return level
@@ -620,11 +743,10 @@ class OrderBook:
         if math.isfinite(price):
             return price
         interval_name = aggressive_order.interval.name
-        if interval_name not in self._unpriced_fills_reported:
-            self._unpriced_fills_reported.add(interval_name)
-            resting = sorted({self.get_order_by_id(an_id=so.curve.id).actor.name for so, _ in fills})
-            _log.warning(f'MARKET: {self.name}: in {interval_name} the market order of {aggressive_order.actor.name} is '
-                         f'filled by the market orders of {resting}; neither side names a price, so the match has none.')
+        resting = tuple(sorted({self.get_order_by_id(an_id=so.curve.id).actor.name for so, _ in fills}))
+        self._unpriced_fills.setdefault(interval_name, (aggressive_order.actor.name, resting))
+        _log.debug(f'MARKET: {self.name}: in {interval_name} the market order of {aggressive_order.actor.name} is filled '
+                   f'by the market orders of {list(resting)}; neither side names a price, so the match has none.')
         return level
 
     def _apply_fills(self, aggressive_order: Order, ao: Vertex, fills: list, price: float):

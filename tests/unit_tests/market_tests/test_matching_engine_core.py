@@ -465,11 +465,14 @@ def test_orders_match_only_within_their_own_interval():
     assert len(market.get_counteroffers(SupplyOrDemand.SUPPLY)) >= 1, 'without an interval the whole book is searched'
 
 
-def test_a_standing_curve_of_several_vertices_is_filled_at_the_ladder_rungs(market):
+def test_a_standing_curve_of_several_vertices_is_filled_at_its_own_price_for_the_quantity(market):
     """Only vertices typed LIMIT_ORDER used to be taken from the standing side, so a resting curve of three or more
     vertices (every quoted neighbor curve of a multi-node deployment) was never filled: the campus's book left its
-    offices' six-point demand curves standing against the city's three-point supply remainder. A standing curve now
-    offers at every rung of the ladder the quantity its segments reach there."""
+    offices' six-point demand curves standing against the city's three-point supply remainder. A standing curve offers
+    at every rung of the ladder the quantity its segments reach there, and when it offers more at a rung than the
+    aggressive order wants, the fill is made inside the segment at the curve's own price for the quantity taken (the
+    linear standing-order case), not at the rung above: 27 kW of a segment rising from 0 kW at 0.03156 to 43 kW at
+    0.03292 trades at 0.03156 + 0.00136 * 27 / 43."""
     tn = market.tn
     gen = LocalAsset(transactive_node=tn, name='Gen')
     load = Neighbor(transactive_node=tn, name='Load')
@@ -483,6 +486,7 @@ def test_a_standing_curve_of_several_vertices_is_filled_at_the_ladder_rungs(mark
     legs = [l for l in market.matchList if l.actor is load]
     assert legs, 'the load is filled against the resting supply curve'
     assert sum(l.vertices[-1].quantity for l in legs) == pytest.approx(-27.0), 'all of it, at rungs the supply reaches'
-    assert all(l.vertices[-1].price == pytest.approx(0.03292) for l in legs), 'at the first rung with enough supply'
+    assert all(l.vertices[-1].price == pytest.approx(0.03156 + 0.00136 * 27.0 / 43.0) for l in legs), \
+        'at the supply curve\'s price for 27 kW, inside the first segment that reaches it'
     remainder = next(o for o in market.orderList if o.actor is gen)
     assert max(v.quantity for v in remainder.vertices) == pytest.approx(13000.0 - 27.0)

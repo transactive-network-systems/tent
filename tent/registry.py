@@ -36,6 +36,7 @@ SHIPPED: dict[str, str] = {
     'ConsensusMarket': 'tent.market.consensus_market:ConsensusMarket',
     'MatchingEngine': 'tent.market.matching_engine:MatchingEngine',
     'MatchingAuction': 'tent.market.matching_auction:MatchingAuction',
+    'MatchingConsensusMarket': 'tent.market.matching_consensus:MatchingConsensusMarket',
     'HourlyAveragePriceModel': 'tent.market.price_models.hourly_average_price_model:HourlyAveragePriceModel',
     # Neighbors
     'Neighbor': 'tent.neighbor:Neighbor',

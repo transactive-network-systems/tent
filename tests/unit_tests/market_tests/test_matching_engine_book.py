@@ -690,12 +690,26 @@ def test_a_curve_hitting_a_resting_market_order_prices_the_fill_from_the_curve(e
     assert remainder.actor is asset and max(v.quantity for v in remainder.vertices) == pytest.approx(60.0)
 
 
-def test_two_market_orders_have_no_price_and_are_named_once(engine, neighbor, asset, caplog):
+def test_two_market_orders_have_no_price_and_are_named_once_per_pass(engine, neighbor, asset, caplog):
+    """Each fill is logged at DEBUG as it happens; the pass reports its unpriced fills in one WARNING line, and a
+    later pass does not repeat an interval and pair of actors already reported (T-69: the campus's two inelastic assets
+    met in every interval of every market, a warning per interval)."""
     engine.orderList = [market_order(engine, neighbor, -40.0), market_order(engine, neighbor, -10.0)]
-    with caplog.at_level('WARNING', logger='tent.market'):
+    with caplog.at_level('DEBUG', logger='tent.market'):
         engine.match(market_order(engine, asset, 30.0, status=OrderStatus.NEW))
         engine.match(market_order(engine, asset, 20.0, status=OrderStatus.NEW))
+        assert not [r for r in caplog.records if r.levelname == 'WARNING'], 'nothing is warned per fill'
+        engine.report_unpriced_fills()
     assert all(abs(m.vertices[-1].price) == INF for m in engine.matchList)
-    messages = [r.getMessage() for r in caplog.records if 'neither side names a price' in r.getMessage()]
-    assert len(messages) == 1, 'once per interval'
-    assert 'LocalAsset #1' in messages[0] and 'Neighbor #1' in messages[0]
+    details = [r for r in caplog.records if r.levelname == 'DEBUG' and 'neither side names a price' in r.getMessage()]
+    assert len(details) == 2, 'one detail line per fill'
+    warnings = [r.getMessage() for r in caplog.records if r.levelname == 'WARNING']
+    assert len(warnings) == 1, 'one line per pass'
+    assert 'in 1 of 1 intervals' in warnings[0] and 'LocalAsset #1 by Neighbor #1' in warnings[0]
+    assert 'neither side names a price' in warnings[0]
+    caplog.clear()
+    with caplog.at_level('WARNING', logger='tent.market'):
+        engine.orderList = [market_order(engine, neighbor, -40.0)]
+        engine.match(market_order(engine, asset, 30.0, status=OrderStatus.NEW))
+        engine.report_unpriced_fills()
+    assert not caplog.records, 'the same interval and actors are not reported again'

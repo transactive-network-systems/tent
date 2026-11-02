@@ -132,7 +132,12 @@ class Order(SDCurve):
         reduced by it, or None if nothing is left. The quantity carries the sign of this order's side (> 0 for supply,
         < 0 for demand). This order itself is unchanged.
         """
-        points = [Vertex(price=pp.price, quantity=pp.quantity - quantity, continuity=pp.continuity, curve=self)
+        # Rounding dust (a vertex within 1e-9 of the transacted quantity, relative) is zero: a fill planned at a balance
+        # price inside a segment meets the other side to floating-point precision, and a remainder of 1e-13 kW would
+        # otherwise stand in the book as an unfilled order.
+        tolerance = 1e-9 * max(1.0, abs(quantity))
+        points = [Vertex(price=pp.price, quantity=0.0 if abs(pp.quantity - quantity) <= tolerance
+                         else pp.quantity - quantity, continuity=pp.continuity, curve=self)
                   for pp in list(self.vertices)]
         unmatched_order: Order or None = copy(self)
         unmatched_order.vertices = points

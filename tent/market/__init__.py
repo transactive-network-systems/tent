@@ -77,6 +77,12 @@ class Market(Component):
     # and the residual curve's own price for that quantity, since an order book's fill prices are those of the orders
     # taken, not a price the residual curve passes through.
     BALANCE_POINT = 'scheduled_power'
+    # What two nodes must agree on at the balance point for a negotiating market to count a link as converged
+    # (TransactiveSignal.balance_points_differ): 'price_and_quantity' for a market that clears at one price, so both
+    # ends of a link state the same price for the same exchange once they agree; 'quantity' for a market whose prices
+    # are its own (an order book fills at the resting orders' prices, so the two ends of a link price the same exchange
+    # differently and agree on the quantity alone; MatchingConsensusMarket).
+    BALANCE_POINT_AGREEMENT = 'price_and_quantity'
     # Two vertex prices closer than this are one price. Market.sum_vertices offsets a duplicate price by 1e-10 so the
     # system curve stays a function; the cleared price then lands within that offset of the flat segment it sits on.
     FLAT_PRICE_TOLERANCE = 1e-8  # [$/kWh]
