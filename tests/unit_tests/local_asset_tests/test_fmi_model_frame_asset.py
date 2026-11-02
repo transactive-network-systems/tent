@@ -123,6 +123,8 @@ def market():
     price_model = Mock()
     price_model.get = Mock(return_value=(0.05, 0.01))
     mkt.price_model = price_model
+    mkt.marginal_prices.get_by_interval.return_value = None  # no cleared price yet: the series default applies
+    mkt.series.default_price = 0.05
     return mkt
 
 

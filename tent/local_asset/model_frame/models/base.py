@@ -170,11 +170,80 @@ class ModelFrame(object):
                             'subscribe_key': entry.subscribe_key}
             self.models[entry.subscribe_key] = model_class(model_config, parent=self)
 
-    def model_flexibility(self, params: dict = None) -> List[float]:
+    def sweep_ratios(self) -> List[float]:
+        """The position of each flexibility point along every model's response to price: i / (n - 1) for n =
+        demand_curve_points points (0.0 alone when n is 1). Index i of model_flexibility is the summed power at ratio
+        i / (n - 1), and set_points_at_ratio gives the set points behind it."""
+        n = self.demand_curve_points
+        return [0.0] if n == 1 else [i / (n - 1) for i in range(n)]
+
+    @staticmethod
+    def _set_point_bounds(model, interval_start_time):
+        """(low, high) of the model's set-point range for the interval, or None for a model without one (an
+        uncontrolled load, a model that does not offer one)."""
+        set_point_range = getattr(model, 'set_point_range', None)
+        bounds = set_point_range(interval_start_time) if callable(set_point_range) else None
+        return None if bounds is None or bounds[0] is None or bounds[1] is None else (bounds[0], bounds[1])
+
+    @staticmethod
+    def _consumes_less_at_the_high_set_point(model, params: dict, low: float, high: float) -> bool:
+        """The direction of the model's response: True when the model consumes no more at its high set point than at
+        its low one (a cooling thermostat: a higher set point, less cooling), so that a higher price maps to a higher set
+        point; False when it consumes more there (a light: a higher level, more power; a thermostat whose regression
+        slope has the other sign in some hour), so that a higher price maps to a lower set point. Either way the
+        model's consumption does not rise with the price, which a demand curve requires. Powers are generation-positive,
+        so more consumption is the lower value."""
+        if high == low:
+            return True
+        return model.predict_power(params=params, set_point=high) >= model.predict_power(params=params, set_point=low)
+
+    def set_points_at_ratio(self, ratio: float, params: dict) -> dict:
+        """Each model's set point at `ratio` (0 to 1) of its response to price for the interval described by params, by
+        subscribe key: the set point at which it consumes most at 0, the one at which it consumes least at 1, linear
+        between (see _consumes_less_at_the_high_set_point for which end is which). A model without a set-point range
+        maps to None and predicts its power without a set point."""
+        set_points = {}
+        for key, model in self.models.items():
+            bounds = self._set_point_bounds(model, params.get('interval_time'))
+            if bounds is None:
+                set_points[key] = None
+                continue
+            low, high = bounds
+            if self._consumes_less_at_the_high_set_point(model, params, low, high):
+                set_points[key] = low + ratio * (high - low)
+            else:
+                set_points[key] = high - ratio * (high - low)
+        return set_points
+
+    def model_power_at(self, params: dict, set_points: dict) -> float:
+        """The summed power of the models, each at the set point given for it (None: the model's own default)."""
         params = params if params else {}
+        q = 0.0
+        for key, model in self.models.items():
+            try:
+                q += model.predict_power(params=params, set_point=set_points.get(key))
+            except KeyError:
+                _log.debug(f"Error making prediction for {model.subscribe_key}.")
+        return q
+
+    def model_flexibility(self, params: dict = None) -> List[float]:
+        """The summed power of the models at each sweep ratio (see sweep_ratios): a model with a set-point range is
+        asked for its power at the set point of each ratio (the same mapping set_points_at_ratio gives, so the schedule
+        at a price reproduces the curve); a model without one contributes its own predict_flexibility, point by point
+        (an uncontrolled load's constant power; an FMI adapter's envelope sweep)."""
+        params = params if params else {}
+        ratios = self.sweep_ratios()
         flexibility = [0.0] * self.demand_curve_points
         for model in self.models.values():
+            bounds = self._set_point_bounds(model, params.get('interval_time'))
             try:
+                if bounds is not None:
+                    low, high = bounds
+                    forward = self._consumes_less_at_the_high_set_point(model, params, low, high)
+                    for i, ratio in enumerate(ratios):
+                        set_point = low + ratio * (high - low) if forward else high - ratio * (high - low)
+                        flexibility[i] += model.predict_power(params=params, set_point=set_point)
+                    continue
                 prediction = list(model.predict_flexibility(params=params))
             except KeyError:
                 _log.debug(f"Error making prediction for {model.subscribe_key}.")

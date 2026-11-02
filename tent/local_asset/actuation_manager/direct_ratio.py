@@ -14,29 +14,18 @@ class DirectRatioActuationManager(ActuationManager):
             # TODO: Is price assignment just trying to find the first price in delivery?
             #  If so, there is now a Measurement.first method. If not, this needs to be reworked.
             price = [v.value for ti, v in mkt.marginal_prices.all if ti.start_time == mkt.transition_times.delivery][0]
-            vertex_prices = [
-                av.price
-                for ti, sdc in self.parent.active_vertices.all
-                for av in sdc.vertices
-                if ti.start_time == mkt.transition_times.delivery
-            ]
-            if not vertex_prices:
-                return
-            min_price = min(vertex_prices)
-            max_price = max(vertex_prices)
-            price = min(max(price, min_price), max_price)  # clamp price within bid range.
-            cleared_price_ratio = (price - min_price) / (max_price - min_price)
-            for model in self.parent.models.values():  # TODO: Generalize this away from models in ModelFrameAsset.
-                if model.actuation_key:
-                    min_set_point, max_set_point = model.set_point_range(mkt.transition_times.delivery)
-                    # For forward-acting (cooling) mode:
-                    new_set_point = (cleared_price_ratio * (max_set_point - min_set_point)) + min_set_point
-                    # TODO: For heating mode instead do commented code: Also add context property in thermostat
-                    #  & lighting to determine forward or reverse acting. For thermostat, this will be two set points
-                    #  and a deadband. For lighting, it is always reverse-acting (heating).
-                    # new_set_point = max_set_point - (cleared_price_ratio * (
-                    #            max_set_point - min_set_point))
-                    self.direct_actuate(model.actuation_key, new_set_point)
+            interval = next((ti for ti, sdc in self.parent.active_vertices.all
+                             if ti.start_time == mkt.transition_times.delivery and not sdc.empty), None)
+            if interval is None:
+                return  # the asset offered no curve for the delivery interval, so there is nothing to map the price on
+            # The asset's one price-to-set-point mapping (ModelFrameAsset.set_points_at_price): the cleared price's
+            # position in the span of the curve it offered, clamped to it, and each model's set point at that position
+            # of its range. The curve and the schedule come from the same mapping, so the devices are set to produce
+            # the scheduled power. Forward-acting (cooling) for every model; see the asset for the mapping's terms.
+            set_points = self.parent.set_points_at_price(price, interval, mkt)
+            for key, model in self.parent.models.items():  # TODO: Generalize this away from models in ModelFrameAsset.
+                if model.actuation_key and set_points.get(key) is not None:
+                    self.direct_actuate(model.actuation_key, set_points[key])
 
     def direct_actuate(self, target_id, new_set_point):
         pass
