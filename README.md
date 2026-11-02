@@ -80,6 +80,12 @@ Local assets represent controllable and uncontrollable energy resources. Rather 
 * **Thermostat / HVAC Models**: Calculate heating/cooling demand curves.
 * **Lighting Models**: Scheduled illumination loads.
 * **Uncontrolled Models**: Inflexible base power loads.
+
+The asset owns one price-to-set-point mapping (the price's position in its curve's price span, clamped, taken to the
+same ratio of every model's set-point range, each run in the direction in which the model consumes less) and uses it
+three times: the curve it offers is the summed model power at `demand_curve_points` sweep ratios, the power it
+schedules is the models' power at the set points the market price maps to, and the actuation manager writes those set
+points. The scheduled power is therefore the curve read at the price, and the devices are set to produce it.
 * **FMI Flexibility Models**: Physical simulator adapters (OCHRE, GridLAB-D, pvlib, Replay).
 
 </details>

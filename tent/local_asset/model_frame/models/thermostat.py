@@ -125,7 +125,7 @@ class Thermostat(Model):
         if not params.get('occupied'):
             csp = self.unoccupied_set_point
         else:
-            csp = set_point if set_point else self.csp
+            csp = set_point if set_point is not None else self.csp
         oat = self.oat if not params.get(OAT) else params.get(OAT)
         temp = self.room_temp if not params.get(TIN) else params.get(TIN)
         index = self.current_time.hour if not params.get('interval_time') else params.get('interval_time').hour

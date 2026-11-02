@@ -41,6 +41,7 @@ class ModelFrameAsset(LocalAsset, ModelFrame):
         LocalAsset.__init__(self, transactive_node, config=cfg)
 
         self.temperature_forecast_name = cfg.temperature_forecast_name
+        self._price_spans: dict[str, tuple[float, float]] = {}  # interval name -> the price span its curve was built with
 
         # The occupancy and actuation managers name their classes like every other configured component (see
         # tent.registry); SimpleOccupancyManager and NullActuationManager apply when a configuration names none.
@@ -124,92 +125,116 @@ class ModelFrameAsset(LocalAsset, ModelFrame):
         if subscribe_key in self.models:
             self.models[subscribe_key].update_data(message, time_received)
 
-    def _get_scheduled_power_from_model(self, time_interval: TimeInterval, outside_air_temperature) -> float:
-        """Return a schedule power value for one interval from a model."""
+    # ------------------------------------------------------------------------------ the price to set-point mapping
+    # The asset owns one mapping from a price to its models' set points, and uses it three times: the curve it offers
+    # (update_vertices: the summed model power at the set points of each sweep ratio, at the price of that ratio), the
+    # power it schedules at the market's price (schedule_power), and the set points the actuation manager writes for the
+    # cleared price (set_points_at_price). The three therefore agree: the scheduled power is the curve read at the
+    # price, and the devices are set to produce it. Each model's set point moves with the price in the direction in
+    # which its consumption falls (ModelFrame.set_points_at_ratio), so the curve never consumes more at a higher price.
+
+    def price_span(self, time_interval: TimeInterval, market: Market) -> tuple[float, float]:
+        """[minimum, maximum] price of this asset's curve for the interval: the span the curve was built with when it
+        exists (update_vertices keeps it, so a price model updated since does not move the mapping away from the curve
+        in the book), otherwise the price model's average plus and minus one standard deviation."""
+        span = self._price_spans.get(time_interval.name)
+        if span is None:
+            span = tuple(self._get_price_flexibility(time_interval, market))
+        return span
+
+    def price_ratio(self, price: float, time_interval: TimeInterval, market: Market) -> float:
+        """Where `price` lies in the interval's price span, clamped to [0, 1]: 0 at or below the minimum price, 1 at
+        or above the maximum. A span of no width (the price model reports no spread) maps every price to 0.5."""
+        low, high = self.price_span(time_interval, market)
+        if high <= low:
+            return 0.5
+        return (min(max(price, low), high) - low) / (high - low)
+
+    def set_points_at_price(self, price: float, time_interval: TimeInterval, market: Market) -> dict:
+        """Each model's set point for `price` in the interval, by subscribe key (see ModelFrame.set_points_at_ratio).
+        With a single flexibility point the asset is inelastic and the set points are those of ratio 0 whatever the
+        price, as its one vertex is."""
+        ratio = 0.0 if self.demand_curve_points == 1 else self.price_ratio(price, time_interval, market)
+        outside_air_temperature = self._outside_air_temperature(self._temperature_forecast(), time_interval)
+        return self.set_points_at_ratio(ratio, self._model_params(time_interval, outside_air_temperature))
+
+    def _market_price(self, time_interval: TimeInterval, market: Market) -> float:
+        """The market's marginal price for the interval, or the series default price while it has none."""
+        marginal_price = market.marginal_prices.get_by_interval(time_interval)
+        return market.series.default_price if marginal_price is None or marginal_price.value is None \
+            else marginal_price.value
+
+    def _temperature_forecast(self):
+        services = [x for x in self.information_services if x.name == self.temperature_forecast_name] \
+            if (self.information_services and self.temperature_forecast_name) else []
+        return services[0] if services else None
+
+    @staticmethod
+    def _outside_air_temperature(temp_forecast, time_interval: TimeInterval):
+        if temp_forecast is None:
+            return None
+        forecast = temp_forecast.predicted_values.get_by_interval(time_interval)
+        if hasattr(forecast, 'value'):
+            return forecast.value
+        return forecast if isinstance(forecast, (int, float)) else None
+
+    def _model_params(self, time_interval: TimeInterval, outside_air_temperature) -> dict:
         occupied = self.occupancy_manager.check_schedule(time_interval.start_time) if self.occupancy_manager else True
-        params = {'interval_time': time_interval.start_time, 'OAT': outside_air_temperature, 'occupied': occupied}
-        return self.model_power(params=params)
+        return {'interval_time': time_interval.start_time, 'OAT': outside_air_temperature, 'occupied': occupied}
+
+    def _get_scheduled_power_from_model(self, time_interval: TimeInterval, outside_air_temperature,
+                                        market: Market) -> float:
+        """The summed model power for the interval at the set points the market's price maps to."""
+        params = self._model_params(time_interval, outside_air_temperature)
+        set_points = self.set_points_at_price(self._market_price(time_interval, market), time_interval, market)
+        return self.model_power_at(params, set_points)
 
     def _get_power_flexibility_from_model(self, time_interval: TimeInterval, outside_air_temperature) -> list[float]:
-        occupied = self.occupancy_manager.check_schedule(time_interval.start_time) if self.occupancy_manager else True
-        params = {'interval_time': time_interval.start_time, 'OAT': outside_air_temperature, 'occupied': occupied}
-        flexibility = self.model_flexibility(params=params)
-        min_power = min(flexibility)
-        max_power = max(flexibility)
-        if min_power == max_power:
-            min_power = min_power - 1e-10
-        return [min_power, max_power]
+        """The summed model power at each sweep ratio (demand_curve_points values; see ModelFrame.sweep_ratios)."""
+        return self.model_flexibility(params=self._model_params(time_interval, outside_air_temperature))
 
     def _get_price_flexibility(self, time_interval: TimeInterval,   market: Market,
                                multiplier: float = 1.0) -> list[float]:
-        # interval_price = market.marginalPrices.get_by_interval(time_interval)
-        # effective_price = interval_price.value if interval_price else market.defaultPrice
-        # min_price = 0.8 * effective_price
-        # max_price = 1.2 * effective_price
+        """[minimum, maximum] price of the curve: the price model's average minus and plus `multiplier` standard
+        deviations at the interval's start."""
         start_time = time_interval.start_time
         average_price, standard_deviation = market.price_model.get(start_time)
         min_price = average_price - (multiplier * standard_deviation)
         max_price = average_price + (multiplier * standard_deviation)
         return [min_price, max_price]
 
-    def _create_vertices(self, power_flexibility: list[float], price_flexibility: list[float]) -> list[Vertex]:
-        # Create the vertex that can represent this (lack of) flexibility
-        # Vertex(marginal_price=, prod_cost=0.0, power=)
-        lower_vertex = Vertex(price=price_flexibility[0], cost=0.0, quantity=power_flexibility[0])
-        upper_vertex = Vertex(price=price_flexibility[1], cost=0.0, quantity=power_flexibility[1])
-        return [lower_vertex, upper_vertex]
+    def _create_vertices(self, powers: list[float], price_flexibility: list[float]) -> list[Vertex]:
+        """One vertex per sweep ratio: the price at that ratio of the price span and the summed power there. With two
+        points these are the curve's ends; with one, a single (inelastic) vertex at the minimum price."""
+        low, high = price_flexibility
+        return [Vertex(price=low + ratio * (high - low), cost=0.0, quantity=power)
+                for ratio, power in zip(self.sweep_ratios(), powers)]
 
     def schedule_power(self, market):
-        # Determine powers of an asset in active time intervals.
-        # - Updates self.scheduledPowers - the schedule of power consumed
-        temp_services = [x for x in self.information_services if x.name == self.temperature_forecast_name] if (self.information_services and self.temperature_forecast_name) else []
-        temp_forecast = temp_services[0] if temp_services else None
+        """Schedule, for every interval, the summed model power at the set points the market's marginal price (the
+        series default price while there is none) maps to: the same mapping the curve is built from and the actuation
+        manager writes, so the schedule is the curve read at the price."""
+        temp_forecast = self._temperature_forecast()
         if temp_forecast is not None and hasattr(temp_forecast, 'update_information'):
             temp_forecast.update_information(market)
-
         for time_interval in market.time_intervals:
-            outside_air_temperature = None
-            if temp_forecast is not None:
-                outside_air_temperature = temp_forecast.predicted_values.get_by_interval(time_interval)
-
-            if hasattr(outside_air_temperature, 'value'):
-                modeled_value = self._get_scheduled_power_from_model(time_interval, outside_air_temperature.value)
-            elif outside_air_temperature is not None and isinstance(outside_air_temperature, (int, float)):
-                modeled_value = self._get_scheduled_power_from_model(time_interval, outside_air_temperature)
-            else:
-                modeled_value = self._get_scheduled_power_from_model(time_interval, None)
-
+            outside_air_temperature = self._outside_air_temperature(temp_forecast, time_interval)
+            modeled_value = self._get_scheduled_power_from_model(time_interval, outside_air_temperature, market)
             value = modeled_value if modeled_value is not None else self.default_power
             self.scheduled_powers.update(time_interval, value)
-
         self.schedule_calculated = True
 
     def update_vertices(self, market):
-        """Create vertices to represent the asset's flexibility"""
-        temp_services = [x for x in self.information_services if x.name == self.temperature_forecast_name] if (self.information_services and self.temperature_forecast_name) else []
-        temp_forecast = temp_services[0] if temp_services else None
-
+        """Build the asset's curve for every interval: demand_curve_points vertices, each the summed model power at the
+        set points of a sweep ratio, at the price of that ratio within the price model's span (kept per interval for
+        price_span)."""
+        temp_forecast = self._temperature_forecast()
         for time_interval in market.time_intervals:
-            outside_air_temperature = None
-            if temp_forecast is not None:
-                outside_air_temperature = temp_forecast.predicted_values.get_by_interval(time_interval)
-
-            if hasattr(outside_air_temperature, 'value'):
-                oat_val = outside_air_temperature.value
-            elif outside_air_temperature is not None and isinstance(outside_air_temperature, (int, float)):
-                oat_val = outside_air_temperature
-            else:
-                oat_val = None
-
-            power_flexibility = self._get_power_flexibility_from_model(time_interval, oat_val)
-            if power_flexibility is None:
-                power_flexibility = [self.default_power, self.default_power]
-                _log.warning(f'No outside air temperature found for interval {time_interval.name}.'
-                             f' Using default ({power_flexibility}) for power flexibility.')
-
+            outside_air_temperature = self._outside_air_temperature(temp_forecast, time_interval)
             price_flexibility = self._get_price_flexibility(time_interval, market)
-            self.active_vertices.update(time_interval, self._create_vertices(power_flexibility, price_flexibility),
-                                        replace=True)
+            self._price_spans[time_interval.name] = (price_flexibility[0], price_flexibility[1])
+            powers = self._get_power_flexibility_from_model(time_interval, outside_air_temperature)
+            self.active_vertices.update(time_interval, self._create_vertices(powers, price_flexibility), replace=True)
 
     def actuate(self, mkt: Market):
         if getattr(self, "actuation_manager", None) is not None:

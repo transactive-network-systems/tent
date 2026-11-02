@@ -46,7 +46,7 @@ class Lighting(Model):
         interval_time: datetime = params.get('interval_time')
         index = interval_time.hour
         # TODO: should this consider current set point, if it is the current interval?
-        if not set_point:
+        if set_point is None:
             power = self.lighting_schedule[index]*self.rated_power
         else:
             power = set_point * self.rated_power

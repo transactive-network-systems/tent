@@ -146,10 +146,13 @@ def deployed_office_config() -> Path | None:
     return path if path.is_file() else None
 
 
-def office_node(tmp_path, data_manager: dict | None):
+def office_node(tmp_path, data_manager: dict | None, demand_curve_points: int | None = None):
     """The deployed small office (21 model-frame models, a transactive campus neighbor, two consensus series) with the
-    host package's meter point and actuator replaced by shipped classes and a generated weather file."""
+    host package's meter point and actuator replaced by shipped classes and a generated weather file; optionally with
+    another number of flexibility points than the deployed configuration's."""
     configs = _without_host_keys(json.load(open(deployed_office_config())))  # the agent keeps its own keys
+    if demand_curve_points is not None:
+        configs['local_assets'][0]['model_configs']['demand_curve_points'] = demand_curve_points
     configs.pop('meter_points')
     configs['neighbors'][0]['meter_points'] = None
     configs['local_assets'][0]['actuation_manager'] = {'class_name': 'NullActuationManager'}
@@ -199,3 +202,27 @@ def test_the_deployed_small_office_opens_its_negotiation_in_one_pass(tmp_path, c
     tn.step()
     assert len(sent) == 1, 'nothing new to say: no second signal'
     assert rows() - before < 1500
+
+
+@pytest.mark.skipif(deployed_office_config() is None, reason='the deployed consensus container configurations are not '
+                                                             'beside this repository')
+@pytest.mark.parametrize('points', [2, 5])
+def test_the_deployed_small_office_closes_its_local_balance(tmp_path, caplog, points):
+    """With the model-frame asset's curve, schedule and set points coming from one price-to-set-point mapping, the
+    office's local balance closes: before, the model scheduled 16.12 kW where its curve said 13.38 kW at the cleared
+    price (17 percent, above the 15 percent threshold) in 4 of 24 intervals, and the market never converged."""
+    clock_at(datetime(2017, 7, 3, 0, 0, tzinfo=timezone.utc))
+    tn = office_node(tmp_path, None, demand_curve_points=points)
+    tn.register_recipient('PNNL_Campus', lambda message: None)
+    market = next(s for s in tn.market_series if s.name == 'Real-Time_Auction').newest_market
+    times = market.transition_times
+    with caplog.at_level(logging.WARNING, logger='tent.market'):
+        clock_at(times.active)
+        tn.step()
+        clock_at(times.negotiation)
+        tn.step()
+    assert market.converged, [r.getMessage() for r in caplog.records if 'not balanced' in r.getMessage()]
+    assert not any('is not balanced' in r.getMessage() for r in caplog.records)
+    assert abs(market.duality_gap) <= market.series.duality_gap_threshold
+    worst = max(abs(market.net_powers.get_by_interval(ti).value) for ti in market.time_intervals)
+    assert worst < 1e-6, f'net power {worst} kW: the asset schedules what its curve says at the cleared price'
