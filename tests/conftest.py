@@ -3,6 +3,7 @@ from datetime import timezone
 
 import pytest
 
+from tent.base import archiving
 from tent.utils.timer import Timer
 
 _TIMER_DEFAULTS = {
@@ -26,3 +27,12 @@ def real_time_clock():
     _reset_timer()
     yield
     _reset_timer()
+
+
+@pytest.fixture(autouse=True)
+def all_curves_archived():
+    """Every test starts and ends archiving every changed curve version: the level is process-wide state, as the archive
+    is, and a node configured with another level in one test must not leak it into the next."""
+    archiving.set_curve_archiving('all')
+    yield
+    archiving.set_curve_archiving('all')

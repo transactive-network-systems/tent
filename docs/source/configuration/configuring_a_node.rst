@@ -89,6 +89,12 @@ Node settings
      -  
      - ISO 8601 real time at which simulated time equals simulation_start_time; shared by every agent of one simulation (the host sets it from its environment). Null means the time this node was created.
      -  
+   * - ``curve_archiving``
+     - one of "all", "final", "none"
+     - "all"
+     -  
+     - Which curve versions (sd_curve and vertex rows: system curves, signal curves, active vertices) the archive keeps. "all": every version that differs from the last one archived for the same measurement and interval (an unchanged curve is never written twice). "final": only the versions a market archives when it leaves Negotiation and when it clears, the last system curve and the last signal exchanged with each neighbor per interval. "none": no curve rows; measurement and signal headers are still written.
+     - yes
 
 Data manager
 ------------

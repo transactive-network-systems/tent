@@ -14,14 +14,38 @@ whatever a tick touches is written when the tick ends; TENT reads nothing back f
 
 Deferral is process-wide (a module-level stack), as the archive itself is; nested blocks hand their registrations to the
 enclosing one so that the write happens when the outermost block ends.
+
+Curve archiving is also decided here, in one place, so that a deployment's archive volume is a setting rather than a
+property of each container. Curves (sd_curve and vertex rows: an entity's active vertices, a market's system curve, the
+curves of a sent or received transactive signal) are by far the largest part of an archive, and a negotiation rebuilds
+and re-sends them on every tick whether or not they changed. Two rules apply, through curve_version_due:
+
+- A curve is archived only when it differs from the last version archived for the same thing (the same measurement and
+  interval; for a signal, the same neighbor, market, direction and interval): the same vertices, each with the same
+  price, quantity, cost and continuity, are not written again. A signal re-sent unchanged still writes its
+  transactive_signal row (sequence, timestamps) but no curves: a reader takes, per interval, the latest curve archived
+  for that neighbor, market and direction at or before the signal's time, as it takes the latest version of any value.
+- The node's curve_archiving setting (set_curve_archiving) says which versions are written at all: 'all' (every
+  changed version), 'final' (only the versions a market archives when it leaves Negotiation and when it clears, within
+  a final_curves block: the last system curve and the last signal exchanged with each neighbor per interval), or 'none'
+  (no curve rows; the measurement and signal headers are still written).
 """
 import logging
 from contextlib import contextmanager
-from typing import Iterator
+from typing import Iterator, Literal
+from weakref import WeakKeyDictionary
 
 _log = logging.getLogger(__name__)
 
 _pending: list[dict[object, tuple[object, list | None]]] = []
+
+CurveArchiving = Literal['all', 'final', 'none']
+CURVE_ARCHIVING_LEVELS: tuple[str, ...] = ('all', 'final', 'none')
+_curve_archiving: str = 'all'
+_final_depth: int = 0
+# The fingerprint of the last curve version archived, per interval (weakly held: a market's intervals die with it) and
+# per lineage key (what the curve stands for, see Measurement.curve_lineage).
+_last_curves: WeakKeyDictionary = WeakKeyDictionary()
 
 
 def defer(archivable, key=None, records: list[dict] | None = None) -> bool:
@@ -103,3 +127,57 @@ def _flush(registrations) -> None:
 
 def is_deferring() -> bool:
     return bool(_pending)
+
+
+def set_curve_archiving(level: str) -> None:
+    """Which curve versions are written: 'all', 'final' or 'none' (the node's curve_archiving setting; see the module
+    docstring)."""
+    if level not in CURVE_ARCHIVING_LEVELS:
+        raise ValueError(f'curve_archiving must be one of {CURVE_ARCHIVING_LEVELS}, not {level!r}.')
+    global _curve_archiving
+    _curve_archiving = level
+
+
+def curve_archiving() -> str:
+    return _curve_archiving
+
+
+@contextmanager
+def final_curves() -> Iterator[None]:
+    """Within this block curves are archived at the 'final' level too: a market opens it when it leaves Negotiation and
+    when it clears, to write the last version of its system curve and of the signals exchanged (see Market.archive_final_curves)."""
+    global _final_depth
+    _final_depth += 1
+    try:
+        yield
+    finally:
+        _final_depth -= 1
+
+
+def in_final_curves() -> bool:
+    """Whether a final_curves block is open (a curve registered for deferred archiving inside one is written as final
+    when the block that defers it ends, which may be after the final_curves block closed)."""
+    return _final_depth > 0
+
+
+def curve_version_due(interval, lineage, fingerprint, final: bool = False) -> bool:
+    """
+    Whether a curve version with this `fingerprint` (its vertices as (price, quantity, cost, continuity) tuples) is to be
+    archived for `lineage` (what the curve stands for, see Measurement.curve_lineage) in `interval`, and, when it is, note
+    it as the last version archived. False when the node archives no curves, when it archives final curves only and this
+    is not one (`final`: archived from within a final_curves block), or when the fingerprint is that of the last version
+    archived for the same lineage and interval. A curve without an interval has no lineage to compare with and is due
+    whenever the level allows.
+    """
+    if _curve_archiving == 'none' or (_curve_archiving == 'final' and not (final or _final_depth)):
+        return False
+    if interval is None or lineage is None:
+        return True
+    try:
+        last = _last_curves.setdefault(interval, {})
+    except TypeError:  # an interval that cannot be weakly referenced or hashed: nothing to compare with
+        return True
+    if last.get(lineage) == fingerprint:
+        return False
+    last[lineage] = fingerprint
+    return True

@@ -328,7 +328,7 @@ def test_reconfigurable_fields_are_the_costs_limits_thresholds_and_schedules():
     assert 'subscribe_key' not in Lighting.Config.reconfigurable_fields()
     assert {'default_lighting_schedule', 'rated_power'} <= Lighting.Config.reconfigurable_fields()
     assert 'schedule' in SimpleOccupancyManager.Config.reconfigurable_fields()
-    assert TransactiveNode.Config.reconfigurable_fields() == frozenset(), 'node settings rebuild the node'
+    assert TransactiveNode.Config.reconfigurable_fields() == {'curve_archiving'}, 'other node settings rebuild the node'
     schema = Neighbor.Config.model_json_schema()
     assert schema['properties']['loss_factor']['reconfigurable'] is True
     assert 'reconfigurable' not in schema['properties']['transactive']
@@ -499,3 +499,16 @@ def test_the_configuration_schema_describes_every_registered_class():
     bad = node_config()
     bad['neighbors'][0]['loss_factr'] = 0.1
     assert any('loss_factr' in error.message for error in validator.iter_errors(bad))
+
+
+def test_the_node_takes_a_new_curve_archiving_level_in_place(node):
+    from tent.base import archiving
+    new_config = deepcopy(node.configuration)
+    new_config['curve_archiving'] = 'final'
+    assert node.reconfigure(new_config) is True
+    assert node.curve_archiving == 'final' and archiving.curve_archiving() == 'final'
+    assert node.config.curve_archiving == 'final' and node.configuration == new_config
+    new_config['curve_archiving'] = 'none'
+    new_config['tz'] = 'America/Los_Angeles'
+    assert node.reconfigure(new_config) is False, 'a fixed node setting alongside still rebuilds'
+    assert archiving.curve_archiving() == 'final', 'nothing was applied'

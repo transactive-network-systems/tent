@@ -54,6 +54,12 @@ class TimeInterval(Archivable):
     The TimeInterval is the Market time interval.
     """
 
+    @property
+    def referent(self) -> 'TimeInterval':
+        """This interval itself. Containers hold their interval through a weak proxy, which cannot key a dictionary;
+        read through the proxy, this property yields the interval the proxy stands for."""
+        return self
+
     def __init__(self, market, duration, start_time):
         super(TimeInterval, self).__init__()
         self.duration: timedelta = duration if isinstance(duration, timedelta) else timedelta(seconds=duration)

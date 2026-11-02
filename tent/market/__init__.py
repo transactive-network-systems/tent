@@ -609,7 +609,30 @@ class Market(Component):
         _log.debug(f'MARKET: {self.name} STATE IS NOW TRANSITIONING: Negotiation to Market Lead')
         # The prior market may have cleared during this market's Negotiation; intervals not priced here follow it.
         self.refresh_prices_from_prior_market()
+        self.archive_final_curves()
         return None
+
+    def archive_final_curves(self) -> None:
+        """
+        Archive the curves this market stands on at this point, whatever the node's curve_archiving level short of
+        'none': its system curve and the last signal sent to and received from each transactive neighbor, per interval.
+        Called when the market leaves Negotiation and when it clears (the transition to Delivery), so that a node
+        archiving final curves only keeps the last version per market and interval; at the 'all' level a curve that is
+        unchanged since its last archived version is not written again (see tent.base.archiving).
+        """
+        with archiving.final_curves():
+            for time_interval in self.time_intervals:
+                curve = self.active_vertices.get_by_interval(time_interval)
+                if curve is not None:
+                    curve.archive()
+                for neighbor in self.tn.neighbors:
+                    if not getattr(neighbor, 'transactive', False):
+                        continue
+                    for signals in (neighbor.last_sent_signals, neighbor.last_received_signals):
+                        signal = signals.get(self)
+                        curve = signal.get_by_interval(time_interval) if signal is not None else None
+                        if curve is not None:
+                            curve.archive()
 
     def while_in_market_lead(self):
         """
@@ -659,6 +682,8 @@ class Market(Component):
             _log.debug(f'Final prices are: {self.marginal_prices.log_report}')
         for time_interval, final_price in self.marginal_prices.all:
             self.price_model.update(time_interval.start_time, final_price.value)
+        # The cleared market's curves: the last version per interval, which a node archiving final curves only keeps.
+        self.archive_final_curves()
 
         # Tell Local Assets it is time to actuate.
         self._actuate_assets()
