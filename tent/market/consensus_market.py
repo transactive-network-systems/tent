@@ -161,15 +161,18 @@ class ConsensusMarket(Market):
                     _log.warning(f'{self.name}: no marginal price could be found in at least one interval.')
                     self._mark_signals_seen()
                     return False
-                # Reschedule powers at the cleared prices, then measure the duality gap and the power balance.
+                # Reschedule powers at the cleared prices (held within each entity's limits, as the schedule the curves
+                # were built from was), then measure the duality gap and the power balance.
                 for entity in self._entities():
                     entity.schedule_power(self)
+                    entity.clamp_scheduled_powers(self)
                 self.update_costs()
                 self.update_supply_demand()
-                if self.total_production_cost == 0:
-                    # Nothing costs anything: balance is judged on net power alone.
-                    self.duality_gap = max((abs(self.net_powers.get_by_interval(ti).value) for ti in self.time_intervals),
-                                           default=0.0)
+                if self.total_production_cost == 0 or self.unbalanceable:
+                    # Nothing costs anything, or some interval has no crossing (its costs cannot close either way):
+                    # balance is judged on the net power of the intervals that can balance.
+                    self.duality_gap = max((abs(self.net_powers.get_by_interval(ti).value) for ti in self.time_intervals
+                                            if ti.name not in self.unbalanceable), default=0.0)
                     gap_ok = self.duality_gap <= self.series.duality_gap_threshold
                 else:
                     self.duality_gap = (self.total_production_cost - self.total_dual_cost) / self.total_production_cost
@@ -207,13 +210,17 @@ class ConsensusMarket(Market):
         """
         True when the scheduled powers add up to zero in every interval, within the series' duality_gap_threshold as a
         fraction of the larger of the interval's total generation and total demand. A price that closes the duality gap
-        is not a solution if the powers behind it do not balance (an interval balance() could not bracket keeps its old
-        price; a supplier scheduled short of the load), so this check gates convergence and with it consensus. One
-        warning per call names the worst interval and how many are off.
+        is not a solution if the powers behind it do not balance (a supplier scheduled short of the load), so this check
+        gates convergence and with it consensus. An interval whose system curve never crosses zero (Market.unbalanceable)
+        is left out: its imbalance is known, was reported once by balance(), keeps the interval out of consensus, and
+        must not keep the negotiation rebalancing every tick. One warning per call names the worst interval and how many
+        are off.
         """
         threshold = self.series.duality_gap_threshold
         missing, off = [], []
         for time_interval in self.time_intervals:
+            if time_interval.name in self.unbalanceable:
+                continue  # no crossing to find: the imbalance is known and was reported by balance()
             net = self.net_powers.get_by_interval(time_interval)
             generation = self.total_generation.get_by_interval(time_interval)
             demand = self.total_demand.get_by_interval(time_interval)
@@ -254,7 +261,7 @@ class ConsensusMarket(Market):
     def in_consensus(self) -> bool:
         """Full consensus right now: locally balanced, no received signal still to be processed, and every transactive
         neighbor converged at the last check."""
-        return (self.converged and not self._new_signals()
+        return (self.converged and not self.unbalanceable and not self._new_signals()
                 and all(n.is_converged(self) for n in self.transactive_neighbors))
 
     def record_consensus(self) -> None:
@@ -268,7 +275,8 @@ class ConsensusMarket(Market):
         for time_interval in self.time_intervals:
             flags = [n.convergence_flags.get_by_interval(time_interval) for n in neighbors]
             agreed = all(f is not None and bool(f.value) for f in flags)
-            self.full_consensus.update(time_interval, bool(self.converged and agreed))
+            balanced = time_interval.name not in self.unbalanceable
+            self.full_consensus.update(time_interval, bool(self.converged and balanced and agreed))
 
     # ------------------------------------------------------------------------------------------------ state machine
     def transition_from_active_to_negotiation(self):
@@ -339,6 +347,12 @@ class ConsensusMarket(Market):
     def transition_from_negotiation_to_market_lead(self):
         # Negotiation may have ended by timeout rather than consensus; record the consensus state either way.
         self.record_consensus()
-        if not self.in_consensus:
+        if self.unbalanceable:
+            worst = max(self.unbalanceable.items(), key=lambda item: abs(item[1]))
+            _log.warning(f'MARKET: {self.name} left Negotiation with {len(self.unbalanceable)} of '
+                         f'{len(self.time_intervals)} intervals that cannot be balanced with the available '
+                         f'counterparties (largest: {worst[1]:.4g} kW in {worst[0]}); their powers are scheduled at the '
+                         f'curve end nearest zero and they are out of consensus.')
+        elif not self.in_consensus:
             _log.warning(f'MARKET: {self.name} left Negotiation without full consensus in every interval.')
         super(ConsensusMarket, self).transition_from_negotiation_to_market_lead()

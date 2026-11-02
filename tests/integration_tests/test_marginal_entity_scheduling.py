@@ -88,17 +88,24 @@ def test_two_suppliers_flat_at_the_same_price_share_the_load_by_segment_width(cl
         assert market.net_powers.get_by_interval(time_interval).value == pytest.approx(0.0, abs=1e-9)
 
 
-def test_an_unbalanced_schedule_is_neither_converged_nor_in_consensus(clock, caplog):
-    """The supplier can give at most 60 kW to a 100 kW inelastic load: no price balances the interval."""
+def test_a_deficit_no_counterparty_supplies_is_out_of_consensus_but_does_not_spin(clock, caplog):
+    """The supplier can give at most 60 kW to a 100 kW inelastic load: no price balances the interval. The market
+    schedules the supplier at its 60 kW, records the 40 kW deficit, keeps the interval out of consensus, says so once
+    per interval, and does not rebalance on every tick."""
     tn = node_with(lambda tn: [BulkSupplierDC(transactive_node=tn, name='bpa', cost_parameters=[0.0, 0.0, 0.0],
                                               minimum_power=0.0, maximum_power=60.0, loss_factor=0.0,
                                               demand_rate=0.0, demand_threshold=1e9, up_or_down='upstream',
                                               default_vertices=[[float('inf'), 0.0, 0.0, True]])])
     with caplog.at_level(logging.WARNING, logger='tent.market'):
-        market = negotiate(tn, clock)
-    assert not market.converged and not market.in_consensus
+        market = negotiate(tn, clock, ticks=4)
+    assert market.converged, 'the local problem is solved as far as its counterparties allow'
+    assert not market.in_consensus
     assert all(bool(v) is False for v in market.full_consensus.values)
-    assert any('Failed to balance' in r.getMessage() for r in caplog.records), 'no supply vertex reaches zero net power'
-    assert any('is not balanced' in r.getMessage() and 'not converged' in r.getMessage() for r in caplog.records)
+    assert market.unbalanceable == {ti.name: pytest.approx(-40.0) for ti in market.time_intervals}
+    cannot = [r.getMessage() for r in caplog.records if 'cannot balance' in r.getMessage()]
+    assert len(cannot) == 2 and all('deficit of 40 kW' in m for m in cannot), 'once per interval over five passes'
+    assert not any('is not balanced' in r.getMessage() for r in caplog.records), 'a known deficit is not an imbalance'
+    assert market.negotiation_passes == 1, 'nothing rebalances on later ticks: the negotiation does not spin'
     for time_interval in market.time_intervals:
         assert market.net_powers.get_by_interval(time_interval).value == pytest.approx(-40.0)
+        assert tn.neighbors[0].scheduled_powers.get_by_interval(time_interval).value == pytest.approx(60.0)

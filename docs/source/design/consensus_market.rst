@@ -28,7 +28,15 @@ a price) takes the residual of the others rather than reading its own curve, whi
 its minimum (``Market.assign_cleared_powers``, read back by ``Entity.market_power``). The loop is bounded by the
 market keyword ``max_balance_iterations`` (default 20) and stops as soon as an iteration leaves every price where it
 was, since the curves were rebuilt at those prices and the next iteration would repeat it; with piece-wise linear
-curves one pass suffices. Everything a pass reschedules (powers, costs, curves) is archived once when the pass ends
+curves one pass suffices. Rescheduled powers are held within each entity's configured limits, as the schedule the
+curves were built from was. An interval whose system curve never crosses zero (every participant supplies, as a campus
+whose own generation exceeds its load against a city that only sells; or every one demands) cannot be balanced with the
+counterparties the node has: ``Market.balance`` prices and schedules it at the curve end nearest zero, records the
+remaining surplus or deficit in ``Market.unbalanceable``, and says so once per interval. The consensus market treats
+that as distinct from "not yet converged": the pass is converged if the other intervals balance, so the negotiation does
+not rebalance every tick, while the interval is recorded out of full consensus and named when Negotiation ends. Whether
+such a surplus may be exported is configuration: the neighbor must have a negative ``minimum_power`` and the remote node
+must offer a curve that reaches into negative quantities (a bulk supplier's does not). Everything a pass reschedules (powers, costs, curves) is archived once when the pass ends
 (``tent.base.archiving.deferred_archiving``, one transaction; every market tick opens such a block in
 ``Market.events``), not once per iteration, and a value that is updated to what it already holds writes no new version.
 
@@ -36,7 +44,9 @@ curves one pass suffices. Everything a pass reschedules (powers, costs, curves) 
 system curve with that neighbor excluded, bounded to what the node can exchange with it, stated from the neighbor's
 side (positive quantity means this node supplies the neighbor), with losses and demand charges that only apply locally
 removed. The curve carries a *balance point*: the vertex at the power this node has scheduled with the neighbor, sign
-flipped into the neighbor's perspective. The neighbor folds a received signal into its own balancing problem as that
+flipped into the neighbor's perspective and, across a lossy link, stated as the power the neighbor sends rather than
+the power that arrives (``Neighbor.balance_point_quantities`` inverts the loss model the way the curve had its losses
+removed), so the point lies on the curve. The neighbor folds a received signal into its own balancing problem as that
 neighbor's active vertices and replies in kind. The rule for the balance point is the market class attribute
 ``Market.BALANCE_POINT``, read by ``Neighbor.prep_transactive_signal``: ``'scheduled_power'`` for ``Market`` and
 ``ConsensusMarket`` as described; ``'predicted_price'`` for ``Auction``, whose bid has cleared nothing with the

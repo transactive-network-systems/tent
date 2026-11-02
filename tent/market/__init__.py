@@ -42,6 +42,7 @@ under Contract DE-AC05-76RL01830
 """
 
 import logging
+import math
 
 from sortedcontainers import SortedList, SortedSet
 from typing import TYPE_CHECKING, Mapping
@@ -158,6 +159,10 @@ class Market(Component):
         self._cleared_powers: dict[tuple, tuple[SDCurve, float]] = {}
         self._information_services_updated: bool = False  # see update_information_services
         self._own_prices: set[datetime] = set()  # start times of intervals this market has balanced itself; see balance
+        # Intervals whose system curve never crosses zero, by name, with the net power left at the curve end nearest
+        # zero (positive: a surplus no counterparty absorbs; negative: a deficit no counterparty supplies). See balance.
+        self.unbalanceable: dict[str, float] = {}
+        self._no_crossing_reported: set[str] = set()  # interval names whose missing crossing has been logged
 
         # Set up market
         self.check_marginal_prices()
@@ -780,13 +785,15 @@ class Market(Component):
         Balance the market once: sum every entity's active vertices into the system curve for each active time interval
         and read the marginal price where that curve crosses zero net power (linear interpolation between the bracketing
         vertices, which is exact for the piece-wise linear curves TENT entities produce), then assign every entity the
-        power it exchanges at that price (assign_cleared_powers). Sets converged False and returns False when an interval
-        cannot be bracketed (e.g. no supply at all), leaving the remaining intervals untouched; returns True when every
-        interval found a price. Iteration, where an asset's curve depends on the price, belongs to the caller (see
+        power it exchanges at that price (assign_cleared_powers). An interval whose curve never crosses zero (no supply
+        at all, or no demand at all) is priced and scheduled at the curve end nearest zero and recorded in
+        `unbalanceable` with the net power left there; the method then returns False, and True when every interval
+        crossed. Iteration, where an asset's curve depends on the price, belongs to the caller (see
         ConsensusMarket.balance_locally).
         """
         self.assign_system_vertices()
         self._cleared_powers.clear()
+        self.unbalanceable.clear()
 
         # Index through active time intervals.
         for time_interval in self.time_intervals:
@@ -799,37 +806,55 @@ class Market(Component):
             # Get the indexed active system vertices.
             active_sd_curve: SDCurve = self.active_vertices.get_by_interval(time_interval)
 
-            try:
-                # The vertices that bracket the zero crossing: the largest demand (quantity < 0) and the smallest supply
-                # (quantity >= 0). Several vertices may share a quantity where the curve is vertical (a price step, as
-                # at an inelastic entity's price or a flat segment's edge); of those, the ones nearest the crossing in
-                # price bracket it: the highest-priced demand vertex and the lowest-priced supply vertex.
-                if not (lower_active_vertex := max(filter(lambda v: v.quantity < 0, active_sd_curve.vertices),
-                                                   key=lambda v: (v.quantity, v.price), default=None)):
-                    raise ValueError(f'No load demand vertices (quantity < 0) were found.')
+            if active_sd_curve is None or active_sd_curve.empty:
+                _log.warning(f'Failed to balance {self.name} in time interval {time_interval.name}: the system curve '
+                             f'has no vertices.')
+                return False
 
-                if not (upper_active_vertex := min(filter(lambda v: v.quantity >= 0, active_sd_curve.vertices),
-                                                   key=lambda v: (v.quantity, v.price), default=None)):
-                    raise ValueError(f'No supply vertices (quantity >= 0) were found.')
+            # The vertices that bracket the zero crossing: the largest demand (quantity < 0) and the smallest supply
+            # (quantity >= 0). Several vertices may share a quantity where the curve is vertical (a price step, as at
+            # an inelastic entity's price or a flat segment's edge); of those, the ones nearest the crossing in price
+            # bracket it: the highest-priced demand vertex and the lowest-priced supply vertex.
+            lower_active_vertex = max(filter(lambda v: v.quantity < 0, active_sd_curve.vertices),
+                                      key=lambda v: (v.quantity, v.price), default=None)
+            upper_active_vertex = min(filter(lambda v: v.quantity >= 0, active_sd_curve.vertices),
+                                      key=lambda v: (v.quantity, v.price), default=None)
 
+            end = upper_active_vertex if lower_active_vertex is None else lower_active_vertex
+            if (lower_active_vertex is None or upper_active_vertex is None) and abs(end.quantity) <= 1e-9:
+                # Every vertex is on one side of zero but the end nearest zero is zero: the curve touches zero there
+                # (an asset held at 0 kW against a supplier offering from 0 kW up), and the interval is balanced at it.
+                cleared_marginal_price = end.price if math.isfinite(end.price) else cleared_marginal_price
+            elif lower_active_vertex is None or upper_active_vertex is None:
+                # The system curve never crosses zero: every participant supplies (a surplus no counterparty absorbs)
+                # or every one demands (a deficit no counterparty supplies). The market cannot balance this interval
+                # with the counterparties it has; it schedules at the curve end nearest zero, where the imbalance is
+                # smallest, records the imbalance for its callers (a consensus market keeps it out of consensus) and
+                # says so once per interval.
+                # An inelastic end has no price of its own (infinite): the interval keeps the price it had.
+                cleared_marginal_price = end.price if math.isfinite(end.price) else cleared_marginal_price
+                self.unbalanceable[time_interval.name] = end.quantity
+                if time_interval.name not in self._no_crossing_reported:
+                    self._no_crossing_reported.add(time_interval.name)
+                    kind, remedy = (('surplus', 'absorb') if end.quantity >= 0 else ('deficit', 'supply'))
+                    _log.warning(f'MARKET: {self.name} cannot balance {time_interval.name}: the system curve never '
+                                 f'crosses zero, a {kind} of {abs(end.quantity):.4g} kW remains at its end nearest zero '
+                                 f'({cleared_marginal_price:.6g} $/kWh); the entities are scheduled there. No '
+                                 f'counterparty can {remedy} it: check the neighbors\' power limits and curves.')
+            else:
                 if (power_range := upper_active_vertex.quantity - lower_active_vertex.quantity) == 0:
                     _log.warning(f'There is no quantity range is 0. Marginal price is not unique.')
-
                 # Interpolate the marginal price in the interval using a principle of similar triangles.
                 marginal_price_range = upper_active_vertex.price - lower_active_vertex.price
                 cleared_marginal_price = (- marginal_price_range * lower_active_vertex.quantity / power_range
                                          + lower_active_vertex.price)
-            except ValueError as e:
-                _log.warning(f'Failed to balance {self.name} in time interval {time_interval.name}: {e}')
-                self.converged = False
-                return False
 
             # Assign the cleared marginal price to the marginal price value for the
             # indexed active time interval.
             self.marginal_prices.update(time_interval, cleared_marginal_price)
             self.assign_cleared_powers(time_interval, cleared_marginal_price)
             self._own_prices.add(time_interval.start_time)
-        return True
+        return not self.unbalanceable
 
     def assign_cleared_powers(self, time_interval, price: float) -> None:
         """

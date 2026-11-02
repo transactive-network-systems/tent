@@ -101,6 +101,12 @@ class Entity(Component, abc.ABC):
             self.meter_points = WeakSet(self._resolve_references(cfg.meter_points, 'meter point',
                                                                  'get_meters_by_attribute'))
 
+    def clamp_scheduled_powers(self, market):
+        """Hold the scheduled powers within the entity's configured limits. The base entity has no such step; a local
+        asset bounds what its scheduling model produced (see LocalAsset.clamp_scheduled_powers), and a market that
+        reschedules entities after balancing asks every entity for it."""
+        return None
+
     def calculate_reserve_margin(self, market):
         """ Estimate available (spinning) reserve margin for this asset.
 

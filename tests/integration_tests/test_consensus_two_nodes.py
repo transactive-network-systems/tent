@@ -273,8 +273,9 @@ def test_three_node_star_reaches_one_price(clock):
             assert campus.neighbors[0].scheduled_powers.get_by_interval(ti).value == pytest.approx(load, abs=0.5)
 
 
-def test_consensus_with_line_losses(clock):
-    """With a loss factor on the campus side the two nodes price the exchange differently but still agree on it."""
+def test_consensus_with_line_losses(clock, caplog):
+    """With a loss factor on the campus side the two nodes price the exchange differently but still agree on it: the
+    campus states its balance point as the power the city sends, which is what the city schedules."""
     campus = build_node('campus', 'city', asset_curve=[[INF, 0.0, -100.0, True]], asset_limits=(-100.0, 0.0),
                         neighbor_curve=[[0.04, 0.0, 0.0, True], [0.08, 0.0, 1000.0, True]],
                         neighbor_limits=(0.0, 1000.0), up_or_down='upstream', loss_factor=0.03)
@@ -287,8 +288,10 @@ def test_consensus_with_line_losses(clock):
     markets = [market_of(tn) for tn in all_nodes]
     times = markets[0].transition_times
 
-    ticks = negotiate(all_nodes, markets, clock, times)
+    with caplog.at_level(logging.WARNING):
+        ticks = negotiate(all_nodes, markets, clock, times)
     assert ticks is not None, 'both nodes declared full consensus despite the loss model'
+    assert not any('Indeterminate price' in r.getMessage() for r in caplog.records)
     m_campus, m_city = markets
     for market in markets:
         assert all(bool(v) is True for v in market.full_consensus.values)
@@ -298,8 +301,10 @@ def test_consensus_with_line_losses(clock):
         # The campus must import its load plus losses; the city supplies what the campus asks for.
         imported = campus.neighbors[0].scheduled_powers.get_by_interval(ti_campus).value
         supplied = -city.neighbors[0].scheduled_powers.get_by_interval(ti_city).value
-        assert imported == pytest.approx(supplied, rel=0.02)
-        assert imported >= 100.0
+        sent_by_city = -campus.neighbors[0].balance_point_quantities(m_campus)[ti_campus]
+        assert imported == pytest.approx(100.0), 'the campus load arrives in full'
+        assert supplied == pytest.approx(sent_by_city, abs=0.5), 'and the city sends what the campus said it must'
+        assert supplied > imported, 'the losses are supplied too'
         # The campus pays the city's price plus the marginal loss adder.
         assert (m_campus.marginal_prices.get_by_interval(ti_campus).value
                 > m_city.marginal_prices.get_by_interval(ti_city).value)

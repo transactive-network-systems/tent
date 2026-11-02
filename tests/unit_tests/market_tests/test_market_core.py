@@ -69,14 +69,45 @@ def test_balance_brackets_a_price_step_with_the_vertices_nearest_the_crossing():
     assert market.cleared_power(supplier, ti) == pytest.approx(20.0)
 
 
-def test_balance_returns_false_and_keeps_the_old_price_when_an_interval_cannot_be_bracketed(market_with_entities):
+def test_an_interval_whose_curve_never_crosses_zero_is_scheduled_at_its_end_and_reported_once(market_with_entities, caplog):
+    """No supply at all: the system curve is the inelastic 4 kW load alone. The deficit is recorded, the entities are
+    scheduled at the curve end nearest zero, the price stays (an inelastic end has none) and the market says so once."""
     market, ti, asset, neighbor = market_with_entities
     neighbor.active_vertices.update(ti, curve(ti, [Vertex(INF, 0, 0)]), replace=True)  # no supply at all
     market.marginal_prices.update(ti, 0.06)
-    assert market.balance() is False
-    assert market.converged is False
-    assert market.marginal_prices.get_by_interval(ti).value == 0.06
-    assert market.cleared_power(asset, ti) is None
+    with caplog.at_level('WARNING', logger='tent.market'):
+        assert market.balance() is False
+        assert market.balance() is False
+    assert market.unbalanceable == {ti.name: -4.0}
+    assert market.marginal_prices.get_by_interval(ti).value == 0.06, 'the end is inelastic: the price it had stays'
+    assert market.cleared_power(asset, ti) == -4.0 and market.cleared_power(neighbor, ti) == 0.0
+    messages = [r.getMessage() for r in caplog.records if 'cannot balance' in r.getMessage()]
+    assert len(messages) == 1, 'once per interval, not once per call'
+    assert 'deficit of 4 kW' in messages[0] and 'supply it' in messages[0]
+
+
+def test_a_surplus_no_counterparty_absorbs_is_scheduled_at_the_lowest_price(caplog):
+    """A 50 kW inelastic generator against a supply-only neighbor curve: every vertex is supply, the end nearest zero is
+    the neighbor's 0 kW at its lowest price, and the surplus is the generator's 50 kW."""
+    tn = MockTN()
+    market = make_market(tn)
+    ti = market.time_intervals[0]
+    generator = LocalAsset(transactive_node=tn, cost_parameters=[0.0, 0.0, 0.0])
+    neighbor = Neighbor(transactive_node=tn, cost_parameters=[0.0, 0.0, 0.0])
+    tn.local_assets, tn.neighbors = [generator], [neighbor]
+    generator.active_vertices.update(ti, curve(ti, [Vertex(INF, 0, 50)]))
+    neighbor.active_vertices.update(ti, curve(ti, [Vertex(0.02, 0, 0), Vertex(0.05, 0, 10)]))
+    with caplog.at_level('WARNING', logger='tent.market'):
+        assert market.balance() is False
+    assert market.unbalanceable == {ti.name: pytest.approx(50.0)}
+    assert market.marginal_prices.get_by_interval(ti).value == pytest.approx(0.02), 'the lowest price: suppliers back off'
+    assert market.cleared_power(neighbor, ti) == pytest.approx(0.0) and market.cleared_power(generator, ti) == 50.0
+    assert any('surplus of 50 kW' in r.getMessage() and 'absorb it' in r.getMessage() for r in caplog.records)
+    # Once a counterparty can take the surplus the interval balances and the record clears.
+    neighbor.active_vertices.update(ti, curve(ti, [Vertex(0.02, 0, -100), Vertex(0.05, 0, 10)]), replace=True)
+    assert market.balance() is True
+    assert market.unbalanceable == {}
+    assert market.cleared_power(neighbor, ti) == pytest.approx(-50.0)
 
 
 class TestClearedPowers:

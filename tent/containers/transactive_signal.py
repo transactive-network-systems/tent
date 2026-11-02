@@ -103,9 +103,18 @@ class TransactiveSignal(SDMeasurement):
         means the neighbor supplies this node), so the sign flips. This is the rule of a negotiating market
         (Market.BALANCE_POINT == 'scheduled_power').
         """
-        for ti, sp in scheduled_powers.all:
+        self.mark_balance_points_at_quantities({ti: -float(sp.value) for ti, sp in scheduled_powers.all})
+
+    def mark_balance_points_at_quantities(self, quantities) -> None:
+        """
+        Mark the balance point on every interval's curve at the given quantity, already stated in the curve's
+        perspective (the neighbor's: positive means this node supplies the neighbor, and for power the neighbor supplies
+        across a lossy link, the quantity the neighbor sends, not what arrives; see Neighbor.balance_point_quantities).
+        `quantities` maps intervals to quantities; intervals the signal has no curve for are skipped.
+        """
+        for ti, quantity in quantities.items():
             if self.get_by_interval(ti) is not None:
-                self._mark_balance_point(ti, -float(sp.value))
+                self._mark_balance_point(ti, float(quantity))
 
     def mark_balance_points_at_prices(self, prices_by_interval):
         """
@@ -175,11 +184,16 @@ class TransactiveSignal(SDMeasurement):
     def generate_signal(self, scheduled_powers=None) -> dict:
         """
         The wire form of this signal (see TransactiveSignalMessage), stamped with the current time and marked as sent.
-        With scheduled_powers, the balance points are marked first. Intervals whose curve has no vertices are not
+        With scheduled_powers, the balance points are marked first: a Measurement of this node's scheduled powers with
+        the neighbor (sign flipped into the neighbor's perspective), or a mapping of intervals to quantities already in
+        the neighbor's perspective (see mark_balance_points_at_quantities). Intervals whose curve has no vertices are not
         included. A vertex whose price has no wire form (-inf or NaN) is an error.
         """
         if scheduled_powers is not None:
-            self.mark_balance_points(scheduled_powers)
+            if hasattr(scheduled_powers, 'all'):
+                self.mark_balance_points(scheduled_powers)
+            else:
+                self.mark_balance_points_at_quantities(scheduled_powers)
         if self.sequence is None:
             raise ValueError(f'The signal to {self.neighbor.name} for {self.market.name} has no sequence number; number '
                              f'it before sending (see Neighbor.send_transactive_signal).')

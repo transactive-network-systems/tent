@@ -545,12 +545,35 @@ class Neighbor(Entity):
         # balance points the sent one will and check_for_convergence can compare them; an auction bid marks the residual
         # curve's own quantity at the market's predicted price, since nothing has been cleared with the neighbor yet.
         if market.BALANCE_POINT == 'scheduled_power':
-            self.prepared_signals[market].mark_balance_points(self.scheduled_powers)
+            self.prepared_signals[market].mark_balance_points_at_quantities(self.balance_point_quantities(market))
         elif market.BALANCE_POINT == 'predicted_price':
             self.prepared_signals[market].mark_balance_points_at_prices(market.marginal_prices)
         else:
             raise ValueError(f'{type(market).__name__}.BALANCE_POINT is {market.BALANCE_POINT!r}; it must be '
                              f'"scheduled_power" or "predicted_price".')
+
+    def balance_point_quantities(self, market) -> dict:
+        """
+        The power scheduled with this neighbor in each of the market's intervals, stated as the signal's curve is: in the
+        neighbor's perspective (sign flipped: positive means this node supplies the neighbor) and, for power the neighbor
+        supplies across a lossy link, as the quantity the neighbor sends rather than the quantity that arrives here. The
+        scheduled power is what arrives (include_marginal_losses reduced the neighbor's offered quantities to it); the
+        signal's curve had those losses removed again (remove_marginal_losses), so a balance point marked from the
+        arriving power would lie a loss factor's worth inside the curve's end. The same inversion remove_marginal_losses
+        applies to a vertex is applied here.
+        """
+        quantities = {}
+        for time_interval in market.time_intervals:
+            scheduled = self.scheduled_powers.get_by_interval(time_interval)
+            if scheduled is None:
+                continue
+            quantity = -float(scheduled.value)
+            if quantity < 0 and self.loss_factor != 0 and self.maximum_power > 0:
+                quantity = -(self.maximum_power / (2 * self.loss_factor)) \
+                    * (1 - (1 - 4 * (-quantity / self.maximum_power) * self.loss_factor) ** 0.5)
+                quantity = max(quantity, -self.maximum_power)
+            quantities[time_interval] = quantity
+        return quantities
 
     def send_transactive_signal(self, market, include_schedule=False):
         # Send transactive records to a transactive neighbor.
@@ -596,8 +619,8 @@ class Neighbor(Entity):
         prepared_signal.sequence = sequence
         prepared_signal.in_reply_to = received.sequence if received is not None else None
         prepared_signal.revised = revised
-        self.tn.issue_signal(self.name,
-                             prepared_signal.generate_signal(self.scheduled_powers if include_schedule else None))
+        self.tn.issue_signal(self.name, prepared_signal.generate_signal(
+            self.balance_point_quantities(market) if include_schedule else None))
 
         # Keep a snapshot of what was sent. The prepared signal is revised in place on every negotiation pass, so the
         # sent signal must be an independent copy or the convergence check would compare a signal with itself.

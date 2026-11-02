@@ -89,9 +89,10 @@ def test_a_node_whose_local_balance_cannot_close_still_sends_its_signal_on_tick_
     times = market.transition_times
     step(tn, clock, times.active)
     with caplog.at_level(logging.WARNING, logger='tent.market'):
-        step(tn, clock, times.negotiation)  # the opening pass: balance fails, the signal is sent regardless
-    assert not market.converged
-    assert any('Failed to balance' in r.getMessage() for r in caplog.records)
+        step(tn, clock, times.negotiation)  # the opening pass: no crossing, the signal is sent regardless
+    assert market.unbalanceable == {ti.name: pytest.approx(-50.0) for ti in market.time_intervals}, '50 kW short'
+    assert not market.in_consensus
+    assert any('cannot balance' in r.getMessage() and 'deficit of 50 kW' in r.getMessage() for r in caplog.records)
     assert len(sent) == 1 and sent[0]['sequence'] == 1 and sent[0]['revised'] is True
     assert market in neighbor.last_sent_signals
     for interval in sent[0]['intervals'].values():
@@ -106,7 +107,7 @@ def test_a_node_whose_local_balance_cannot_close_still_sends_its_signal_on_tick_
     market.on_local_change(tn.local_assets[0])
     step(tn, clock, times.negotiation + timedelta(seconds=3))
     assert len(sent) == 2 and sent[1]['sequence'] == 2 and sent[1]['revised'] is True
-    assert market.converged, 'with 40 kW of load the neighbor curve can balance'
+    assert market.converged and market.unbalanceable == {}, 'with 40 kW of load the neighbor curve can balance'
     quantities = [v['quantity'] for v in list(sent[1]['intervals'].values())[0]['flexibility']]
     assert any(q == pytest.approx(-40.0) for q in quantities), 'the new residual, in the neighbor\'s perspective'
 
@@ -226,3 +227,81 @@ def test_the_deployed_small_office_closes_its_local_balance(tmp_path, caplog, po
     assert abs(market.duality_gap) <= market.series.duality_gap_threshold
     worst = max(abs(market.net_powers.get_by_interval(ti).value) for ti in market.time_intervals)
     assert worst < 1e-6, f'net power {worst} kW: the asset schedules what its curve says at the cleared price'
+
+
+class GenerationPredictor(InelasticAsset):
+    """A load predictor that extrapolates generation (a positive power) in the first interval, as the campus's open-loop
+    predictor did in hot hours, with limits that forbid it. Its curve is built from the clamped schedule."""
+
+    def schedule_power(self, market):
+        for n, time_interval in enumerate(market.time_intervals):
+            self.scheduled_powers.update(time_interval, 501.4 if n == 0 else self.constant_power)
+        self.schedule_calculated = True
+
+    def update_vertices(self, market):
+        for time_interval in market.time_intervals:
+            power = self.scheduled_powers.get_by_interval(time_interval).value
+            self.active_vertices.update(time_interval, [Vertex(INF, 0.0, power)], archive=False, replace=True)
+
+
+def test_a_rescheduled_power_is_held_within_the_limits_the_curve_was_built_from(clock, caplog):
+    """The campus case (T-60): the predictor's clamped 0 kW went into the curve, but the reschedule after balancing
+    took the unclamped 501.4 kW and the market reported itself 501.4 kW out of balance in that interval."""
+    tn, sent = build_office(GenerationPredictor(transactive_node=None, name='buildings', cost_parameters=[0.0, 0.0, 0.0],
+                                                curve_power=-60.0, minimum_power=-24200.0, maximum_power=0.0),
+                            neighbor_maximum=120.0)
+    market = tn.market_series[0].newest_market
+    times = market.transition_times
+    step(tn, clock, times.active)
+    with caplog.at_level(logging.WARNING, logger='tent.market'):
+        step(tn, clock, times.negotiation)
+    first, second = market.time_intervals
+    assert tn.local_assets[0].scheduled_powers.get_by_interval(first).value == 0.0, 'held at the limit after the reschedule'
+    assert tn.local_assets[0].scheduled_powers.get_by_interval(second).value == -60.0
+    assert market.net_powers.get_by_interval(first).value == pytest.approx(0.0, abs=1e-9)
+    assert market.converged and market.unbalanceable == {}
+    assert not any('is not balanced' in r.getMessage() for r in caplog.records)
+
+
+def test_a_surplus_the_neighbor_cannot_absorb_is_out_of_consensus_without_spinning(clock, caplog):
+    """A node whose own generation exceeds its load, against a neighbor that only supplies (the campus against the
+    city's bulk-supplier curve): no price balances. The market schedules at the curve end nearest zero (the neighbor
+    at 0 kW, its lowest price), records the surplus, says so once per interval, stays out of consensus and does not
+    rebalance every tick. A neighbor that may take power (a negative minimum_power and a curve reaching into negative
+    quantities) balances it."""
+    tn, sent = build_office(InelasticAsset(transactive_node=None, name='solar', cost_parameters=[0.0, 0.0, 0.0],
+                                           curve_power=100.0), neighbor_maximum=120.0)
+    market = tn.market_series[0].newest_market
+    times = market.transition_times
+    step(tn, clock, times.active)
+    with caplog.at_level(logging.WARNING, logger='tent.market'):
+        step(tn, clock, times.negotiation)
+        for seconds in range(1, 5):
+            step(tn, clock, times.negotiation + timedelta(seconds=seconds))
+    assert market.unbalanceable == {ti.name: pytest.approx(100.0) for ti in market.time_intervals}
+    assert market.converged and not market.in_consensus
+    assert market.negotiation_passes == 1, 'the opening pass only: an unbalanceable interval does not spin'
+    cannot = [r.getMessage() for r in caplog.records if 'cannot balance' in r.getMessage()]
+    assert len(cannot) == 2 and all('surplus of 100 kW' in m and 'absorb it' in m for m in cannot)
+    for ti in market.time_intervals:
+        assert market.marginal_prices.get_by_interval(ti).value == pytest.approx(0.045), "the neighbor curve's lowest price"
+        assert tn.neighbors[0].scheduled_powers.get_by_interval(ti).value == pytest.approx(0.0)
+        assert bool(market.full_consensus.get_by_interval(ti).value) is False
+    assert len(sent) == 1, 'the residual (all supply) still went to the neighbor'
+    with caplog.at_level(logging.WARNING, logger='tent.market'):
+        step(tn, clock, times.market_lead)
+    assert any('cannot be balanced with the available counterparties' in r.getMessage()
+               and 'largest: 100 kW' in r.getMessage() for r in caplog.records)
+
+    # The remedy is configuration: a neighbor that can take the export.
+    tn2, _ = build_office(InelasticAsset(transactive_node=None, name='solar', cost_parameters=[0.0, 0.0, 0.0],
+                                         curve_power=100.0), neighbor_maximum=120.0)
+    taker = tn2.neighbors[0]
+    taker.minimum_power = -120.0
+    taker.default_vertices.update([Vertex(0.045, 0.0, -120.0)], archive=False)  # it buys up to 120 kW at 0.045 too
+    market2 = tn2.market_series[0].newest_market
+    step(tn2, clock, market2.transition_times.active)
+    step(tn2, clock, market2.transition_times.negotiation)
+    assert market2.unbalanceable == {} and market2.converged
+    for ti in market2.time_intervals:
+        assert taker.scheduled_powers.get_by_interval(ti).value == pytest.approx(-100.0)

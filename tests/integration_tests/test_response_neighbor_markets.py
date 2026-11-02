@@ -184,13 +184,13 @@ def test_intervals_before_the_first_value_wait_and_a_value_holds_until_changed(c
     assert neighbor.active_vertices.get_by_interval(first) is None
     assert neighbor.active_vertices.get_by_interval(second) is not None
     assert any(f'counterparty has no vertices in time interval {first.name}' in r.getMessage() for r in caplog.records)
-    # The only supply is missing in the first interval, so that interval cannot balance: the load is unmet there, and
-    # an unbalanced schedule is neither converged nor in consensus.
-    assert any('Failed to balance' in r.getMessage() and first.name in r.getMessage() for r in caplog.records)
+    # The only supply is missing in the first interval, so that interval cannot balance: the load is unmet there, the
+    # deficit is recorded once and the interval is out of consensus.
+    assert any('cannot balance' in r.getMessage() and first.name in r.getMessage() for r in caplog.records)
     assert market.net_powers.get_by_interval(first).value == pytest.approx(-100.0)
     assert powers(neighbor, market)[0] == 0.0
-    assert not market.converged and not market.in_consensus
-    assert any('is not balanced' in r.getMessage() and first.name in r.getMessage() for r in caplog.records)
+    assert market.unbalanceable == {first.name: pytest.approx(-100.0)}
+    assert not market.in_consensus
 
     # A value for the first interval arrives; the earlier entry still holds for the later intervals.
     tn.provide_subscription(PRICE_KEY, [{'start_time': first.start_time.isoformat(), 'value': 0.03}])
