@@ -95,6 +95,16 @@ class Neighbor(Entity):
         loss_factor: float = Setting(0.01, ge=0, lt=1, reconfigurable=True,
                                      description='[dimensionless] full-load loss fraction of the connection; 0.01 is 1%.')
         mechanism: str = Setting('consensus', description='Coordination mechanism (future use).')
+        signal_simplification_tolerance: float = Setting(
+            0.0, ge=0, reconfigurable=True,
+            description='[fraction of the curve\'s price and quantity spans] interior vertices of each curve of a '
+                        'prepared transactive signal that lie within this distance of the simplified curve are dropped '
+                        'before the signal is sent and archived (see tent.containers.curve_simplification); 0 sends '
+                        'every vertex. 0.01 is one percent.')
+        signal_max_vertices: int | None = Setting(
+            None, ge=2, reconfigurable=True,
+            description='Most vertices a curve of a sent transactive signal may carry; the simplification tolerance is '
+                        'doubled until a curve fits. Null means no cap.')
         transactive: bool = Setting(False, description='True when this neighbor exchanges transactive signals; False '
                                                        'for a passive supplier or load described by its curve.')
         up_or_down: enum_by_name(Direction) = Setting(
@@ -114,6 +124,8 @@ class Neighbor(Entity):
         self.friend = cfg.friend                                       # [boolean]: True for collaborative, friendly Neighbor
         self.loss_factor = float(cfg.loss_factor)                      # [dimensionless] 0.01 = 1% full-load loss
         self.mechanism = cfg.mechanism                                 # future, unused
+        self.signal_simplification_tolerance = float(cfg.signal_simplification_tolerance)  # [fraction of spans] 0 = off
+        self.signal_max_vertices = cfg.signal_max_vertices             # [count or None] cap on a sent curve's vertices
         self.transactive = cfg.transactive                             # [boolean]: True for transactive neighbor
         self.up_or_down = cfg.up_or_down                               # 'upstream' or 'downstream' direction of this neighbor
 
@@ -465,6 +477,7 @@ class Neighbor(Entity):
 
         # An active threshold is initialized here and used during the assessment of demand charges.
         active_threshold = -self.demand_threshold
+        simplification = []  # (vertices before, vertices after, tolerance applied) per interval, for one DEBUG line
         for time_interval in market.time_intervals:
             if market not in self.prepared_signals:
                 self.prepared_signals[market] = TransactiveSignal(market=market, neighbor=self, archive_now=False)
@@ -504,6 +517,14 @@ class Neighbor(Entity):
             if self.loss_factor != 0:
                 self.remove_marginal_losses(sd_curve)
 
+            # Optionally drop the interior vertices the neighbor could interpolate anyway (signal_simplification_tolerance)
+            # and cap the count (signal_max_vertices): what is stored here is what is sent and archived, and what the
+            # convergence check compares with the last signal sent. The balance point is marked on the simplified curve.
+            if self.signal_simplification_tolerance > 0 or self.signal_max_vertices is not None:
+                before = len(sd_curve)
+                sd_curve, applied = sd_curve.simplified(self.signal_simplification_tolerance, self.signal_max_vertices)
+                simplification.append((before, len(sd_curve), applied))
+
             # The vertices are now suitable for creating transactive records representing the remote agent perspective.
             #  Store the corrected vertices in prepared_signals, where they are ready to send to the remote neighbor.
             if sd_curve.empty:
@@ -512,6 +533,13 @@ class Neighbor(Entity):
                 raise ValueError(f'prep_transactive_signal: the curve prepared for neighbor {self.name} in time interval '
                                  f'{time_interval.name} is empty after bounds and corrections; it is not stored.')
             self.prepared_signals[market].update(time_interval, sd_curve, archive=False, replace=True)
+        if simplification and _log.isEnabledFor(logging.DEBUG):
+            tolerances = sorted({applied for _, _, applied in simplification})
+            _log.debug(f'{self.tn.name}: signal to {self.name} for {market.name} simplified from '
+                       f'{sum(b for b, _, _ in simplification)} to {sum(a for _, a, _ in simplification)} vertices over '
+                       f'{len(simplification)} intervals (per interval {[(b, a) for b, a, _ in simplification]}; '
+                       f'tolerance {tolerances[0]:g}' + (f' to {tolerances[-1]:g}' if len(tolerances) > 1 else '')
+                       + ').')
         # Mark record 0, the balance point, on every interval's curve by the market's rule (Market.BALANCE_POINT): a
         # negotiating market marks the power scheduled with this neighbor, so the prepared signal carries the same
         # balance points the sent one will and check_for_convergence can compare them; an auction bid marks the residual

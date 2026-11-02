@@ -11,6 +11,7 @@ from tent.containers.measurement import Measurement
 from tent.containers.time_interval import TimeInterval
 from tent.containers.vertex import Vertex
 from tent.enumerations import MeasurementType, MeasurementUnit
+from tent.containers.curve_simplification import simplify_vertices
 from tent.utils.helpers import validate_bool, safe_weak_proxy_callback
 from tent.utils.timer import Timer
 
@@ -156,6 +157,22 @@ class SDCurve(Archivable):
         else:
             raise ValueError(f'All vertices in a vertex list must all be vertices, lists, or dicts.'
                              f' Received: {vertices}')
+
+    def simplified(self, tolerance: float, max_vertices: int | None = None) -> tuple['SDCurve', float]:
+        """
+        A new curve (same measurement and interval, not archived) with the interior vertices that lie within
+        `tolerance` (a fraction of the curve's price and quantity spans) of the simplified polyline removed, and at most
+        `max_vertices` vertices when a cap is given; with it, the tolerance finally applied. The first and last vertex
+        and vertices at an infinite price are always kept; the costs of the kept vertices are recomputed from the
+        simplified polyline. See tent.containers.curve_simplification for the rules and what is preserved.
+        """
+        hours = self.interval.duration.total_seconds() / 3600 if self.interval is not None else None
+        vertices = list(self.vertices)
+        if hours is None and len(vertices) > 2:
+            raise ValueError(f'simplified: the curve for {self._owner_description()} has no interval; vertex costs '
+                             f'integrate over its duration and cannot be recomputed.')
+        simplified, applied = simplify_vertices(vertices, tolerance, hours if hours is not None else 1.0, max_vertices)
+        return SDCurve(self.measurement, self.interval, simplified, archive=False), applied
 
     def apply_constraints_and_bounds(self, minimum_power: float = None, maximum_power: float = None):
         """ Applies constraints and bounds to the SDCurve vertices whereby:
