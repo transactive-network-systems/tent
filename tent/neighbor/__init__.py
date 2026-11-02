@@ -160,10 +160,12 @@ class Neighbor(Entity):
         and last received signals. Two things are decided and recorded in the per-market CoordinationState:
 
         - A signal is DUE (is_signal_due) when nothing has been sent yet; or local conditions changed so the prepared
-          signal differs from the sent one; or the neighbor, having seen this node's latest revised signal, still
-          disagrees at the balance point; or the neighbor's latest signal is revised and has not been answered. The
+          signal differs from the sent one; or the neighbor's latest signal is revised and has not been answered. The
           answer to a revised signal that changes nothing here is an acknowledgement: the same content resent with
-          revised=False, which the neighbor in turn need not answer. That is what ends the exchange.
+          revised=False, which the neighbor in turn need not answer. That is what ends the exchange. A neighbor that
+          disagrees at the balance point while nothing has changed here is not answered again: resending the same
+          content cannot move it, and answering every such signal made two nodes acknowledge each other without end.
+          The disagreement is logged and keeps the interval unconverged until one side's conditions change.
         - An interval is CONVERGED (convergence_flags, is_converged) when the neighbor has been heard from, has
           acknowledged this node's latest revised signal (its in_reply_to is at least that sequence), agrees at the
           balance point, and local conditions have not changed. A neighbor that never replied is not in consensus.
@@ -193,15 +195,16 @@ class Neighbor(Entity):
             disagree = (heard and acknowledged
                         and TransactiveSignal.balance_points_differ(sent_signal, received_signal, time_interval,
                                                                     self.convergence_threshold))
-            due = never_sent or local_change or disagree or unanswered
+            due = never_sent or local_change or unanswered
             if never_sent:
                 _log.debug(f"No signal sent yet for time interval {time_interval.name}.")
             elif local_change:
                 _log.debug(f"Local conditions have changed for time interval {time_interval.name}.")
-            elif disagree:
-                _log.debug(f"{self.name} disagrees at the balance point for time interval {time_interval.name}.")
             elif unanswered:
                 _log.debug(f"{self.name}'s revised signal {received_signal.sequence} has not been answered.")
+            elif disagree:
+                _log.debug(f"{self.name} disagrees at the balance point for time interval {time_interval.name}; nothing "
+                           f"has changed here, so no signal is due.")
             due_flags.append(due)
             self.convergence_flags.update(time_interval, bool(heard and acknowledged and not disagree and not local_change))
 
@@ -553,7 +556,7 @@ class Neighbor(Entity):
         # balance points the sent one will and check_for_convergence can compare them; an auction bid marks the residual
         # curve's own quantity at the market's predicted price, since nothing has been cleared with the neighbor yet.
         if market.BALANCE_POINT == 'scheduled_power':
-            self.prepared_signals[market].mark_balance_points_at_quantities(self.balance_point_quantities(market))
+            self.prepared_signals[market].mark_balance_points_at_quantities(self.balance_points(market))
         elif market.BALANCE_POINT == 'predicted_price':
             self.prepared_signals[market].mark_balance_points_at_prices(market.marginal_prices)
         else:
@@ -570,18 +573,39 @@ class Neighbor(Entity):
         arriving power would lie a loss factor's worth inside the curve's end. The same inversion remove_marginal_losses
         applies to a vertex is applied here.
         """
-        quantities = {}
+        return {time_interval: quantity for time_interval, (quantity, _) in self.balance_points(market).items()}
+
+    def balance_points(self, market) -> dict:
+        """
+        The balance point of each of the market's intervals as (quantity, price) in the neighbor's perspective: the
+        quantity of balance_point_quantities and the price the exchange clears at from the neighbor's side. The market's
+        marginal price is this node's; the neighbor's side of a lossy link sees it without the marginal loss adder, and
+        a demand charge applied here is not the neighbor's either, so both are taken off exactly as
+        remove_marginal_losses and remove_demand_charges take them off the curve's vertices. An interval the market has
+        no price for carries None for the price. Both sides of a link state the same point this way, which is what the
+        convergence check compares.
+        """
+        points = {}
+        threshold = min(-self.demand_threshold, 0.0)
         for time_interval in market.time_intervals:
             scheduled = self.scheduled_powers.get_by_interval(time_interval)
             if scheduled is None:
                 continue
-            quantity = -float(scheduled.value)
-            if quantity < 0 and self.loss_factor != 0 and self.maximum_power > 0:
-                quantity = -(self.maximum_power / (2 * self.loss_factor)) \
-                    * (1 - (1 - 4 * (-quantity / self.maximum_power) * self.loss_factor) ** 0.5)
-                quantity = max(quantity, -self.maximum_power)
-            quantities[time_interval] = quantity
-        return quantities
+            received = -float(scheduled.value)  # the neighbor's perspective: negative is power it supplies to this node
+            quantity = received
+            marginal_price = market.marginal_prices.get_by_interval(time_interval)
+            price = None if marginal_price is None or marginal_price.value is None else float(marginal_price.value)
+            if received < 0:
+                if price is not None and self.demand_rate != 0 and received < threshold:
+                    price = price - self.demand_rate
+                if self.loss_factor != 0 and self.maximum_power > 0:
+                    quantity = -(self.maximum_power / (2 * self.loss_factor)) \
+                        * (1 - (1 - 4 * (-received / self.maximum_power) * self.loss_factor) ** 0.5)
+                    quantity = max(quantity, -self.maximum_power)
+                    if price is not None:
+                        price = price * (1 + 4 * self.loss_factor * received / self.maximum_power) ** 0.5
+            points[time_interval] = (quantity, price)
+        return points
 
     def send_transactive_signal(self, market, include_schedule=False):
         # Send transactive records to a transactive neighbor.
@@ -628,7 +652,7 @@ class Neighbor(Entity):
         prepared_signal.in_reply_to = received.sequence if received is not None else None
         prepared_signal.revised = revised
         self.tn.issue_signal(self.name, prepared_signal.generate_signal(
-            self.balance_point_quantities(market) if include_schedule else None))
+            self.balance_points(market) if include_schedule else None))
 
         # Keep a snapshot of what was sent. The prepared signal is revised in place on every negotiation pass, so the
         # sent signal must be an independent copy or the convergence check would compare a signal with itself.

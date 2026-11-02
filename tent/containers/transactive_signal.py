@@ -109,12 +109,19 @@ class TransactiveSignal(SDMeasurement):
         """
         Mark the balance point on every interval's curve at the given quantity, already stated in the curve's
         perspective (the neighbor's: positive means this node supplies the neighbor, and for power the neighbor supplies
-        across a lossy link, the quantity the neighbor sends, not what arrives; see Neighbor.balance_point_quantities).
-        `quantities` maps intervals to quantities; intervals the signal has no curve for are skipped.
+        across a lossy link, the quantity the neighbor sends, not what arrives; see Neighbor.balance_points). `quantities`
+        maps intervals to a quantity, or to a (quantity, price) pair giving the price of the exchange in the same
+        perspective, which the balance point then carries (see _mark_balance_point); intervals the signal has no curve
+        for are skipped.
         """
-        for ti, quantity in quantities.items():
-            if self.get_by_interval(ti) is not None:
-                self._mark_balance_point(ti, float(quantity))
+        for ti, point in quantities.items():
+            if self.get_by_interval(ti) is None:
+                continue
+            if isinstance(point, tuple):
+                quantity, price = point
+                self._mark_balance_point(ti, float(quantity), None if price is None else float(price))
+            else:
+                self._mark_balance_point(ti, float(point))
 
     def mark_balance_points_at_prices(self, prices_by_interval):
         """
@@ -134,12 +141,19 @@ class TransactiveSignal(SDMeasurement):
                                  f'a balance point cannot be marked on it.')
             self._mark_balance_point(ti, sd_curve.power_from_vertices(prices[ti]))
 
-    def _mark_balance_point(self, ti: TimeInterval, quantity: float) -> None:
-        """Mark the vertex at quantity on the interval's curve as its balance point: a lone vertex is inelastic and is
-        the balance point whatever the quantity; a vertex already at the quantity (within interpolation noise) is
-        reused rather than duplicated; a quantity a hair beyond either end of the curve (SDCurve.END_VERTEX_TOLERANCE,
-        the rounding between a scheduled power and the curve it was read from) is that end vertex; otherwise a vertex
-        is interpolated on the curve and added."""
+    def _mark_balance_point(self, ti: TimeInterval, quantity: float, price: float | None = None) -> None:
+        """
+        Mark the balance point on the interval's curve: the quantity exchanged and, when given, the price of the
+        exchange, both in the curve's perspective. A lone vertex is inelastic and is the balance point whatever the
+        quantity. A quantity a hair beyond either end of the curve (SDCurve.END_VERTEX_TOLERANCE, the rounding between
+        a scheduled power and the curve it was read from) is taken as that end. Without a price, the point is the vertex
+        already at the quantity (within interpolation noise) or one interpolated on the curve. With a price, the point
+        must carry it: the residual curve is often vertical at the exchanged quantity (an inelastic system takes the same
+        power at every price below its flexibility), where the price read off the curve is any price of that segment and
+        not the one the market cleared at, and the neighbor compares prices as well as quantities; so a vertex at the
+        quantity is reused only when its price is the exchange price, and otherwise a vertex (price, quantity) is added,
+        which lies on the curve's vertical segment.
+        """
         sd_curve: SDCurve = self.get_by_interval(ti)
         if sd_curve.empty:
             # A signal never holds an empty curve (prep_transactive_signal refuses one); reaching this is a bug.
@@ -147,19 +161,26 @@ class TransactiveSignal(SDMeasurement):
                              f'{self.neighbor.name} holds an empty curve for interval {ti.name}; a balance point '
                              f'cannot be marked on it.')
         vertices = list(sd_curve.vertices)
+        if len(vertices) == 1:
+            self.__balance_vertices[ti] = vertices[0]
+            return
+        lowest, highest = min(vertices, key=lambda v: v.quantity), max(vertices, key=lambda v: v.quantity)
+        if quantity < lowest.quantity and sd_curve.is_at_end_vertex(quantity, lowest):
+            quantity = lowest.quantity
+        elif quantity > highest.quantity and sd_curve.is_at_end_vertex(quantity, highest):
+            quantity = highest.quantity
         tolerance = 1e-6 * max(1.0, abs(quantity))
-        existing = vertices[0] if len(vertices) == 1 else next(
-            (v for v in vertices if abs(v.quantity - quantity) <= tolerance), None)
-        if existing is None:
-            lowest, highest = min(vertices, key=lambda v: v.quantity), max(vertices, key=lambda v: v.quantity)
-            if quantity < lowest.quantity and sd_curve.is_at_end_vertex(quantity, lowest):
-                existing = lowest
-            elif quantity > highest.quantity and sd_curve.is_at_end_vertex(quantity, highest):
-                existing = highest
+        at_quantity = sorted((v for v in vertices if abs(v.quantity - quantity) <= tolerance),
+                             key=lambda v: abs(v.quantity - quantity))
+        if price is None or not isfinite(price):
+            existing = at_quantity[0] if at_quantity else None
+        else:
+            price_tolerance = 1e-6 * max(1e-3, abs(price))
+            existing = next((v for v in at_quantity if abs(v.price - price) <= price_tolerance), None)
         if existing is not None:
             self.__balance_vertices[ti] = existing
             return
-        balance_price = sd_curve.price_from_vertices(quantity)
+        balance_price = sd_curve.price_from_vertices(quantity) if price is None or not isfinite(price) else price
         balance_cost = sd_curve.prod_cost_from_vertices(quantity)
         vertex = Vertex(balance_price, balance_cost, quantity, curve=sd_curve)
         sd_curve.update(vertex, archive=False)

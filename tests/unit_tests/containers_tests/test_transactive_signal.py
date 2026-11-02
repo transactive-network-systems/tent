@@ -165,3 +165,48 @@ class TestBalancePointNearTheEndOfTheCurve:
         assert SDCurve.is_at_end_vertex(-442.63539393683266, end)
         assert not SDCurve.is_at_end_vertex(-440.0, end)
         assert SDCurve.is_at_end_vertex(0.0005, Vertex(price=0.05, quantity=0.0)), 'at least 1 kW absolute near zero'
+
+
+class TestBalancePointWithAnExchangePrice:
+    """The campus's residual curve towards the city was vertical at the exchanged quantity (an inelastic system below
+    its offices' flexibility): reading the price off the curve gave 0.04025 while the campus cleared at 0.03228 on the
+    city's side, and the city, whose own point was (6489.48, 0.03228), saw a 25 percent price disagreement forever."""
+    CURVE = [(0.04025, -6489.48), (0.0423, -6459.0)]
+
+    def signal(self, tn, market, ti):
+        neighbor = Neighbor(transactive_node=tn, name='CoR', cost_parameters=[0, 0, 0])
+        sig = TransactiveSignal(market=market, neighbor=neighbor)
+        sig.update(ti, [Vertex(price=p, quantity=q) for p, q in self.CURVE], archive=False)
+        return sig
+
+    def test_the_point_carries_the_exchange_price_on_a_vertical_segment(self, market_and_interval):
+        tn, market, ti = market_and_interval
+        sig = self.signal(tn, market, ti)
+        sig.mark_balance_points_at_quantities({ti: (-6489.48, 0.03228)})
+        point = sig.balance_point(ti)
+        assert (point.quantity, point.price) == (pytest.approx(-6489.48), pytest.approx(0.03228))
+        assert len(sig.get_by_interval(ti)) == 3, 'added: the vertex at the quantity has another price'
+        assert [(v.price, v.quantity) for v in sig.flexibility_vertices(ti)] == [(0.04025, -6489.48), (0.0423, -6459.0)]
+        assert sig.get_by_interval(ti).power_from_vertices(0.03228) == pytest.approx(-6489.48), 'the point lies on the curve'
+
+    def test_a_vertex_at_the_quantity_and_the_price_is_reused(self, market_and_interval):
+        tn, market, ti = market_and_interval
+        sig = self.signal(tn, market, ti)
+        sig.mark_balance_points_at_quantities({ti: (-6489.48, 0.04025)})
+        assert sig.balance_point(ti) is sig.get_by_interval(ti).vertices[0] and len(sig.get_by_interval(ti)) == 2
+
+    def test_without_a_price_the_vertex_at_the_quantity_is_reused_as_before(self, market_and_interval):
+        tn, market, ti = market_and_interval
+        sig = self.signal(tn, market, ti)
+        sig.mark_balance_points_at_quantities({ti: -6489.48})
+        assert sig.balance_point(ti) is sig.get_by_interval(ti).vertices[0] and len(sig.get_by_interval(ti)) == 2
+        sig.mark_balance_points_at_quantities({ti: (-6489.48, None)})
+        assert len(sig.get_by_interval(ti)) == 2
+
+    def test_a_lone_vertex_is_the_point_whatever_the_price(self, market_and_interval):
+        tn, market, ti = market_and_interval
+        neighbor = Neighbor(transactive_node=tn, name='CoR', cost_parameters=[0, 0, 0])
+        sig = TransactiveSignal(market=market, neighbor=neighbor)
+        sig.update(ti, [Vertex(price=float('inf'), quantity=-100.0)], archive=False)
+        sig.mark_balance_points_at_quantities({ti: (-100.0, 0.05)})
+        assert len(sig.get_by_interval(ti)) == 1 and sig.balance_point(ti) is sig.get_by_interval(ti).vertices[0]

@@ -305,3 +305,84 @@ def test_a_surplus_the_neighbor_cannot_absorb_is_out_of_consensus_without_spinni
     assert market2.unbalanceable == {} and market2.converged
     for ti in market2.time_intervals:
         assert taker.scheduled_powers.get_by_interval(ti).value == pytest.approx(-100.0)
+
+
+def deployed_node_config(node: str, file_name: str, tmp_path):
+    """A deployed consensus container configuration made runnable here: host keys stripped, meter points and the data
+    manager removed, the host actuator replaced, the repository's weather file."""
+    import glob
+    containers = Path(CONTAINER_CONFIGS[0]).parents[3] / 'tent-consensus'
+    configs = _without_host_keys(json.load(open(containers / node / 'agent_configs' / file_name)))
+    configs.pop('meter_points', None)
+    configs.pop('data_manager', None)
+    for neighbor in configs['neighbors']:
+        neighbor['meter_points'] = None
+    weather = sorted(glob.glob(str(Path(__file__).resolve().parents[2] / 'sample_configs' / '**' / '*.csv'),
+                               recursive=True))[0]
+    for service in configs.get('information_service_models', []):
+        service.update(weather_file_path=weather, location=None)
+    for asset in configs['local_assets']:
+        if 'actuation_manager' in asset:
+            asset['actuation_manager'] = {'class_name': 'NullActuationManager'}
+    return configs
+
+
+@pytest.mark.skipif(deployed_office_config() is None, reason='the deployed consensus container configurations are not '
+                                                             'beside this repository')
+def test_the_deployed_hierarchy_reaches_full_consensus_in_a_few_exchanges(tmp_path):
+    """Campus, city and the two offices from the deployed consensus configurations, wired as the message bus wires them,
+    reach full consensus on the real-time market within a few ticks, with every link settling after a handful of signals
+    (no acknowledgement chain). Run 22 never reached consensus: the campus's balance point carried a price read off a
+    vertical residual curve, 25 percent from the city's, and both nodes answered each other's acknowledgements without
+    end (the city sent its day-ahead signal 164 times in ten minutes)."""
+    clock_at(datetime(2017, 7, 3, 0, 0, tzinfo=timezone.utc))
+    nodes = {}
+    for node, file_name in (('campus', 'tn.campus.json'), ('city', 'tn.city.json'),
+                            ('small_office_dr', 'tn.so.dr.json'), ('small_office_ilc', 'tn.so.ilc.json')):
+        tn = MockTN()
+        tn.configure_node(deployed_node_config(node, file_name, tmp_path))
+        nodes[tn.name] = tn
+    campus = nodes['PNNL_Campus']
+    for name, tn in nodes.items():
+        if tn is not campus:
+            campus.connect_peer(tn)
+            tn.connect_peer(campus)
+    markets = {name: next(s for s in tn.market_series if s.name == 'Real-Time_Auction').newest_market
+               for name, tn in nodes.items()}
+    assert len({m.name for m in markets.values()}) == 1, 'one market name on every node'
+    times = markets['PNNL_Campus'].transition_times
+    for when in (times.active, times.negotiation):
+        clock_at(when)
+        for tn in nodes.values():
+            tn.step()
+    for tick in range(1, 13):
+        clock_at(times.negotiation + timedelta(seconds=tick))
+        for tn in nodes.values():
+            tn.step()
+        if all(m.in_consensus for m in markets.values()):
+            break
+    else:
+        pytest.fail({name: (m.in_consensus, m.converged, m.unbalanceable) for name, m in markets.items()})
+    assert tick <= 6, f'full consensus took {tick} ticks'
+    sequences = {f'{tn.name}->{n.name}': n.last_sent_signals[markets[tn.name]].sequence
+                 for tn in nodes.values() for n in tn.neighbors if n.transactive and markets[tn.name] in n.last_sent_signals}
+    assert all(sequence <= 5 for sequence in sequences.values()), sequences
+    # Every link agrees at the balance point, price included, with the flags set on both sides.
+    for tn in nodes.values():
+        market = markets[tn.name]
+        for neighbor in tn.neighbors:
+            if not neighbor.transactive:
+                continue
+            assert neighbor.is_converged(market), f'{tn.name} with {neighbor.name}'
+            sent, received = neighbor.last_sent_signals[market], neighbor.last_received_signals[market]
+            for ti in market.time_intervals:
+                assert sent.balance_point(ti).quantity == pytest.approx(-received.balance_point(ti).quantity, abs=0.5)
+                assert sent.balance_point(ti).price == pytest.approx(received.balance_point(ti).price, rel=1e-3)
+    # Nothing more is sent once consensus holds.
+    for tick in range(13, 18):
+        clock_at(times.negotiation + timedelta(seconds=tick))
+        for tn in nodes.values():
+            tn.step()
+    assert {f'{tn.name}->{n.name}': n.last_sent_signals[markets[tn.name]].sequence
+            for tn in nodes.values() for n in tn.neighbors if n.transactive and markets[tn.name] in n.last_sent_signals} == sequences
+    assert all(m.in_consensus for m in markets.values())

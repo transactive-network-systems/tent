@@ -292,6 +292,10 @@ def test_prep_transactive_signal():
 
     class DummyMarket:
         BALANCE_POINT = 'scheduled_power'  # the rule Neighbor.prep_transactive_signal reads (see Market)
+        class marginal_prices:  # no cleared price yet: the balance point carries none
+            @staticmethod
+            def get_by_interval(time_interval):
+                return None
         """Mock Market with sum_vertices capability"""
         def __init__(self, name, data_manager, tn):
             self.name = name

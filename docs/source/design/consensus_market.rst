@@ -45,9 +45,15 @@ system curve with that neighbor excluded, bounded to what the node can exchange 
 side (positive quantity means this node supplies the neighbor), with losses and demand charges that only apply locally
 removed. The curve carries a *balance point*: the vertex at the power this node has scheduled with the neighbor, sign
 flipped into the neighbor's perspective and, across a lossy link, stated as the power the neighbor sends rather than
-the power that arrives (``Neighbor.balance_point_quantities`` inverts the loss model the way the curve had its losses
-removed), so the point lies on the curve. The neighbor folds a received signal into its own balancing problem as that
-neighbor's active vertices and replies in kind. The rule for the balance point is the market class attribute
+the power that arrives (``Neighbor.balance_points`` inverts the loss model the way the curve had its losses removed),
+so the point lies on the curve. The point also carries the price of the exchange from the neighbor's side: this node's
+marginal price without the marginal loss adder and without a demand charge applied here, as ``remove_marginal_losses``
+and ``remove_demand_charges`` take them off the curve. The residual curve is often vertical at the exchanged quantity
+(an inelastic system takes the same power at every price below its flexibility), where the price read off the curve
+would be any price of that segment and not the one the market cleared at; a vertex at the quantity is therefore reused
+only when its price is the exchange price, and otherwise the point (price, quantity) is added to the curve, on its
+vertical segment. Both sides state the same point this way, which is what the convergence check compares. The neighbor
+folds a received signal into its own balancing problem as that neighbor's active vertices and replies in kind. The rule for the balance point is the market class attribute
 ``Market.BALANCE_POINT``, read by ``Neighbor.prep_transactive_signal``: ``'scheduled_power'`` for ``Market`` and
 ``ConsensusMarket`` as described; ``'predicted_price'`` for ``Auction``, whose bid has cleared nothing with the
 supplier yet, so record 0 is the residual curve's own quantity at the market's current (predicted) price for the
@@ -66,11 +72,13 @@ per-market ``CoordinationState`` (``is_converged(market)``, ``is_signal_due(mark
 
 - A signal is **due** when nothing has been sent yet; or local conditions have changed so that the prepared signal
   differs from the sent one (``TransactiveSignal.conditions_have_changed``: a sent flexibility vertex has no
-  counterpart within ``convergence_threshold`` among the prepared ones, or the balance point moved); or the neighbor,
-  having acknowledged this node's latest revised signal, still disagrees at the balance point
-  (``TransactiveSignal.balance_points_differ``, which flips the sign of the received quantity); or the neighbor's
+  counterpart within ``convergence_threshold`` among the prepared ones, or the balance point moved); or the neighbor's
   latest signal is revised and has not been answered. Answering a revised signal that changes nothing here resends the
-  same content with ``revised`` false, which the neighbor need not answer; that is what ends an exchange.
+  same content with ``revised`` false, which the neighbor need not answer; that is what ends an exchange. A neighbor
+  that disagrees at the balance point (``TransactiveSignal.balance_points_differ``, which flips the sign of the received
+  quantity) while nothing has changed here is not answered again: resending the same content cannot move it, and
+  answering every such signal made two nodes acknowledge each other without end. The disagreement keeps the interval
+  unconverged until one side's conditions change.
 - The interval is **converged** when the neighbor has been heard from, has acknowledged this node's latest revised
   signal (its ``in_reply_to`` is at least that sequence), agrees at the balance point, and local conditions have not
   changed. A neighbor that never replied is not in consensus, however settled this node's own position is.

@@ -74,3 +74,41 @@ def test_a_signal_marks_given_quantities_in_its_own_perspective():
     message = signal.generate_signal({ti: -40.0})  # a mapping: already in the neighbor's perspective
     curve = list(message['intervals'].values())[0]
     assert curve['flexibility'][curve['balance_point']]['quantity'] == pytest.approx(-40.0)
+
+
+def test_the_balance_point_price_is_the_market_price_on_the_neighbors_side():
+    """The campus cleared at 0.03292 $/kWh importing 6489.48 kW over its 20 MW link with loss factor 0.03; the city,
+    which supplies it, sees 0.03292 x sqrt(1 - 4 x 0.03 x 6489.48 / 20000) = 0.03228, the price the city cleared at."""
+    tn = MockTN(name='campus')
+    market = make_market(tn, T0)
+    city = Neighbor(transactive_node=tn, name='CoR', transactive=True, up_or_down='upstream',
+                    default_vertices=[[0.03, 0.0, 0.0, True], [0.04, 0.0, 20000.0, True]], minimum_power=0.0,
+                    maximum_power=20000.0, loss_factor=0.03, demand_rate=0.0, cost_parameters=[0.0, 0.0, 0.0])
+    tn.neighbors = [city]
+    ti = market.time_intervals[0]
+    market.marginal_prices.update(ti, 0.03292)
+    city.scheduled_powers.update(ti, 6489.48)
+    quantity, price = city.balance_points(market)[ti]
+    assert quantity == pytest.approx(-(20000 / 0.06) * (1 - (1 - 4 * 0.03 * 6489.48 / 20000) ** 0.5))
+    assert price == pytest.approx(0.03292 * (1 - 4 * 0.03 * 6489.48 / 20000) ** 0.5) == pytest.approx(0.03228, abs=1e-5)
+    # Exports carry this node's price unchanged; without a market price the point carries none.
+    city.scheduled_powers.update(ti, -500.0)
+    assert city.balance_points(market)[ti] == (pytest.approx(500.0), pytest.approx(0.03292))
+    market.marginal_prices._data.clear()
+    assert city.balance_points(market)[ti] == (pytest.approx(500.0), None)
+
+
+def test_a_demand_charge_applied_here_is_taken_off_the_neighbors_price():
+    tn = MockTN(name='campus')
+    market = make_market(tn, T0)
+    supplier = Neighbor(transactive_node=tn, name='utility', transactive=True, up_or_down='upstream',
+                        default_vertices=[[0.03, 0.0, 0.0, True], [0.04, 0.0, 1000.0, True]], minimum_power=0.0,
+                        maximum_power=1000.0, loss_factor=0.0, demand_rate=4.5, demand_threshold=10.0,
+                        cost_parameters=[0.0, 0.0, 0.0])
+    tn.neighbors = [supplier]
+    ti = market.time_intervals[0]
+    market.marginal_prices.update(ti, 4.55)  # the local price includes the 4.5 $/kWh demand charge above 10 kW
+    supplier.scheduled_powers.update(ti, 20.0)
+    assert supplier.balance_points(market)[ti] == (pytest.approx(-20.0), pytest.approx(0.05))
+    supplier.scheduled_powers.update(ti, 5.0)  # below the threshold: no charge was applied
+    assert supplier.balance_points(market)[ti] == (pytest.approx(-5.0), pytest.approx(4.55))

@@ -293,6 +293,25 @@ def test_consensus_with_line_losses(clock, caplog):
     assert ticks is not None, 'both nodes declared full consensus despite the loss model'
     assert not any('Indeterminate price' in r.getMessage() for r in caplog.records)
     m_campus, m_city = markets
+    assert m_campus.in_consensus and m_city.in_consensus
+    for tn, market in ((campus, m_campus), (city, m_city)):
+        neighbor = tn.neighbors[0]
+        assert neighbor.is_converged(market)
+        assert all(bool(neighbor.convergence_flags.get_by_interval(ti).value) for ti in market.time_intervals)
+    # Both sides state the balance point in the city's perspective: the power the city sends at the city's price.
+    for ti_campus, ti_city in zip(m_campus.time_intervals, m_city.time_intervals):
+        sent = campus.neighbors[0].last_sent_signals[m_campus].balance_point(ti_campus)
+        theirs = city.neighbors[0].last_sent_signals[m_city].balance_point(ti_city)
+        assert sent.quantity == pytest.approx(-theirs.quantity, abs=0.5)
+        # The campus's residual is its inelastic load: a lone vertex, which carries no price; the city's point carries
+        # the city's cleared price.
+        assert sent.price == INF
+        assert theirs.price == pytest.approx(m_city.marginal_prices.get_by_interval(ti_city).value, rel=1e-3)
+    # The exchange ended: an acknowledgement is not answered, so the sequence numbers stopped growing.
+    sequences = {tn.name: tn.neighbors[0].last_sent_signals[m].sequence for tn, m in ((campus, m_campus), (city, m_city))}
+    for _ in range(5):
+        step_both(all_nodes, clock, times.negotiation + timedelta(seconds=20 + _))
+    assert {tn.name: tn.neighbors[0].last_sent_signals[m].sequence for tn, m in ((campus, m_campus), (city, m_city))} == sequences
     for market in markets:
         assert all(bool(v) is True for v in market.full_consensus.values)
     # Intervals are per market object, so pair them by start time.
