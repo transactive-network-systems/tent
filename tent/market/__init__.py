@@ -132,6 +132,7 @@ class Market(Component):
         # The market row must exist before anything that references it (measurements, time intervals, state changes).
         # NOTE for subclasses: any attribute your get_record() reports must be set BEFORE calling Market.__init__.
         self._market_state: MarketState = initial_market_state
+        self._state_handler_failures: dict[MarketState, int] = {}  # failures of while_in_<state> handlers, per state
         self.archive()
         self.record_state(initial_market_state)
 
@@ -187,8 +188,34 @@ class Market(Component):
     def market_state(self, new_state: MarketState):
         """Every state change is recorded in market_state_change (append-only), including the initial state."""
         if new_state != self._market_state:
+            failures = getattr(self, '_state_handler_failures', {}).pop(self._market_state, 0)
+            if failures > 1:
+                _log.warning(f'MARKET: {self.name} leaves {self._market_state.name} after its handler failed {failures} '
+                             f'times (the first failure was logged with its traceback).')
             self._market_state = new_state
             self.record_state(new_state)
+
+    def _run_state_handler(self, handler) -> None:
+        """
+        Run a while_in_<state> handler so that a failure in it cannot hang the market. The handler is where a market
+        schedules, balances and signals while it waits in a state; one that raises on every tick (an asset without
+        vertices for an interval, a host that cannot send) would otherwise abort events() before the state's soft timeout
+        is checked, and the market would repeat the same work, and archive its results, on every tick for as long as the
+        node runs. The exception is logged with its traceback the first time it occurs in a state and counted after that
+        (one line when the state ends, see _state_handler_failures); the soft timeout then forces the state to complete
+        at its deadline as it does for a handler that merely never finishes.
+        """
+        try:
+            handler()
+        except Exception:
+            failures = self._state_handler_failures.get(self.market_state, 0) + 1
+            self._state_handler_failures[self.market_state] = failures
+            if failures == 1:
+                _log.exception(f'MARKET: {self.name}: {handler.__name__} failed in {self.market_state.name}; the state '
+                               f'completes at its deadline if the failure persists.')
+            else:
+                _log.debug(f'MARKET: {self.name}: {handler.__name__} failed again in {self.market_state.name} '
+                           f'({failures} times).')
 
     def record_state(self, state: MarketState) -> None:
         record = {'table_name': 'market_state_change',
@@ -302,7 +329,7 @@ class Market(Component):
             # classes of class Market.
             # 210118DJH: NOTE: Flag "_stateIsComplete" must be set true after the market's responsibilities have been
             #            completed in this next method or its replacements.
-            self.while_in_active()
+            self._run_state_handler(self.while_in_active)
 
             # ── SOFT TIMEOUT: Active state ──
             if self._stateIsCompleted is not True and current_time >= self.transition_times.negotiation:
@@ -339,7 +366,7 @@ class Market(Component):
             # dependent upon a convergence flag.
             # 210118DJH: NOTE: Flag "_stateIsComplete" must be set true after the market's responsibilities have been
             #            completed in this next method or its replacements.
-            self.while_in_negotiation()
+            self._run_state_handler(self.while_in_negotiation)
 
             # ── SOFT TIMEOUT: Negotiation state ──
             if self._stateIsCompleted is not True and current_time >= self.transition_times.market_lead:
@@ -374,7 +401,7 @@ class Market(Component):
             #  overwritten by child classes of class Market.
             # 210118DJH: NOTE: Flag "_stateIsComplete" must be set true after the market's responsibilities have been
             #            completed in this next method or its replacements.
-            self.while_in_market_lead()
+            self._run_state_handler(self.while_in_market_lead)
 
             # ── SOFT TIMEOUT: MarketLead state ──
             if self._stateIsCompleted is not True and current_time >= self.transition_times.delivery_lead:
@@ -404,7 +431,7 @@ class Market(Component):
             # method may be overwritten by child classes of class Market.
             # 210118DJH: NOTE: Flag "_stateIsComplete" must be set true after the market's responsibilities have been
             #            completed in this next method or its replacements.
-            self.while_in_delivery_lead()
+            self._run_state_handler(self.while_in_delivery_lead)
 
             # ── SOFT TIMEOUT: DeliveryLead state ──
             if self._stateIsCompleted is not True and current_time >= self.transition_times.delivery:
@@ -437,7 +464,7 @@ class Market(Component):
             # overwritten by child classes of class Market.
             # 210118DJH: NOTE: Flag "_stateIsComplete" must be set true after the market's responsibilities have been
             #            completed in this next method or its replacements.
-            self.while_in_delivery()
+            self._run_state_handler(self.while_in_delivery)
 
             # ── SOFT TIMEOUT: Delivery state ──
             if self._stateIsCompleted is not True and current_time >= self.transition_times.reconciliation:
@@ -472,7 +499,7 @@ class Market(Component):
             # may be overwritten by children of the Market class.
             # 210118DJH: NOTE: Flag "_stateIsComplete" must be set true after the market's responsibilities have been
             #            completed in this next method or its replacements.
-            self.while_in_reconcile()
+            self._run_state_handler(self.while_in_reconcile)
 
             # ── SOFT TIMEOUT: Reconcile state ──
             if self._stateIsCompleted is not True and current_time >= self.transition_times.expiration:
