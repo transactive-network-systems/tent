@@ -189,6 +189,27 @@ class TemperatureForecastModel(InformationServiceModel):
                                      f'{error}') from error
         self.weather_data = records
         self.last_modified = cur_modified
+        self._warn_if_not_fahrenheit(records)
+
+    # A file covering at least this many days whose temperatures never reach this value is not in degrees Fahrenheit.
+    UNIT_CHECK_DAYS = 90
+    UNIT_CHECK_MAX_DEGF = 50.0
+
+    def _warn_if_not_fahrenheit(self, records: list[dict]) -> None:
+        """TENT reads the file in degrees Fahrenheit (the load predictors' regressions and heating thresholds are in
+        degF). A Celsius file is read without error and gives loads of the wrong size and sign, so a file that spans a
+        season or more without ever reaching 50 is reported: no inhabited place in Fahrenheit stays below that for
+        three months."""
+        if not records:
+            return
+        timestamps = [record['Timestamp'] for record in records]
+        span_days = (max(timestamps) - min(timestamps)).days
+        highest = max(record['Value'] for record in records)
+        if span_days >= self.UNIT_CHECK_DAYS and highest < self.UNIT_CHECK_MAX_DEGF:
+            _log.warning(f'{self.name}: weather file {self.weather_file_path} spans {span_days} days and its temperatures '
+                         f'never exceed {highest:g}; TENT reads Value as degrees Fahrenheit, and these look like degrees '
+                         f'Celsius. A load predictor fed Celsius predicts the wrong size of load, and generation in warm '
+                         f'evening hours. Convert the file (degF = degC * 9/5 + 32).')
 
     def get_forecast_file(self, mkt):
         """Predicted values for the market's intervals from the file, by the hour of each interval's start. A missing hour
