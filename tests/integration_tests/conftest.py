@@ -30,7 +30,11 @@ T0 = datetime(2017, 7, 1, 0, 0, tzinfo=timezone.utc)  # the campus config's simu
 INF = float('inf')
 DEFAULT_PRICE = 0.0428  # default_price of both campus series
 OFFICE_BID = [(INF, -55.0)]  # each small office bids 55 kW of inelastic demand
-SUPPLIER_OFFER = [(0.03, 0.0), (0.07, 20000.0)]  # CoR offers from 0.03 $/kWh at no load to 0.07 at its 20 MW limit
+# CoR offers from 0.03 $/kWh at no load to 0.07 at 30 MW. The campus's July afternoon imports 19.1 MW (the regression's
+# 19.0 MW peak plus losses); on a 20 MW offer that is within five percent of exhausting the offer, so the offer is kept
+# well above the peak. The campus bounds what it receives to its CoR link's 20 MW maximum_power (interpolating the offer
+# at 0.0567 there), so every hour clears on the rising segment below the offer's top.
+SUPPLIER_OFFER = [(0.03, 0.0), (0.07, 30000.0)]
 
 
 def campus_config(**series_overrides) -> dict:

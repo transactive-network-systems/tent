@@ -29,14 +29,12 @@ def test_marginal_prices_are_the_default_until_delivery_lead_balances_the_market
     cleared = prices(market)
     assert DEFAULT_PRICE not in cleared, 'every interval was balanced to a price of its own'
     by_hour = dict(zip((ti.start_time.hour for ti in market.time_intervals), cleared))
-    assert len(set(cleared)) == 23 and by_hour[11] == by_hour[12], \
-        'the net load differs by hour, so does the price, except at 11:00 and 12:00: the building is held at its ' \
-        '16.4 MW limit in both and the clear-sky solar output is mirrored around noon, so the two hours clear alike'
-    assert max(by_hour, key=by_hour.get) == 17 and min(by_hour, key=by_hour.get) == 1, \
-        'the highest price where the building is at its limit and the sun has set (17:00), the lowest at 01:00'
+    assert len(set(cleared)) == 24, 'the net load differs in every hour, so does the price'
+    assert max(by_hour, key=by_hour.get) == 15 and min(by_hour, key=by_hour.get) == 1, \
+        'the highest price at the 15:00 load peak, the lowest at 01:00'
     assert all(SUPPLIER_OFFER[0][0] < p < SUPPLIER_OFFER[1][0] for p in cleared), \
-        'within the supplier\'s offer: the 16.5 MW peak import (with losses) stays under its 20 MW cap, so the offer ' \
-        'is never exhausted and no price reaches 0.07'
+        'within the supplier\'s offer: the 19.1 MW peak import clears on the rising segment of the offer bounded to ' \
+        'the 20 MW link (0.0598 with losses), well under the offer\'s 0.07 top'
 
 
 def test_the_cleared_price_balances_the_campus_in_every_interval(cleared):
@@ -62,10 +60,12 @@ def test_prices_rise_with_the_hourly_load(cleared):
     assert by_price == by_import, 'a rising offer prices the heaviest hour highest'
     building = asset_named(campus, 'InelasticBuildings')
     load = powers(building, market)
-    assert min(load) == building.minimum_power == -16400.0 and -7500.0 < max(load) < -7000.0, \
-        'the July load swings from a 7.3 MW night to the 16.4 MW limit the regression is held at in the afternoon'
-    assert max(cor.scheduled_powers.get_by_interval(ti).value for ti in market.time_intervals) < 0.85 * cor.maximum_power, \
-        'the supplier is never asked for its whole 20 MW offer, so every hour clears on its rising segment'
+    assert -19500.0 < min(load) < -18500.0 and -7500.0 < max(load) < -7000.0 and min(load) > building.minimum_power, \
+        'the July load swings from a 7.3 MW night to a 19.0 MW afternoon peak, inside the 24.2 MW limit'
+    peak_import = max(cor.scheduled_powers.get_by_interval(ti).value for ti in market.time_intervals)
+    assert 0.9 * cor.maximum_power < peak_import < cor.maximum_power * (1 - cor.loss_factor), \
+        'the peak import (19.1 MW) uses most of the 20 MW link but stays below what the link delivers after losses, ' \
+        'so every hour clears on the rising segment of the offer'
 
 
 def test_local_assets_keep_their_inelastic_schedules_through_clearing(campus, clock):
