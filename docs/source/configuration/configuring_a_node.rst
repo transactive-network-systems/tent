@@ -1991,6 +1991,12 @@ An object of this class contains all the critical timing and initialization prop
      -  
      - [s] lifetime of the orders the engine quotes for local entities; null means they stand until the market clears.
      - yes
+   * - ``order_archiving``
+     - one of "final_book", "every_pass"
+     - "final_book"
+     -  
+     - Which order books a negotiating market archives. Applies to a market that rebuilds its book on every balancing pass (MatchingConsensusMarket, which clears a fresh book each time a neighbor's signal or a local change moves it). "final_book": only the book standing when the market leaves MarketLead, the one it clears on; the books of the passes a later signal superseded are not written. "every_pass": the book standing at the end of every pass, for debugging a negotiation (ten passes per market on the deployed campus). MatchingEngine and MatchingAuction clear one book per market and archive orders as they are booked, so for them the two values are the same behaviour.
+     -  
    * - ``actuate_assets``
      - boolean
      - True
@@ -2145,6 +2151,12 @@ An object of this class contains all the critical timing and initialization prop
      -  
      - [s] lifetime of the orders the engine quotes for local entities; null means they stand until the market clears.
      - yes
+   * - ``order_archiving``
+     - one of "final_book", "every_pass"
+     - "final_book"
+     -  
+     - Which order books a negotiating market archives. Applies to a market that rebuilds its book on every balancing pass (MatchingConsensusMarket, which clears a fresh book each time a neighbor's signal or a local change moves it). "final_book": only the book standing when the market leaves MarketLead, the one it clears on; the books of the passes a later signal superseded are not written. "every_pass": the book standing at the end of every pass, for debugging a negotiation (ten passes per market on the deployed campus). MatchingEngine and MatchingAuction clear one book per market and archive orders as they are booked, so for them the two values are the same behaviour.
+     -  
    * - ``actuate_assets``
      - boolean
      - True
@@ -2299,6 +2311,12 @@ An object of this class contains all the critical timing and initialization prop
      -  
      - [s] lifetime of the orders the engine quotes for local entities; null means they stand until the market clears.
      - yes
+   * - ``order_archiving``
+     - one of "final_book", "every_pass"
+     - "final_book"
+     -  
+     - Which order books a negotiating market archives. Applies to a market that rebuilds its book on every balancing pass (MatchingConsensusMarket, which clears a fresh book each time a neighbor's signal or a local change moves it). "final_book": only the book standing when the market leaves MarketLead, the one it clears on; the books of the passes a later signal superseded are not written. "every_pass": the book standing at the end of every pass, for debugging a negotiation (ten passes per market on the deployed campus). MatchingEngine and MatchingAuction clear one book per market and archive orders as they are booked, so for them the two values are the same behaviour.
+     -  
    * - ``actuate_assets``
      - boolean
      - True

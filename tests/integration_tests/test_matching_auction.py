@@ -112,7 +112,7 @@ def test_the_class_is_registered_and_shares_the_book():
     assert resolve('MatchingAuction', Market) is MatchingAuction
     assert issubclass(MatchingAuction, Auction)
     assert MatchingAuction.MARKET_TYPE is MarketTypes.matching_auction
-    assert set(MatchingAuction.Config.model_fields) == {'actuate_assets', 'matching_strategy', 'order_expiry'}
+    assert set(MatchingAuction.Config.model_fields) == {'actuate_assets', 'matching_strategy', 'order_expiry', 'order_archiving'}
     tables = {d['name']: d for d in MatchingAuction.get_archive_definitions()}
     assert tables['matching_auction']['inherits'] == 'auction'
     assert [c['name'] for c in tables['matching_auction']['columns']] == ['id', 'matching_strategy']

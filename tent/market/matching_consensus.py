@@ -22,9 +22,11 @@ The local problem counts as balanced when the book has cleared every interval: n
 `unbalanceable` as the base market records a curve that never crosses zero) and the scheduled powers sum to zero. The
 duality gap of the interpolation does not apply to a book (its fill prices are the resting orders' own, not one
 uniform price), so convergence is judged on the power balance. Each balancing pass clears a fresh book: orders are
-not revised against a book whose matches were made with curves a neighbor has since replaced. The pass's final book is
-what the archive holds; the books of the passes a later signal superseded are not written, as the signals themselves
-are the record of the negotiation.
+not revised against a book whose matches were made with curves a neighbor has since replaced. What the archive holds is
+set by `order_archiving` (OrderBookConfig): by default only the book standing when the market leaves MarketLead, the
+one it clears on (a late signal absorbed in MarketLead rebuilds it once more); the books of the passes a later signal
+superseded are not written, as the signals themselves are the record of the negotiation. With 'every_pass' the book
+standing at the end of every balancing pass is archived, for debugging a negotiation.
 """
 import logging
 
@@ -79,12 +81,24 @@ class MatchingConsensusMarket(OrderBook, ConsensusMarket):
     # ------------------------------------------------------------------------------------------ the balancing step
     def balance_locally(self) -> bool:
         """One local balancing pass (ConsensusMarket.balance_locally) with the book as its solve step. The orders of the
-        pass's iterations are held and the final iteration's book is archived once the pass is done."""
+        pass's iterations are held (each iteration's reset_book drops the previous iteration's) so that only the final
+        iteration's book can be archived: at the end of the pass with order_archiving 'every_pass', or, by default
+        ('final_book'), when the market leaves MarketLead, by which time the next pass's reset has replaced it with its
+        own book, so what is written is the book the market clears on."""
         self.hold_order_archiving()
         try:
             return super(MatchingConsensusMarket, self).balance_locally()
         finally:
-            self.flush_held_orders()
+            if self.order_archiving == 'every_pass':
+                self.flush_held_orders()
+
+    def transition_from_market_lead_to_delivery_lead(self):
+        """The market clears on the book now standing (while_in_market_lead may have rebuilt it once on a late signal):
+        write it if it is held (order_archiving 'final_book') and resume archiving as orders are booked. The state
+        machine's MarketLead timeout calls this same transition, so a market forced on at its deadline writes it too.
+        With 'every_pass' nothing is held and this only confirms the archiving state."""
+        super(MatchingConsensusMarket, self).transition_from_market_lead_to_delivery_lead()
+        self.flush_held_orders()
 
     def _solve_locally(self) -> bool:
         """Clear a fresh book of every entity's current curve and settle it: prices from the fills, every entity's

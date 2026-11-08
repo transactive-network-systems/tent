@@ -8,12 +8,15 @@ from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 
 import pytest
+from pydantic import ValidationError
 
 from tent.enumerations import MarketState, MarketTypes, MeasurementType
 from tent.market import Market
 from tent.market.consensus_market import ConsensusMarket
 from tent.market.market_series import MarketSeries
+from tent.market.matching_auction import MatchingAuction
 from tent.market.matching_consensus import MatchingConsensusMarket
+from tent.market.matching_engine import MatchingEngine
 from tent.neighbor import Neighbor
 from tent.registry import resolve
 from tent.utils.timer import Timer
@@ -49,7 +52,9 @@ def clock():
         yield state
 
 
-def build_node(name, peer, asset_curve, asset_limits, neighbor_curve, neighbor_limits, up_or_down):
+def build_node(name, peer, asset_curve, asset_limits, neighbor_curve, neighbor_limits, up_or_down, **settings):
+    """A node with one asset and one transactive neighbor whose series is a MatchingConsensusMarket; `settings` are
+    further settings of the market (order_archiving, say)."""
     tn = MockTN(name=name)
     tn._data_manager = RecordingDataManager()
     tn.local_assets = [FlexibleAsset(transactive_node=tn, name=f'{name} asset', cost_parameters=[0.0, 0.0, 0.0],
@@ -60,22 +65,27 @@ def build_node(name, peer, asset_curve, asset_limits, neighbor_curve, neighbor_l
                              maximum_power=neighbor_limits[1], loss_factor=0.0, demand_rate=0.0,
                              convergence_threshold=0.02, cost_parameters=[0.0, 0.0, 0.0])]
     tn.market_series = [MarketSeries(transactive_node=tn, market_class=MatchingConsensusMarket,
-                                     matching_strategy=['ORDER_AGE'], **SERIES)]
+                                     matching_strategy=['ORDER_AGE'], **SERIES, **settings)]
     return tn
+
+
+def build_pair(**settings):
+    """The campus has an inelastic 100 kW load (a lone vertex: a market order in a book) and buys from the city, whose
+    generator's price rises from 0.04 to 0.08 over 0 to 1000 kW. Each node's default view of the other is deliberately
+    wrong (the city expects 50 kW of load), so the negotiation has something to correct."""
+    campus = build_node('campus', 'city', asset_curve=[[INF, 0.0, -100.0, True]], asset_limits=(-100.0, 0.0),
+                        neighbor_curve=CITY_CURVE, neighbor_limits=(0.0, 1000.0), up_or_down='upstream', **settings)
+    city = build_node('city', 'campus', asset_curve=CITY_CURVE, asset_limits=(0.0, 1000.0),
+                      neighbor_curve=[[INF, 0.0, -50.0, True]], neighbor_limits=(-1000.0, 0.0), up_or_down='downstream',
+                      **settings)
+    campus.connect_peer(city)
+    city.connect_peer(campus)
+    return campus, city
 
 
 @pytest.fixture
 def nodes(clock):
-    # The campus has an inelastic 100 kW load (a lone vertex: a market order in a book) and buys from the city, whose
-    # generator's price rises from 0.04 to 0.08 over 0 to 1000 kW. Each node's default view of the other is deliberately
-    # wrong (the city expects 50 kW of load), so the negotiation has something to correct.
-    campus = build_node('campus', 'city', asset_curve=[[INF, 0.0, -100.0, True]], asset_limits=(-100.0, 0.0),
-                        neighbor_curve=CITY_CURVE, neighbor_limits=(0.0, 1000.0), up_or_down='upstream')
-    city = build_node('city', 'campus', asset_curve=CITY_CURVE, asset_limits=(0.0, 1000.0),
-                      neighbor_curve=[[INF, 0.0, -50.0, True]], neighbor_limits=(-1000.0, 0.0), up_or_down='downstream')
-    campus.connect_peer(city)
-    city.connect_peer(campus)
-    return campus, city
+    return build_pair()
 
 
 def market_of(tn):
@@ -104,7 +114,7 @@ def test_the_class_is_registered_and_shares_the_book():
     assert MatchingConsensusMarket.MARKET_TYPE is MarketTypes.matching_consensus
     assert MatchingConsensusMarket.BALANCE_POINT == 'matched_quantity'
     assert set(MatchingConsensusMarket.Config.model_fields) == {'actuate_assets', 'max_balance_iterations',
-                                                                'matching_strategy', 'order_expiry'}
+                                                                'matching_strategy', 'order_expiry', 'order_archiving'}
     tables = {d['name']: d for d in MatchingConsensusMarket.get_archive_definitions()}
     assert tables['matching_consensus']['inherits'] == 'market'
     assert [c['name'] for c in tables['matching_consensus']['columns']] == ['id', 'matching_strategy']
@@ -154,11 +164,16 @@ def test_two_nodes_negotiate_their_books_to_full_consensus(nodes, clock, caplog)
     sent_before = {tn.name: tn.neighbors[0].last_sent_signals[m].sequence for tn, m in ((campus, m_campus), (city, m_city))}
     step_all(nodes, clock, times.negotiation + timedelta(seconds=30))
     assert {tn.name: tn.neighbors[0].last_sent_signals[m].sequence for tn, m in ((campus, m_campus), (city, m_city))} == sent_before
-    # The deadline moves both on cleanly; each archive holds the market row, its final book and the consensus flags.
+    # The deadline moves both on cleanly; each archive holds the market row and the consensus flags, and the book once
+    # the market has cleared (by default only the final book is written, when the market leaves MarketLead).
     with caplog.at_level(logging.WARNING, logger='tent.market'):
         step_all(nodes, clock, times.market_lead)
     assert m_campus.market_state is MarketState.MarketLead and m_city.market_state is MarketState.MarketLead
     assert not any('timed out' in r.getMessage() for r in caplog.records)
+    for tn, market in ((campus, m_campus), (city, m_city)):
+        assert tn.data_manager.by_table('order') == [], 'the book is held until the market clears'
+    step_all(nodes, clock, times.delivery_lead)
+    assert m_campus.market_state is MarketState.DeliveryLead and m_city.market_state is MarketState.DeliveryLead
     for tn, market in ((campus, m_campus), (city, m_city)):
         rows = [r for r in tn.data_manager.by_table('matching_consensus') if r['id'] == market.id]
         assert len(rows) == 1 and rows[0]['matching_strategy'] == ['ORDER_AGE']
@@ -170,13 +185,9 @@ def test_two_nodes_negotiate_their_books_to_full_consensus(nodes, clock, caplog)
         assert headers, f'{tn.name} archived a FullConsensus measurement header'
 
 
-def test_only_the_final_book_of_each_balancing_pass_is_archived(nodes, clock, monkeypatch):
-    """Each balancing iteration clears a fresh book and only the book standing at the end of the pass is written, so the
-    archive holds one book per pass (here one iteration each: the first iteration balances), never a book an iteration
-    threw away."""
-    campus, city = nodes
-    m_campus, m_city = market_of(campus), market_of(city)
-    flushed, resets = {m_campus: [], m_city: []}, {m_campus: 0, m_city: 0}
+def count_book_archiving(monkeypatch, markets):
+    """Count, per market, the orders each flush writes and the books reset; the behaviour is unchanged."""
+    flushed, resets = {m: [] for m in markets}, {m: 0 for m in markets}
     original_flush, original_reset = MatchingConsensusMarket.flush_held_orders, MatchingConsensusMarket.reset_book
 
     def counting_flush(self):
@@ -189,14 +200,99 @@ def test_only_the_final_book_of_each_balancing_pass_is_archived(nodes, clock, mo
 
     monkeypatch.setattr(MatchingConsensusMarket, 'flush_held_orders', counting_flush)
     monkeypatch.setattr(MatchingConsensusMarket, 'reset_book', counting_reset)
+    return flushed, resets
+
+
+def test_order_archiving_is_a_setting_of_every_book_market():
+    """The setting validates its two values, defaults to the final book and rejects anything else; MatchingEngine and
+    MatchingAuction carry it too (their behaviour is the same either way)."""
+    assert MatchingConsensusMarket.Config().order_archiving == 'final_book'
+    assert MatchingConsensusMarket.Config(order_archiving='every_pass').order_archiving == 'every_pass'
+    assert MatchingConsensusMarket.Config(order_archiving='final_book').order_archiving == 'final_book'
+    with pytest.raises(ValidationError, match='order_archiving'):
+        MatchingConsensusMarket.Config(order_archiving='sometimes')
+    with pytest.raises(ValidationError, match='order_archiving'):
+        MatchingConsensusMarket.Config(order_archiving=None)
+    for market_class in (MatchingEngine, MatchingAuction):
+        assert market_class.Config.model_fields['order_archiving'].default == 'final_book'
+    tn = build_pair(order_archiving='every_pass')[0]
+    assert market_of(tn).order_archiving == 'every_pass'
+
+
+def test_by_default_only_the_final_book_of_the_market_is_archived(nodes, clock, monkeypatch):
+    """Several balancing passes, each clearing a fresh book: nothing reaches the archive while the negotiation runs or
+    while the market waits in MarketLead, and when it leaves MarketLead the one book then standing, the one it clears
+    on, is written in full."""
+    campus, city = nodes
+    m_campus, m_city = market_of(campus), market_of(city)
+    flushed, resets = count_book_archiving(monkeypatch, [m_campus, m_city])
+    times = m_campus.transition_times
+    assert negotiate(nodes, [m_campus, m_city], clock, times) is not None
+    step_all(nodes, clock, times.market_lead)
+    for tn, market in ((campus, m_campus), (city, m_city)):
+        assert market.order_archiving == 'final_book'
+        assert resets[market] == market.clearings >= 2, 'several passes, each clearing a fresh book'
+        assert flushed[market] == [] and tn.data_manager.by_table('order') == [], 'nothing written yet'
+        assert market._book_archiving is False and market._held_orders, 'the latest pass\'s book is held'
+    step_all(nodes, clock, times.delivery_lead)
+    for tn, market in ((campus, m_campus), (city, m_city)):
+        assert market.market_state is MarketState.DeliveryLead
+        assert len(flushed[market]) == 1 and flushed[market][0] > 0, 'one flush, of the final book'
+        rows = tn.data_manager.by_table('order')
+        assert len(rows) == flushed[market][0], 'exactly the final book, nothing of the earlier passes'
+        archived = {row['id'] for row in rows}
+        assert all(leg.id in archived for leg in market.matchList)
+        assert all(order.id in archived for order in market.orderList)
+        assert market._book_archiving is True and not market._held_orders, 'archiving resumed, nothing left held'
+
+
+def test_every_pass_archives_the_book_standing_at_the_end_of_each_pass(clock, monkeypatch):
+    """With order_archiving 'every_pass', each balancing pass's final book is written as the pass ends (each iteration
+    clears a fresh book, so never a book an iteration threw away): one book per pass, several per market."""
+    nodes = build_pair(order_archiving='every_pass')
+    campus, city = nodes
+    m_campus, m_city = market_of(campus), market_of(city)
+    flushed, resets = count_book_archiving(monkeypatch, [m_campus, m_city])
     times = m_campus.transition_times
     assert negotiate(nodes, [m_campus, m_city], clock, times) is not None
     for tn, market in ((campus, m_campus), (city, m_city)):
         passes = len(flushed[market])
         assert resets[market] == market.clearings >= passes >= 2, 'every iteration clears a fresh book; one flush per pass'
+        assert market._book_archiving is True and not market._held_orders, 'nothing is held between passes'
         rows = tn.data_manager.by_table('order')
-        assert len(rows) == sum(flushed[market]), 'exactly the final book of every pass'
+        assert len(rows) == sum(flushed[market]) > flushed[market][-1], 'every pass\'s final book, not only the last'
         assert all(leg.id in {row['id'] for row in rows} for leg in market.matchList)
+    # Leaving MarketLead has nothing more to write.
+    step_all(nodes, clock, times.market_lead)
+    step_all(nodes, clock, times.delivery_lead)
+    for tn, market in ((campus, m_campus), (city, m_city)):
+        assert market.market_state is MarketState.DeliveryLead
+        assert len(tn.data_manager.by_table('order')) == sum(flushed[market][:-1]), 'the last flush was empty'
+        assert flushed[market][-1] == 0 and market._book_archiving is True
+
+
+def test_a_market_forced_out_of_market_lead_still_archives_its_final_book(nodes, clock, monkeypatch, caplog):
+    """A MarketLead handler that fails on every tick never completes the state; the state machine's timeout forces it
+    on at the deadline through the same transition, so the held book is written all the same."""
+    campus, city = nodes
+    m_campus, m_city = market_of(campus), market_of(city)
+    times = m_campus.transition_times
+    assert negotiate(nodes, [m_campus, m_city], clock, times) is not None
+
+    def failing(self):
+        raise RuntimeError('a host that cannot send')
+
+    monkeypatch.setattr(MatchingConsensusMarket, 'while_in_market_lead', failing)
+    with caplog.at_level(logging.WARNING, logger='tent.market'):
+        step_all(nodes, clock, times.market_lead)
+        assert all(tn.data_manager.by_table('order') == [] for tn in nodes)
+        step_all(nodes, clock, times.delivery_lead)
+    assert sum('MarketLead state timed out' in r.getMessage() for r in caplog.records) == 2
+    for tn, market in ((campus, m_campus), (city, m_city)):
+        assert market.market_state is MarketState.DeliveryLead
+        archived = {row['id'] for row in tn.data_manager.by_table('order')}
+        assert archived and all(leg.id in archived for leg in market.matchList)
+        assert market._book_archiving is True and not market._held_orders
 
 
 def test_local_change_after_consensus_is_renegotiated(nodes, clock):

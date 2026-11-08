@@ -7,8 +7,9 @@ Matching Engine: Order Book Clearing
 A ``MatchingEngine`` is a ``Market`` that clears a single node's system through an order book rather than by
 interpolating the summed curve. It is configured like any market: a ``MarketSeries`` whose ``market_class_name`` is
 ``MatchingEngine``; its own settings are ``matching_strategy`` (the tie-break order among same-price orders: ``NONE``,
-``ORDER_AGE``, ``ORDER_VOLUME``, ``PROPORTIONAL_VOLUME``) and ``order_expiry`` (the lifetime in seconds of the orders the
-engine quotes for its entities; null means they stand until the market clears).
+``ORDER_AGE``, ``ORDER_VOLUME``, ``PROPORTIONAL_VOLUME``), ``order_expiry`` (the lifetime in seconds of the orders the
+engine quotes for its entities; null means they stand until the market clears) and ``order_archiving``, which only
+matters to a market that rebuilds its book per balancing pass (see :ref:`negotiated books <markets_negotiated_books>`).
 
 Negotiation: the book
 ---------------------
@@ -96,6 +97,8 @@ Two deployments use the class, from the same code and differing only in configur
 The ``matching_auction`` table extends ``auction`` with ``matching_strategy``; the orders are rows of the ``order``
 table as for the single-node engine.
 
+.. _markets_negotiated_books:
+
 Negotiated books: MatchingConsensusMarket
 -----------------------------------------
 
@@ -107,15 +110,15 @@ with that neighbor, and the signals go back and forth until both ends of every l
 threshold. Only the balancing step differs: instead of interpolating on the summed curve, each pass rebuilds the node's
 book from every local asset's and every neighbor's current curve (the neighbors' from their last received signals),
 matches and settles, so the marginal prices and every entity's cleared power come from the fills. A pass clears a fresh
-book rather than revising one whose matches were made against curves a neighbor has since replaced; the book standing
-at the end of the pass is what the archive holds. The exchange proposed to a neighbor is the quantity matched against
-its curve, marked on the residual curve at that curve's own price for it (record 0 at the matched quantity, as the
-``MatchingAuction``'s downstream signals), so the point lies on the curve the neighbor receives; the neighbor books the
-curve, matches it against its own book and replies with its own matched quantity. The local problem counts as balanced
-when the book has cleared every interval: a standing market order left over is an inelastic quantity no price would
-have cleared, recorded as the base market records a curve that never crosses zero and kept out of consensus, and the
-scheduled powers sum to zero. A book has no duality gap to close (its fill prices are the resting orders' own), so the
-pass is judged on the power balance, and the duality gap recorded is the largest imbalance.
+book rather than revising one whose matches were made against curves a neighbor has since replaced; which of those
+books the archive holds is the ``order_archiving`` setting (below). The exchange proposed to a neighbor is the quantity
+matched against its curve, marked on the residual curve at that curve's own price for it (record 0 at the matched
+quantity, as the ``MatchingAuction``'s downstream signals), so the point lies on the curve the neighbor receives; the
+neighbor books the curve, matches it against its own book and replies with its own matched quantity. The local problem
+counts as balanced when the book has cleared every interval: a standing market order left over is an inelastic quantity
+no price would have cleared, recorded as the base market records a curve that never crosses zero and kept out of
+consensus, and the scheduled powers sum to zero. A book has no duality gap to close (its fill prices are the resting
+orders' own), so the pass is judged on the power balance, and the duality gap recorded is the largest imbalance.
 
 The two ends of a link agree on the exchanged quantity; the price is not part of the agreement
 (``BALANCE_POINT_AGREEMENT`` is ``'quantity'``, where a market that clears at one price asks for price and quantity).
@@ -128,9 +131,15 @@ deployed four-node hierarchy reaches full consensus on its real-time market in a
 agreeing on the exchange to the link's losses.
 
 The ``matching_consensus`` table extends ``market`` with ``matching_strategy``; the orders are rows of the ``order``
-table, one book per balancing pass; the consensus flags are the market's ``FullConsensus`` measurement as for the
-consensus market. The deployment generator's ``negotiated`` variant runs it on every node with the consensus variant's
-negotiation windows.
+table; the consensus flags are the market's ``FullConsensus`` measurement as for the consensus market. Which books reach
+the ``order`` table is the ``order_archiving`` setting: by default (``final_book``) only the book standing when the
+market leaves MarketLead, the one it clears on (a late signal absorbed in MarketLead rebuilds it once more), so a market
+archives one book however many passes its negotiation took; the books of the passes a later signal superseded are not
+written, as the signals themselves are the record of the negotiation. With ``every_pass`` the book standing at the end
+of every balancing pass is archived, for debugging a negotiation (on the deployed campus about ten passes per market,
+96 000 orders and 255 000 vertices in 25 minutes). ``MatchingEngine`` and ``MatchingAuction`` clear one book per market
+and archive orders as they are booked, so the setting changes nothing for them. The deployment generator's
+``negotiated`` variant runs it on every node with the consensus variant's negotiation windows.
 
 Archive
 -------

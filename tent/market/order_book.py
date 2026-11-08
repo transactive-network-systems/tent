@@ -17,6 +17,7 @@ from copy import copy
 from dataclasses import dataclass, field
 from datetime import timedelta
 from enum import Enum
+from typing import Literal
 
 from pydantic import field_validator
 
@@ -76,6 +77,16 @@ class OrderBookConfig(ConfigModel):
         None, reconfigurable=True,
         description='[s] lifetime of the orders the engine quotes for local entities; null means they stand until '
                     'the market clears.')
+    order_archiving: Literal['final_book', 'every_pass'] = Setting(
+        'final_book',
+        description='Which order books a negotiating market archives. Applies to a market that rebuilds its book on '
+                    'every balancing pass (MatchingConsensusMarket, which clears a fresh book each time a neighbor\'s '
+                    'signal or a local change moves it). "final_book": only the book standing when the market leaves '
+                    'MarketLead, the one it clears on; the books of the passes a later signal superseded are not '
+                    'written. "every_pass": the book standing at the end of every pass, for debugging a negotiation '
+                    '(ten passes per market on the deployed campus). MatchingEngine and MatchingAuction clear one book '
+                    'per market and archive orders as they are booked, so for them the two values are the same '
+                    'behaviour.')
 
     @field_validator('matching_strategy', mode='before')
     @classmethod
@@ -94,6 +105,8 @@ class OrderBook:
         matchList: (list) of Order objects that have been matched (transacted).
         matching_strategy: (list of MatchingStrategy) Tie-break order for same-price orders.
         order_expiry: (timedelta | None) Lifetime of quoted orders; None means they expire at market clearing.
+        order_archiving: (str) 'final_book' or 'every_pass': which books a negotiating market archives (see
+            OrderBookConfig).
         order_measurement: (Measurement) Archival header under which every Order of this market is recorded.
         quotes: (dict) (entity id, interval id) -> Quote for the orders the engine has placed on entities' behalf.
     """
@@ -104,15 +117,16 @@ class OrderBook:
         self.orderList: list[Order] = []  # List of standing orders not yet matched
         self.matchList: list[Order] = []  # List of orders successfully matched
         self.order_expiry: timedelta | None = cfg.order_expiry
+        self.order_archiving: str = cfg.order_archiving
         self.quotes: dict[tuple, Quote] = {}
         # Fills made at the infinite level in this pass, by interval: (aggressive actor, resting actors); reported in one
         # line by report_unpriced_fills, each (interval, actors) once per market (see _fill_price).
         self._unpriced_fills: dict[str, tuple[str, tuple[str, ...]]] = {}
         self._unpriced_fills_reported: set[tuple] = set()
         self._settlement_reported: set[tuple[str, str]] = set()  # (kind, interval) settle() has warned about
-        # A negotiating market rebuilds its book on every balancing pass (reset_book) and archives only the pass's final
-        # book: while this is False the orders _archive_orders is given are held, by identity, and written by
-        # flush_held_orders in their state at that time.
+        # A negotiating market rebuilds its book on every balancing pass (reset_book) and archives only a pass's final
+        # book, of every pass or of the market's last (order_archiving): while this is False the orders _archive_orders
+        # is given are held, by identity, and written by flush_held_orders in their state at that time.
         self._book_archiving: bool = True
         self._held_orders: dict[int, Order] = {}
 
