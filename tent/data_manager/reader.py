@@ -11,7 +11,7 @@ import logging
 from datetime import datetime
 from typing import Iterable, Sequence
 
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func, inspect, select
 
 from archivable import LocalDataManager
 
@@ -119,6 +119,11 @@ class TentArchive(LocalDataManager):
             statement = statement.where(ti.c.start_time < end)
         return self.execute(statement.order_by(mv.c.measurement_id, ti.c.start_time, mv.c.record_time))
 
+    def _present_columns(self, table) -> list:
+        """The columns of a registered table that the database's table actually has, in definition order."""
+        present = {column['name'] for column in inspect(self.engine).get_columns(table.name)}
+        return [column for column in table.c if column.name in present]
+
     def curves(self, measurement_ids: Sequence = None, owner_ids: Sequence = None, interval_ids: Sequence = None,
                latest_only: bool = True, as_of: datetime = None) -> list[dict]:
         """
@@ -126,7 +131,9 @@ class TentArchive(LocalDataManager):
         version per curve id (the newest, optionally no later than as_of); otherwise every version.
         """
         sd, vx, ti = self.tables['sd_curve'], self.tables['vertex'], self.tables['time_interval']
-        statement = (select(sd, ti.c.start_time.label('interval_start'), ti.c.market_id)
+        # Only the sd_curve columns the database has: an archive of an earlier schema version lacks a column added since
+        # (balance_point_record, version 6), and a reader of this TENT still reads it, without that column.
+        statement = (select(*self._present_columns(sd), ti.c.start_time.label('interval_start'), ti.c.market_id)
                      .join(ti, ti.c.id == sd.c.time_interval_id, isouter=True))
         if latest_only:
             newest = select(sd.c.id, func.max(sd.c.record_time).label('record_time'))

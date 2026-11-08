@@ -39,3 +39,10 @@ none and is used when a node's configuration has no ``data_manager`` block and b
 TENT's own side: the table definitions and enumerations TENT ships, their archive schema version, and ``prepare``, which
 declares them on a data manager; ``tent.data_manager.reader.open_archive`` opens an existing archive with TENT's
 queries.
+
+The archive schema version (``tent.data_manager.ARCHIVE_SCHEMA_VERSION``, currently 6) is recorded in every database
+TENT writes and bumped whenever a shipped table or enumeration changes; the README lists the versions. Version 6 (8
+November 2026) added ``sd_curve.balance_point_record``: the record number, among the vertex rows of a curve version
+(numbered in price order, not in wire order), of a transactive signal curve's balance point, the exchange the signal
+proposes to the neighbor. Earlier archives do not say which vertex that was; ``open_archive(...).curves`` reads them
+without the column.

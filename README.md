@@ -187,10 +187,15 @@ declares TENT's archive schema on a data manager and registers TENT's enumeratio
 manager it builds). `tent.data_manager.reader.open_archive(url)` opens an existing archive read-only with TENT's
 canonical queries (`runs`, `components`, `markets`, `values`, `curves`, ...).
 
-The archive carries a schema version. `tent.data_manager.ARCHIVE_SCHEMA_VERSION` (currently 3) numbers the set of
+The archive carries a schema version. `tent.data_manager.ARCHIVE_SCHEMA_VERSION` (currently 6) numbers the set of
 table definitions and enumerations TENT ships and is incremented whenever one of them changes; version 1 is every
 archive written before 2 November 2026, which has no record of its version; version 2 is the first with the record,
-written on 2 November 2026 with TENT's own `archive_schema` table. A new database gets one row in the `archive_schema`
+written on 2 November 2026 with TENT's own `archive_schema` table; version 3 (2 November 2026) is the library's
+`archive_schema` table, one row per application, with a fingerprint that covers the enumerations; version 4 (2 November
+2026) adds the `matching_auction` table and the market types `matching_auction` and `matching_consensus`; version 5 (2
+November 2026) adds the `matching_consensus` table; version 6 (8 November 2026) adds the nullable
+`sd_curve.balance_point_record` column, the record number of a signal curve's balance point among the vertex rows of
+that curve version (see below). A new database gets one row in the `archive_schema`
 table (`version`, `fingerprint`, `application`, `application_version`, `created`) when `LocalDataManager.init_archive`
 creates it. Opening an existing database written with another version raises `ArchiveSchemaMismatch` naming both
 versions; nothing is migrated, the database is recreated or read with a TENT of its own version.
@@ -204,7 +209,13 @@ version archived for the same thing: the same measurement and interval, or for a
 direction and interval (`Measurement.curve_lineage`); the same vertices with the same price, quantity, cost and
 continuity are never written twice. A signal re-sent unchanged still writes its `transactive_signal` row, with no curves
 of its own: a reader takes, per interval, the latest curve archived for that neighbor, market and direction at or before
-the signal's time, as it takes the latest version of any value. The node setting `curve_archiving` (reconfigurable in
+the signal's time, as it takes the latest version of any value. The vertex rows of a curve version are numbered by
+`record` in the curve's price order, which is also the order of the wire's flexibility list, so record 0 is the cheapest
+vertex and not the balance point; the exchange a signal proposes to its neighbor (the vertex the wire's `balance_point`
+names, see `TransactiveSignal`) is `sd_curve.balance_point_record` on the curve's row (archive schema version 6, null for
+a curve without one: a system curve, an entity's active vertices, an order, or a signal with nothing scheduled). A
+balance point re-marked elsewhere on the same vertices is a new curve version (`SDCurve.fingerprint`), since it is a
+different exchange proposed. The node setting `curve_archiving` (reconfigurable in
 place) then says which versions are kept at all: `all` (every changed version, the default), `final` (only the versions
 a market archives when it leaves Negotiation and when it clears, `Market.archive_final_curves`: the last system curve
 and the last signal exchanged with each neighbor per interval) or `none` (no curve rows; measurement and signal headers

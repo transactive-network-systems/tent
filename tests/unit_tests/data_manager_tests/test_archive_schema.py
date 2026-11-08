@@ -27,6 +27,7 @@ RECORDED_FINGERPRINTS = {
     3: '78f0819d2817fc99b8f490b2b516cb0ebe076a9732535b40bbefaa4b89103cf0',  # 2 November 2026: the library's archive_schema table, one row per application (application primary key, version, fingerprint, application_version, created); the fingerprint covers the enumerations too; the market row has actuate_assets
     4: '08e1d982f1cf7036455cf7e65e529bda572c943d8661002a53195585121bdc14',  # 2 November 2026: the matching_auction table (extends auction with matching_strategy) and the MarketTypes members matching_auction and matching_consensus
     5: 'e56233b5dd28a649e697135ccf4a47910b5a1e99f68501e3a6399ec8a3608134',  # 2 November 2026: the matching_consensus table (MatchingConsensusMarket, the consensus protocol with an order book as the balancing step), extending market with matching_strategy
+    6: '0a5accad658e41c0f0b1f3d5cd63d88792b39818f63a875cf0f782a25140f734',  # 8 November 2026: sd_curve.balance_point_record (nullable Integer), the record number of a signal curve's balance point among the vertex rows of that curve version, the exchange the signal proposes; NULL for other curves
 }
 
 

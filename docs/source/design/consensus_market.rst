@@ -58,7 +58,12 @@ folds a received signal into its own balancing problem as that neighbor's active
 ``ConsensusMarket`` as described; ``'predicted_price'`` for ``Auction``, whose bid has cleared nothing with the
 supplier yet, so record 0 is the residual curve's own quantity at the market's current (predicted) price for the
 interval (``TransactiveSignal.mark_balance_points_at_prices``). Nothing in the auction flow reads a received signal's
-balance point; only the consensus convergence check does.
+balance point; only the consensus convergence check does. The archive keeps the balance point with the curve: the
+``sd_curve`` row of a sent or received signal curve carries ``balance_point_record`` (archive schema version 6), the
+record number of the balance-point vertex among that version's vertex rows, which is the wire's ``balance_point`` index
+(both number the vertices in price order), so a reader can compare what the two sides of a link proposed, as
+``check_for_convergence`` does, rather than reading the curves at a price. A balance point re-marked on unchanged
+vertices is a new curve version.
 
 Convergence with a neighbor
 ---------------------------

@@ -562,8 +562,10 @@ class SDCurve(Archivable):
         """What a version of this curve says: the vertices as (price, quantity, cost, continuity) tuples, in curve order,
         and the curve's own row apart from what identifies the version rather than its content (the curve's id and
         record time, its measurement's id: a replaced curve and a re-sent signal are new objects standing for the same
-        thing, see Measurement.curve_lineage). An order's status is part of it. Two curves with the same fingerprint are
-        the same version to the archive and the second is not written."""
+        thing, see Measurement.curve_lineage). An order's status is part of it, and so is a signal curve's balance point
+        (balance_point_record): a balance point re-marked elsewhere on the same vertices is a new version, since it is
+        a different exchange proposed. Two curves with the same fingerprint are the same version to the archive and the
+        second is not written."""
         row = tuple(sorted(((k, v) for k, v in self.get_record().items() if k not in self.VERSION_IDENTITY),
                            key=lambda kv: kv[0]))
         return tuple((v.price, v.quantity, v.cost, v.continuity) for v in self.vertices), row
@@ -604,6 +606,32 @@ class SDCurve(Archivable):
             pass
         return None
 
+    def balance_point_record(self) -> int | None:
+        """
+        The record number of this curve's balance point, or None when the curve has none. A transactive signal marks,
+        per interval, the vertex that is the exchange it proposes to the neighbor (TransactiveSignal.balance_point);
+        on the wire that vertex is named by its index into the interval's flexibility list, and the archive numbers the
+        vertex rows of a version in the same order (the curve's price order, see _version_records), so this is the
+        wire's balance_point for the curve as archived and the vertex row of this version with this record number is the
+        balance point. A curve whose measurement marks no balance points (a system curve, an entity's active vertices, an
+        order) has None, as does a signal curve for an interval with nothing scheduled.
+        """
+        try:
+            measurement, interval = self.__measurement, self.__interval
+            if measurement is None or interval is None:
+                return None
+            balance_point = getattr(measurement, 'balance_point', None)
+            if balance_point is None:
+                return None
+            # The interval itself, not the proxy: a proxy cannot key the signal's (weak) dictionary of balance points.
+            vertex = balance_point(getattr(interval, 'referent', interval))
+        except ReferenceError:
+            return None
+        if vertex is None:
+            return None
+        vertices = list(self.vertices)
+        return vertices.index(vertex) if vertex in vertices else None  # as TransactiveSignal.generate_signal numbers it
+
     def _vertex_record(self, index: int, vertex: Vertex) -> dict:
         return {
             "curve_id": self.id,
@@ -628,7 +656,8 @@ class SDCurve(Archivable):
             "measurement_id": self.measurement.id if self.measurement is not None else None,
             "owner_id": self.measurement.source.id if self.measurement is not None else None,
             "time_interval_id": self.interval.id if self.interval is not None else None,
-            "timestamp": self.interval.start_time if self.interval is not None else None
+            "timestamp": self.interval.start_time if self.interval is not None else None,
+            "balance_point_record": self.balance_point_record()
         })
         return record
 
@@ -645,7 +674,11 @@ class SDCurve(Archivable):
                     {"name": "owner_id", "foreign_key": "component.id"},
                     # {"name": "parent_curve_id", "foreign_key": "sd_curve.id"}, # TODO: Is this needed for order?
                     {"name": "time_interval_id", "foreign_key": "time_interval.id"},
-                    {"name": "timestamp", "type": "DateTime"}
+                    {"name": "timestamp", "type": "DateTime"},
+                    # The record number (vertex.record of this version) of a signal curve's balance point, the exchange
+                    # the signal proposes; NULL for a curve without one. Archive schema version 6; see
+                    # balance_point_record.
+                    {"name": "balance_point_record", "type": "Integer", "kwargs": {"nullable": True}}
                 ]
             }
         ])

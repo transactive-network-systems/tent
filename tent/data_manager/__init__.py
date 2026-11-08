@@ -26,9 +26,12 @@ _log = logging.getLogger(__name__)
 # 2026) is the library's archive_schema table (one row per application: application, version, fingerprint,
 # application_version, created) and a fingerprint that covers the enumerations. Version 4 (2 November 2026) adds the
 # matching_auction table and the market types matching_auction and matching_consensus; version 5 (2 November 2026) adds
-# the matching_consensus table. The fingerprint of each version is recorded in
-# tests/unit_tests/data_manager_tests/test_archive_schema.py; that test fails when a definition changes without a bump.
-ARCHIVE_SCHEMA_VERSION = 5
+# the matching_consensus table. Version 6 (8 November 2026) adds the nullable sd_curve.balance_point_record column: the
+# record number, within the vertex rows of that curve version, of a transactive signal curve's balance point, the
+# exchange the signal proposes (see SDCurve.balance_point_record); until then the archive did not say which vertex that
+# was. The fingerprint of each version is recorded in tests/unit_tests/data_manager_tests/test_archive_schema.py; that
+# test fails when a definition changes without a bump.
+ARCHIVE_SCHEMA_VERSION = 6
 APPLICATION = 'TENT'
 
 
