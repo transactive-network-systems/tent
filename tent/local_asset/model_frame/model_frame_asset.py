@@ -164,6 +164,32 @@ class ModelFrameAsset(LocalAsset, ModelFrame):
         return market.series.default_price if marginal_price is None or marginal_price.value is None \
             else marginal_price.value
 
+    def actuation_price(self, time_interval: TimeInterval, market: Market) -> float:
+        """
+        The price this asset actuates on for the interval [$/kWh]: its own curve's price at the power the market cleared
+        it to, so that the set points written are the ones the curve promised for what the asset traded. For a market
+        that clears at one price the asset was scheduled from its curve at that price, so this is the market's marginal
+        price again (to rounding, and clamped to the curve's span as the mapping clamps it). For an order book whose
+        fills are at the resting orders' prices (continuous clearing) the asset's cleared power is the sum of its legs,
+        and the curve's price for that power is what the asset itself asked for it, where the market's marginal price
+        may be another participant's. The market's marginal price (or the series default) is used when the curve has no
+        unique price at the cleared power: no curve or no cleared power for the interval, a single inelastic vertex, a
+        vertical segment (two vertices at that quantity), or a power off the curve's ends.
+        """
+        fallback = self._market_price(time_interval, market)
+        curve = self.active_vertices.get_by_interval(time_interval)
+        power = market.cleared_power(self, time_interval)
+        if curve is None or curve.empty or power is None or len(curve.vertices) < 2:
+            return fallback
+        vertices = list(curve.vertices)
+        if power < vertices[0].quantity and not curve.is_at_end_vertex(power, vertices[0]):
+            return fallback
+        if power > vertices[-1].quantity and not curve.is_at_end_vertex(power, vertices[-1]):
+            return fallback
+        if any(a.quantity == power == b.quantity for a, b in zip(vertices, vertices[1:])):
+            return fallback  # vertical there: several prices for the one quantity
+        return curve.price_from_vertices(power, warn=False)
+
     def _temperature_forecast(self):
         services = [x for x in self.information_services if x.name == self.temperature_forecast_name] \
             if (self.information_services and self.temperature_forecast_name) else []

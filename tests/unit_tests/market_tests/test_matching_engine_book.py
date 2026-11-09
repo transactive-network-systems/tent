@@ -6,7 +6,9 @@ test classes were never collected (lowercase names, hand-rolled setUp/case metho
 out as "needs investigation". Here the engine is built through MarketSeries like every other market and orders use the
 current Order/Vertex API. The standing-order book is the legacy one: demand and supply, market, limit and piece-wise
 linear orders, continuous and discontinuous, at two magnitudes and two ages (48 orders). Expected results are derived
-from the matching algorithm and checked as exact multisets rather than the legacy "in [25, 50, 100]" lists.
+from the matching algorithm and checked as exact multisets rather than the legacy "in [25, 50, 100]" lists. The engine
+clears continuously here (clearing='continuous'): these are the ladder walk's tests; the batch clearing of the same book
+is tested in test_matching_engine_batch.py.
 """
 from collections import Counter
 from copy import copy
@@ -46,8 +48,8 @@ def engine():
     tn = MockTN()
     tn._data_manager = RecordingDataManager()
     series = MarketSeries(transactive_node=tn, name='Matching Series', market_class=MatchingEngine,
-                          initial_market_state=MarketState.Negotiation, duration_negotiation=3600.0,
-                          duration_delivery_lead=900.0, interval_duration=3600.0)
+                          clearing='continuous', initial_market_state=MarketState.Negotiation,
+                          duration_negotiation=3600.0, duration_delivery_lead=900.0, interval_duration=3600.0)
     tn.market_series = [series]
     tn.neighbors = [Neighbor(transactive_node=tn, name='Neighbor #1', cost_parameters=[0.0, 0.0, 0.0],
                              description='Neighbor actor example')]

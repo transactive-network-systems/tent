@@ -112,7 +112,8 @@ def test_the_class_is_registered_and_shares_the_book():
     assert resolve('MatchingAuction', Market) is MatchingAuction
     assert issubclass(MatchingAuction, Auction)
     assert MatchingAuction.MARKET_TYPE is MarketTypes.matching_auction
-    assert set(MatchingAuction.Config.model_fields) == {'actuate_assets', 'matching_strategy', 'order_expiry', 'order_archiving'}
+    assert set(MatchingAuction.Config.model_fields) == {'actuate_assets', 'clearing', 'matching_strategy', 'order_expiry',
+                                                        'order_archiving'}
     tables = {d['name']: d for d in MatchingAuction.get_archive_definitions()}
     assert tables['matching_auction']['inherits'] == 'auction'
     assert [c['name'] for c in tables['matching_auction']['columns']] == ['id', 'matching_strategy']
@@ -146,8 +147,8 @@ def test_a_city_book_clears_a_campus_auction_bid(clock):
     for ti in m_city.time_intervals:
         legs = [l for l in m_city.matchList if l.interval.name == ti.name]
         assert sum(abs(l.vertices[-1].quantity) for l in legs) / 2 == pytest.approx(40.0), 'one 40 kW trade'
-        # The campus's market order rested in the book; the plant's offer is the aggressive side and 40 kW of its curve
-        # (0 kW at 0.04 to 100 kW at 0.08) is priced from the curve, 0.056: the book's price, and the curve's.
+        # The campus's inelastic 40 kW and the plant's offer (0 kW at 0.04 to 100 kW at 0.08) cross inside the offer's
+        # segment at its price for 40 kW, 0.056: the book's price, and the curve's.
         assert m_city.marginal_prices.get_by_interval(ti).value == pytest.approx(0.056)
         assert m_city.cleared_power(city.neighbors[0], ti) == pytest.approx(-40.0)
         assert city.local_assets[0].scheduled_powers.get_by_interval(ti).value == pytest.approx(40.0)
@@ -231,6 +232,20 @@ def check_exchanges(nodes, markets):
     return city_sends, campus_imports
 
 
+def check_link_prices(nodes, markets):
+    """Both ends of the city-campus link state the same crossing price for the same curves, to the link's losses: the
+    campus sees the city's offer through the link, whose marginal loss adder raises the price it clears at by the
+    reciprocal of the loss derivative d(arriving)/d(sent) = 1 - 2 * loss_factor * sent / capacity."""
+    campus, city = nodes['PNNL_Campus'], nodes['CoR']
+    link = next(n for n in campus.neighbors if n.name == 'CoR')
+    _, city_sends = sent_power(city, 'PNNL_Campus', markets['CoR'])
+    for ti_city, ti_campus, sent in zip(markets['CoR'].time_intervals, markets['PNNL_Campus'].time_intervals, city_sends):
+        city_price = markets['CoR'].marginal_prices.get_by_interval(ti_city).value
+        campus_price = markets['PNNL_Campus'].marginal_prices.get_by_interval(ti_campus).value
+        derivative = 1 - 2 * link.loss_factor * -sent / link.maximum_power
+        assert campus_price == pytest.approx(city_price / derivative, rel=1e-4), (city_price, campus_price)
+
+
 @pytest.mark.skipif(deployed_office_config() is None, reason='the deployed container configurations are not beside '
                                                              'this repository')
 def test_design_a_one_book_at_the_city_clears_the_deployed_hierarchy(tmp_path):
@@ -240,12 +255,15 @@ def test_design_a_one_book_at_the_city_clears_the_deployed_hierarchy(tmp_path):
     assert m_city.matchList and not m_city.unbalanceable
     city_sends, campus_imports = check_exchanges(nodes, markets)
     assert city_sends[0] == pytest.approx(-6489.48, abs=0.01) and campus_imports[0] == pytest.approx(6426.31, abs=0.01)
-    # The book's fill prices are those of the orders taken: the campus's bid rested at its own prices (its offices'
-    # flexibility span seen through the campus), so the city's last fill, its marginal price, is a rung of that bid,
-    # 0.04025 in the first interval, while the campus clears onto the matched point at the city's residual curve's own
-    # price for it, 0.03292. Both are recorded; the quantities agree.
-    assert m_city.marginal_prices.get_by_interval(m_city.time_intervals[0]).value == pytest.approx(0.04025, abs=1e-5)
+    # The city's book clears at the crossing of its supply and the campus's bid, 0.03228 in the first interval, every
+    # leg at that price (with continuous clearing its last fill was a rung of the resting bid, 0.04025). The campus
+    # clears onto the matched point at the city's residual curve's own price for it, 0.03292: the same crossing seen
+    # through the link's losses (check_link_prices).
+    assert m_city.marginal_prices.get_by_interval(m_city.time_intervals[0]).value == pytest.approx(0.03228, abs=1e-5)
     assert m_campus.marginal_prices.get_by_interval(m_campus.time_intervals[0]).value == pytest.approx(0.03292, abs=1e-5)
+    check_link_prices(nodes, markets)
+    assert m_city.average_match_prices.get_by_interval(m_city.time_intervals[0]).value == pytest.approx(
+        m_city.marginal_prices.get_by_interval(m_city.time_intervals[0]).value), 'one price for every leg'
 
 
 @pytest.mark.skipif(deployed_office_config() is None, reason='the deployed container configurations are not beside '
@@ -263,9 +281,14 @@ def test_design_b_a_book_on_the_city_and_the_campus_clears_the_deployed_hierarch
     # every link agree, to the link's losses.
     city_sends, campus_imports = check_exchanges(nodes, markets)
     assert city_sends[0] == pytest.approx(-6489.48, abs=0.01) and campus_imports[0] == pytest.approx(6426.31, abs=0.01)
-    # Each book's own last fill sets its marginal price: the city's at the campus bid's rung (the campus's bid rests and
-    # the city's supply takes all of it at each rung), the campus's inside the city remainder's segment at that curve's
-    # own price for the quantity its offices took (the linear standing-order case), which is the price the campus clears
-    # onto in design A, 0.03292: both deployments give the campus the same price.
-    assert m_city.marginal_prices.get_by_interval(m_city.time_intervals[0]).value == pytest.approx(0.04025, abs=1e-5)
+    # Each book clears at its own crossing: the city's at 0.03228, the campus's at 0.03292, the price the campus clears
+    # onto in design A as well. The two books on the link state the same crossing for the same curves, to the link's
+    # losses: the campus's price is the city's divided by the link's marginal loss derivative (check_link_prices).
+    assert m_city.marginal_prices.get_by_interval(m_city.time_intervals[0]).value == pytest.approx(0.03228, abs=1e-5)
     assert m_campus.marginal_prices.get_by_interval(m_campus.time_intervals[0]).value == pytest.approx(0.03292, abs=1e-5)
+    check_link_prices(nodes, markets)
+    for market in (m_city, m_campus):
+        ti = market.time_intervals[0]
+        assert market.average_match_prices.get_by_interval(ti).value == pytest.approx(
+            market.marginal_prices.get_by_interval(ti).value), 'one price for every leg of a batch'
+        assert len({round(l.vertices[-1].price, 12) for l in market.matchList if l.interval.name == ti.name}) == 1

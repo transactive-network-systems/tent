@@ -74,14 +74,15 @@ class Market(Component):
     # convergence check compares that point with the neighbor's); 'predicted_price' (Auction) places it at the residual
     # curve's own quantity at the market's current price, since no power has been cleared with the neighbor yet;
     # 'matched_quantity' (MatchingAuction once its book has settled) places it at the quantity matched with the neighbor
-    # and the residual curve's own price for that quantity, since an order book's fill prices are those of the orders
-    # taken, not a price the residual curve passes through.
+    # and the residual curve's own price for that quantity, which keeps the point on the curve whatever the book's
+    # prices (the crossing in batch clearing, the resting orders' prices in continuous clearing).
     BALANCE_POINT = 'scheduled_power'
     # What two nodes must agree on at the balance point for a negotiating market to count a link as converged
     # (TransactiveSignal.balance_points_differ): 'price_and_quantity' for a market that clears at one price, so both
     # ends of a link state the same price for the same exchange once they agree; 'quantity' for a market whose prices
-    # are its own (an order book fills at the resting orders' prices, so the two ends of a link price the same exchange
-    # differently and agree on the quantity alone; MatchingConsensusMarket).
+    # are its own (MatchingConsensusMarket: with continuous clearing a book fills at the resting orders' prices, so the
+    # two ends of a link price the same exchange differently and agree on the quantity alone; with batch clearing both
+    # ends clear at the crossing and the price may rejoin the agreement, an owner's decision pending).
     BALANCE_POINT_AGREEMENT = 'price_and_quantity'
     # Two vertex prices closer than this are one price. Market.sum_vertices offsets a duplicate price by 1e-10 so the
     # system curve stays a function; the cleared price then lands within that offset of the flat segment it sits on.

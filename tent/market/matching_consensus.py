@@ -12,16 +12,20 @@ with the configured strategy and settles, so its marginal prices and every entit
 The exchange proposed to a neighbor is the quantity matched against that neighbor's curve, placed on the residual curve
 at that curve's own price for it (the BALANCE_POINT rule 'matched_quantity'), so the point lies on the curve the
 neighbor receives; the neighbor books the curve, matches it against its own book and replies with its own matched
-quantity. Agreement is reached when the two books match the same quantity across the link; the price is not part of
-it (BALANCE_POINT_AGREEMENT 'quantity'): a book fills at the resting orders' own prices, so the two books on a link
-price the same exchange differently (the campus's book prices what it buys from the city at the city's offer, the
-city's book what it sells to the campus at the campus's bid), where interpolation finds the one price both would state.
+quantity. With the default clearing ('batch', OrderBookConfig) a node's inelastic assets net against each other inside
+the sums, so the quantity proposed is the net the node needs from the neighbor, and every leg is at the crossing price.
+Agreement is reached when the two books match the same quantity across the link; the price is not part of it
+(BALANCE_POINT_AGREEMENT 'quantity'). That rule dates from continuous clearing, where a book fills at the resting
+orders' own prices and the two books on a link price the same exchange differently (the campus's book prices what it
+buys from the city at the city's offer, the city's book what it sells to the campus at the campus's bid); with the
+crossing price on both ends the two books state the same price for the same curves, to the link's losses, and the
+price may rejoin the agreement (an owner's decision after this build).
 
 The local problem counts as balanced when the book has cleared every interval: no standing market order is left over
 (an inelastic quantity the book could not fill is a deficit or surplus no price would have cleared, recorded in
 `unbalanceable` as the base market records a curve that never crosses zero) and the scheduled powers sum to zero. The
-duality gap of the interpolation does not apply to a book (its fill prices are the resting orders' own, not one
-uniform price), so convergence is judged on the power balance. Each balancing pass clears a fresh book: orders are
+duality gap of the interpolation does not apply to a book (its result is the fills, not a price iterated to a gap), so
+convergence is judged on the power balance. Each balancing pass clears a fresh book: orders are
 not revised against a book whose matches were made with curves a neighbor has since replaced. What the archive holds is
 set by `order_archiving` (OrderBookConfig): by default only the book standing when the market leaves MarketLead, the
 one it clears on (a late signal absorbed in MarketLead rebuilds it once more); the books of the passes a later signal
@@ -101,7 +105,8 @@ class MatchingConsensusMarket(OrderBook, ConsensusMarket):
         self.flush_held_orders()
 
     def _solve_locally(self) -> bool:
-        """Clear a fresh book of every entity's current curve and settle it: prices from the fills, every entity's
+        """Clear a fresh book of every entity's current curve and settle it (in batch mode each interval once at its
+        crossing; in continuous mode curve by curve at the resting prices): prices from the fills, every entity's
         cleared power from its matched legs (OrderBook.settle). An interval with a standing market order left over
         could not be balanced: no price clears an inelastic quantity nobody matched. Always returns True, as settlement
         leaves every interval priced (an interval with no priced match keeps its opening price)."""
@@ -127,7 +132,8 @@ class MatchingConsensusMarket(OrderBook, ConsensusMarket):
     def _reschedule_entities(self) -> None:
         """Settlement has scheduled every entity from its matched legs (the assets from the cleared-power store, the
         neighbors through schedule_power, which reads it); an asset's own scheduling model is not asked again, as it
-        would schedule from its curve at the last fill's price rather than from what it traded. Limits still apply."""
+        would schedule from its curve at the market's price rather than from what it traded (the two differ at the
+        margin, and everywhere with continuous clearing). Limits still apply."""
         for entity in self._entities():
             entity.clamp_scheduled_powers(self)
 

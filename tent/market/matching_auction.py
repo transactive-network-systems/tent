@@ -15,8 +15,14 @@ Two deployments use it, from the same code (planning: designs A and B of the mul
 The flow is Auction.while_in_market_lead and Auction.while_in_delivery_lead unchanged; only Auction.clear differs: the
 book quotes every local asset's and every neighbor's current curve, matches with the configured strategy, and settles
 (OrderBook.settle), so the marginal prices, the cleared powers and the volume-weighted average price come from the
-fills. Until the book has settled, a bid's record 0 is the residual curve at the predicted price, as an auction's; after
-it, the downstream signals' record 0 is each neighbor's matched quantity at the cleared price.
+fills. With the default clearing ('batch', OrderBookConfig) every curve is quoted and each interval is then cleared once
+at the crossing of the summed supply and demand, every leg at that price, so the result does not depend on the order the
+entities are quoted in and both ends of a link state the same crossing price for the same curves (to the link's
+losses); with 'continuous' clearing the curves are matched one after another at the resting orders' prices, the local
+assets first and the neighbors after them in configuration order, so whichever is quoted first rests and sets the
+prices. In either mode the reported marginal price is the crossing. Until the book has settled, a bid's record 0 is the
+residual curve at the predicted price, as an auction's; after it, the downstream signals' record 0 is each neighbor's
+matched quantity at the residual curve's own price for it.
 """
 import logging
 
@@ -48,10 +54,10 @@ class MatchingAuction(OrderBook, Auction):
     def BALANCE_POINT(self) -> str:  # noqa: N802 (a class attribute on Market, read through the instance)
         """Record 0 of a signal: before the book has settled, the residual curve at the predicted price (the bid sent
         upstream, as an auction's); after it, the neighbor's matched quantity at the residual curve's own price for it
-        (the signals sent downstream), which is where the auction's downstream signals land after balance(). The book's
-        fill prices are those of the orders taken (an aggressive order pays the resting orders' prices), so the market's
-        marginal price, the last fill's, is not in general a price the residual curve passes through at the matched
-        quantity; the curve's own price keeps the point on the curve, and the downstream node clears onto it."""
+        (the signals sent downstream), which is where the auction's downstream signals land after balance(). The curve's
+        own price keeps the point on the curve whatever the book's prices: in batch mode the crossing price, which the
+        residual curve passes through at the matched quantity when it is sloped there; in continuous mode the resting
+        orders' prices, which in general it does not. The downstream node clears onto the point."""
         return 'matched_quantity' if self._settled else 'predicted_price'
 
     @property
@@ -75,8 +81,9 @@ class MatchingAuction(OrderBook, Auction):
 
     def clear(self) -> None:
         """The book as the clearing step: quote every entity's current curve (the upstream neighbor's from its signal,
-        the downstream neighbors' from their bids, the local assets'), match, and settle the fills into prices and
-        cleared powers. Intervals with no match keep their opening price and are logged once (see settle)."""
+        the downstream neighbors' from their bids, the local assets'), match (in batch mode, clear each interval once at
+        its crossing; in continuous mode, each quoted curve against the ones before it), and settle the fills into
+        prices and cleared powers. Intervals with no match keep their opening price and are logged once (see settle)."""
         self.quote_and_match()
         self.settle()
         self._settled = True

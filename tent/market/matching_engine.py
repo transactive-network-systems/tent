@@ -27,9 +27,17 @@ class MatchingEngine(OrderBook, Market):
     revised only when its curve changes, detected by the curve's archived version (SDCurve.last_record_time) or, for
     curves that are never archived, by their vertex values.
 
+    How the book clears is the ``clearing`` setting (OrderBookConfig). In batch mode (the default) the window collects:
+    every pass quotes and revises, nothing is matched, and when Negotiation closes each interval's book is cleared once
+    at the crossing of its summed supply and demand, every leg at that price (a call auction; an order submitted at any
+    time in the window counts the same). In continuous mode every pass matches each new or revised order on arrival
+    against the orders then resting, at the resting orders' prices, so the arrival order decides which side rests: the
+    local assets are quoted first and the neighbors after them, each in configuration order.
+
     Attributes:
         orderList: (list) of standing Order objects, aka the "order book".
         matchList: (list) of Order objects that have been matched (transacted).
+        clearing: (str) 'batch' or 'continuous' (see OrderBookConfig).
         matching_strategy: (list of MatchingStrategy) Tie-break order for same-price orders.
         order_expiry: (timedelta | None) Lifetime of quoted orders; None means they expire at market clearing.
         order_measurement: (Measurement) Archival header under which every Order of this market is recorded.
@@ -39,8 +47,6 @@ class MatchingEngine(OrderBook, Market):
     - A MatchingEngine market does not formally have a market clearing or market clearing time. The clearing time
       inherited from Market marks the end of the Negotiation period within its market state engine.
     """
-    MARKET_TYPE = MarketTypes.matching_engine
-
     MARKET_TYPE = MarketTypes.matching_engine
 
     class Config(Market.Config, OrderBookConfig):
@@ -77,8 +83,11 @@ class MatchingEngine(OrderBook, Market):
         super(MatchingEngine, self).transition_from_active_to_negotiation()
 
     def transition_from_negotiation_to_market_lead(self):
-        """The book closes: settle the matched legs into prices and schedules, then the inherited price refresh for the
-        intervals settlement did not price."""
+        """The book closes. In batch mode the window's orders are cleared now, once: the curves are quoted a last time
+        and every interval is cleared at its crossing (quote_and_match). Then settle the matched legs into prices and
+        schedules, and the inherited price refresh for the intervals settlement did not price."""
+        if self.clearing == 'batch':
+            self.quote_and_match()
         self.settle()
         super(MatchingEngine, self).transition_from_negotiation_to_market_lead()
 
@@ -86,11 +95,15 @@ class MatchingEngine(OrderBook, Market):
     def while_in_negotiation(self):
         """
         In this market state, actors may submit from zero to many offer or bid orders to secure a position in this
-        market object's delivery period. Each pass matches any new (or newly revised) orders against the order book.
-        Negotiation stays open for its whole window so that orders submitted later are still matched; the state is
-        marked complete at the market-lead time.
+        market object's delivery period. In continuous mode each pass matches any new (or newly revised) orders against
+        the order book; in batch mode each pass only quotes and revises, and the book is cleared when the state closes
+        (transition_from_negotiation_to_market_lead). Negotiation stays open for its whole window so that orders
+        submitted later are still matched; the state is marked complete at the market-lead time.
         """
-        self.quote_and_match()
+        if self.clearing == 'batch':
+            self.quote_book()
+        else:
+            self.quote_and_match()
         if Timer.now() >= self.transition_times.market_lead:
             self._stateIsCompleted = True
         return None

@@ -99,10 +99,11 @@ TENT implements continuous double auctions where:
 * The auction aggregates all buy and sell curves to determine the **Market Clearing Price (MCP)** and cleared power.
 * Schedules are committed and dispatched to physical hardware or simulator adapters.
 
-A `MatchingEngine` series clears the same node through an order book instead: entity curves are quoted as orders and
-matched during Negotiation, and when the book closes the matched legs are settled into each entity's scheduled power
-(the signed sum of its legs) and the interval's marginal price (the last match, with the volume-weighted average
-recorded beside it). See `docs/source/markets/matching_engine.rst`.
+A `MatchingEngine` series clears the same node through an order book instead: entity curves are quoted as orders and,
+when the book closes, cleared together at the price where the summed supply and demand cross (or, with `clearing:
+continuous`, matched on arrival at the resting orders' prices); the matched legs are settled into each entity's
+scheduled power (the signed sum of its legs) and the interval's marginal price is the crossing of the orders the window
+saw, with the volume-weighted average of the legs recorded beside it. See `docs/source/markets/matching_engine.rst`.
 
 </details>
 

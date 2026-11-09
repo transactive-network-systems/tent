@@ -1,4 +1,8 @@
-"""Core tests for MatchingEngine against the current Market / MarketSeries / Order API."""
+"""Core tests for MatchingEngine against the current Market / MarketSeries / Order API.
+
+Every series here clears continuously (clearing='continuous'): these tests exercise the ladder walk, the pay-as-rest
+fills and the remainders; the batch clearing has its own module (test_matching_engine_batch.py).
+"""
 from datetime import timedelta
 
 import pytest
@@ -39,7 +43,7 @@ def market():
     tn = MockTN()
     tn._data_manager = RecordingDataManager()
     series = MarketSeries(transactive_node=tn, name='Matching Series', market_class=MatchingEngine,
-                          initial_market_state=MarketState.Negotiation, duration_negotiation=3600.0,
+                          clearing='continuous', initial_market_state=MarketState.Negotiation, duration_negotiation=3600.0,
                           duration_delivery_lead=900.0, interval_duration=3600.0)
     tn.market_series = [series]
     return series.newest_market
@@ -78,14 +82,15 @@ def test_constructed_through_market_series(market):
 
 def make_series(tn, **kwargs):
     return MarketSeries(transactive_node=tn, name='Matching Series', market_class=MatchingEngine,
-                        initial_market_state=MarketState.Negotiation, **kwargs)
+                        initial_market_state=MarketState.Negotiation, clearing='continuous', **kwargs)
 
 
 def test_matching_strategy_configured_on_series(market):
     tn = market.tn
     series = make_series(tn, matching_strategy=['ORDER_AGE', 'ORDER_VOLUME'])
     assert series.market_kwargs == {
-        'actuate_assets': True, 'matching_strategy': [MatchingStrategy.ORDER_AGE, MatchingStrategy.ORDER_VOLUME],
+        'actuate_assets': True, 'clearing': 'continuous',
+        'matching_strategy': [MatchingStrategy.ORDER_AGE, MatchingStrategy.ORDER_VOLUME],
         'order_expiry': None, 'order_archiving': 'final_book'}, 'the validated market settings, defaults included'
     assert series.newest_market.matching_strategy == [MatchingStrategy.ORDER_AGE, MatchingStrategy.ORDER_VOLUME]
     series.spawn()  # every spawned market gets the same keywords
@@ -395,7 +400,7 @@ def test_an_interval_with_no_match_keeps_its_opening_price_and_is_logged_once(ca
     tn = MockTN()
     tn._data_manager = RecordingDataManager()
     series = MarketSeries(transactive_node=tn, name='Matching Series', market_class=MatchingEngine,
-                          initial_market_state=MarketState.Negotiation, duration_negotiation=3600.0,
+                          clearing='continuous', initial_market_state=MarketState.Negotiation, duration_negotiation=3600.0,
                           duration_delivery_lead=900.0, interval_duration=3600.0, intervals_to_clear=2,
                           default_price=0.0428)
     tn.market_series = [series]
@@ -444,7 +449,7 @@ def test_orders_match_only_within_their_own_interval():
     tn = MockTN()
     tn._data_manager = RecordingDataManager()
     series = MarketSeries(transactive_node=tn, name='Matching Series', market_class=MatchingEngine,
-                          initial_market_state=MarketState.Negotiation, duration_negotiation=3600.0,
+                          clearing='continuous', initial_market_state=MarketState.Negotiation, duration_negotiation=3600.0,
                           duration_delivery_lead=900.0, interval_duration=3600.0, intervals_to_clear=2)
     tn.market_series = [series]
     market = series.newest_market
