@@ -2,8 +2,13 @@
 The order book shared by the matching markets.
 
 An order book is a clearing rule: every local asset's and every neighbor's current curve is quoted into the book as
-orders, each new or revised order is matched against the standing book with the configured strategy, and settlement
-turns the matched legs into the market's prices and schedules (see settle). Three markets use it: MatchingEngine, which
+orders, the orders are matched with the configured strategy, and settlement turns the matched legs into the market's
+prices and schedules (see settle). The book clears in one of two ways (OrderBookConfig.clearing): in batch mode every
+order of an interval is collected and the fills are allocated where the summed supply and demand cross, all legs at that
+one price, whatever order the entities were quoted in (clear_interval, crossing); in continuous mode each new or
+revised order is matched on arrival against the orders then resting, at the resting orders' prices (match), so the
+quoting order, which is the arrival order, decides which side rests. In both modes the interval's reported marginal
+price is the crossing of every order the window saw. Three markets use it: MatchingEngine, which
 runs the book through its own Negotiation on one node; MatchingAuction, which runs the Auction's signal exchange
 between nodes with the book as its clearing step instead of interpolation; and MatchingConsensusMarket, which runs the
 consensus protocol with the book as its local balancing step. The book is a mixin so that none of them copies it: a
@@ -66,9 +71,34 @@ class Quote:
     orders: list = field(default_factory=list)
 
 
+@dataclass
+class Crossing:
+    """Where one interval's summed supply and demand cross (see OrderBook.crossing): the price there, which is a batch
+    clearing's price and the interval's reported marginal price in either clearing mode; the fills to make there as
+    [(Order, signed quantity)], supply positive; and how it was found ('interior' to a segment of the ladder, at a 'rung',
+    or a 'surplus' or 'deficit' of market orders no price clears). The price is infinite when no order names one."""
+    price: float
+    fills: list
+    kind: str
+
+
 # TODO: Make sure that IDs can work as UUID, instead of int.
 class OrderBookConfig(ConfigModel):
     """The settings of a market that clears through an order book; a market's Config extends this and its base's."""
+    clearing: Literal['batch', 'continuous'] = Setting(
+        'batch',
+        description='How the book clears an interval. "batch": every order of the interval is collected, supply and '
+                    'demand are summed, the price where they cross is found and the fills are allocated there, all legs '
+                    'at that one price; the result does not depend on the order in which the entities were quoted. '
+                    'Orders below the margin fill in full; at the margin the matching_strategy tie-breaks decide which '
+                    'orders fill and by how much, and all-or-nothing orders fill whole or not at all. Inelastic '
+                    'quantities (market orders) enter the sums, so a node\'s own inelastic supply and load net against '
+                    'each other and the exchange proposed to a neighbor is the net; an inelastic surplus or deficit the '
+                    'curves cannot absorb is left standing as a market order. "continuous": each order is matched on '
+                    'arrival against the book then standing, at the resting orders\' prices; order_expiry, age priority '
+                    'and the arrival order (local assets, then neighbors, in configuration order) keep their meaning, '
+                    'and whichever side was quoted first rests and sets the prices. In both modes the interval\'s '
+                    'reported marginal price is where the supply and demand seen in the window cross.')
     matching_strategy: list[enum_by_name(MatchingStrategy)] = Setting(
         ['ORDER_VOLUME'], min_length=1,
         description='Tie-break order for same-price orders, by name: NONE, ORDER_AGE, ORDER_VOLUME, '
@@ -103,6 +133,8 @@ class OrderBook:
     Attributes:
         orderList: (list) of standing Order objects, aka the "order book".
         matchList: (list) of Order objects that have been matched (transacted).
+        clearing: (str) 'batch' or 'continuous': whether an interval's orders are cleared together at one crossing
+            price or each on arrival at the resting orders' prices (see OrderBookConfig).
         matching_strategy: (list of MatchingStrategy) Tie-break order for same-price orders.
         order_expiry: (timedelta | None) Lifetime of quoted orders; None means they expire at market clearing.
         order_archiving: (str) 'final_book' or 'every_pass': which books a negotiating market archives (see
@@ -116,9 +148,15 @@ class OrderBook:
         self.order_measurement: Measurement = Measurement(self, MeasurementType.Order, MeasurementUnit.kW)
         self.orderList: list[Order] = []  # List of standing orders not yet matched
         self.matchList: list[Order] = []  # List of orders successfully matched
+        self.clearing: str = cfg.clearing
         self.order_expiry: timedelta | None = cfg.order_expiry
         self.order_archiving: str = cfg.order_archiving
         self.quotes: dict[tuple, Quote] = {}
+        # Every order of the window, by interval name and then by id, as submitted (its vertices are never altered:
+        # matching books copies): the supply and demand the interval saw, whose crossing is its reported marginal price
+        # (see crossing and settle). An order a revised or withdrawn quote replaced leaves the set; an order that was
+        # filled, left standing, expired or cancelled stays in it.
+        self._window_orders: dict[str, dict] = {}
         # Fills made at the infinite level in this pass, by interval: (aggressive actor, resting actors); reported in one
         # line by report_unpriced_fills, each (interval, actors) once per market (see _fill_price).
         self._unpriced_fills: dict[str, tuple[str, tuple[str, ...]]] = {}
@@ -148,16 +186,32 @@ class OrderBook:
         }]
 
     def quote_and_match(self) -> None:
-        """One clearing pass: retire expired orders, quote every entity's current curve, match every new or revised
-        order, and leave only standing orders in the book."""
+        """One clearing pass: retire expired orders, quote every entity's current curve, match the book (match_book) and
+        leave only standing orders in it."""
+        self.quote_book()
+        self.match_book()
+
+    def quote_book(self) -> None:
+        """Retire expired orders and quote every entity's current curve into the book, without matching: what a batch
+        market does on every pass of its window, so that the book standing at the close is the current curves."""
         self._expire_orders()
         self.quote_entities()
-        new_orders = [x for x in self.orderList if x.status in (OrderStatus.NEW, OrderStatus.NEW_REVISED)]
-        for new_order in new_orders:
-            self.match(new_order)
-        # Order.match() removes every order it supersedes from the book and match() re-adds unmatched remainders as
-        # standing orders, so after a pass the book should hold standing orders only. Anything else (e.g. a new order
-        # that cancelled itself for having no quantity) is dropped here.
+
+    def match_book(self) -> None:
+        """Match the book by the configured clearing: in batch mode every interval's standing orders are cleared
+        together at the crossing of their summed supply and demand (clear_interval); in continuous mode every new or
+        revised order is matched on arrival against the orders then resting (match). Afterwards only standing orders
+        are left in the book."""
+        if self.clearing == 'batch':
+            for time_interval in self.time_intervals:
+                self.clear_interval(time_interval)
+        else:
+            new_orders = [x for x in self.orderList if x.status in (OrderStatus.NEW, OrderStatus.NEW_REVISED)]
+            for new_order in new_orders:
+                self.match(new_order)
+        # Matching removes every order it supersedes from the book and re-adds unmatched remainders as standing orders,
+        # so after a pass the book should hold standing orders only. Anything else (e.g. a new order that cancelled
+        # itself for having no quantity) is dropped here.
         self.orderList = [x for x in self.orderList
                           if x.status in (OrderStatus.STANDING_ORDER, OrderStatus.REVISED_STANDING_ORDER)]
         self.report_unpriced_fills()
@@ -169,6 +223,7 @@ class OrderBook:
         self.orderList = []
         self.matchList = []
         self.quotes = {}
+        self._window_orders = {}
         self._unpriced_fills = {}
         self._held_orders = {}
 
@@ -209,7 +264,18 @@ class OrderBook:
             order.status = OrderStatus.NEW
         if not any(x is order for x in self.orderList):
             self.orderList.append(order)
+            self._window_orders.setdefault(order.interval.name, {})[order.id] = order
             self._archive_orders([order])
+
+    def window_orders(self, time_interval) -> list[Order]:
+        """Every order the interval has seen in the window, as submitted: each entity's current quote and every order
+        submitted directly, whether since filled, partly filled, standing, expired or cancelled. An order a revised or
+        withdrawn quote replaced is not among them. Their crossing is the interval's reported marginal price."""
+        return list(self._window_orders.get(time_interval.name, {}).values())
+
+    def _forget_window_orders(self, orders) -> None:
+        for order in orders:
+            self._window_orders.get(order.interval.name, {}).pop(order.id, None)
 
     @staticmethod
     def _curve_version(curve):
@@ -256,6 +322,7 @@ class OrderBook:
         for order in standing:
             order.status = OrderStatus.CANCELLED
         self.orderList = [x for x in self.orderList if not any(x is o for o in standing)]
+        self._forget_window_orders(quote.orders)  # the revision (or nothing) now speaks for the entity
         self._archive_orders(standing)
 
     def _expire_orders(self) -> None:
@@ -273,8 +340,11 @@ class OrderBook:
         self.orderList = [x for x in self.orderList if not any(x is o for o in expired)]
         self._archive_orders(expired)
         roots = {o.root_order_id for o in expired}
+        forgotten = [quote for quote in self.quotes.values() if any(o.id in roots for o in quote.orders)]
+        for quote in forgotten:  # the curve, if still active, is quoted afresh this pass and speaks for the entity
+            self._forget_window_orders(quote.orders)
         self.quotes = {key: quote for key, quote in self.quotes.items()
-                       if not any(o.id in roots for o in quote.orders)}
+                       if not any(quote is gone for gone in forgotten)}
 
     def _archive_orders(self, orders) -> None:
         for order in orders:
@@ -287,7 +357,8 @@ class OrderBook:
 
     def match(self, new_order: Order or None = None):
         """
-        Match a new (aggressive) order against the order book, then archive the book changes: every order newly booked
+        Match a new (aggressive) order against the order book at the resting orders' prices (the continuous clearing
+        rule; a batch clearing goes through clear_interval), then archive the book changes: every order newly booked
         in matchList or orderList, and every order removed from the book (superseded by its matched/remainder copies).
         See _match for the matching algorithm.
         """
@@ -486,6 +557,237 @@ class OrderBook:
         fills[largest] = (fills[largest][0], fills[largest][1] - (total + balance_ao.quantity))
         return balance_price, balance_ao, fills
 
+    # ------------------------------------------------------------------------------------------- batch clearing
+    def clear_interval(self, time_interval) -> None:
+        """
+        Clear one interval's standing orders together (clearing 'batch'): find where their summed supply and demand
+        cross (crossing), book the fills there, every leg at the crossing price (_book_fills), and archive the book
+        changes as match does. What the crossing leaves unfilled, in whole or in part, stands on; a new order the
+        crossing did not reach rests as a standing order. Nothing here depends on the order the orders were quoted in:
+        the fills are allocated from the sums, and ties at the margin are broken by the matching strategy's ranks and
+        then by the orders' own attributes (see _priority_key).
+        """
+        live = (OrderStatus.NEW, OrderStatus.NEW_REVISED, OrderStatus.STANDING_ORDER,
+                OrderStatus.REVISED_STANDING_ORDER)
+        orders = [x for x in self.orderList if x.interval.name == time_interval.name and x.status in live]
+        if not orders:
+            return
+        before = self.orderList + self.matchList
+        crossing = self.crossing(orders)
+        if crossing is not None and crossing.fills:
+            self._book_fills(crossing.fills, crossing.price)
+            _log.debug(f'MARKET: {self.name} cleared {time_interval.name} at {crossing.price:.6g} $/kWh ({crossing.kind}): '
+                       f'{len(crossing.fills)} orders fill, {sum(q for _, q in crossing.fills if q > 0):.4g} kW traded.')
+        resting = [o for o in orders if o.status in (OrderStatus.NEW, OrderStatus.NEW_REVISED)]
+        for order in resting:  # an unfilled new order rests, as one that found no counteroffer does in match
+            order.status = OrderStatus.STANDING_ORDER
+        after = self.orderList + self.matchList
+        booked = [x for x in after if not any(x is y for y in before)]
+        superseded = [x for x in before if not any(x is y for y in after)]
+        self._archive_orders(superseded + booked + resting)
+
+    def crossing(self, orders: list) -> 'Crossing | None':
+        """
+        Where the summed supply and demand of one interval's orders cross, with the fills to make there: the batch
+        clearing rule, and in both clearing modes the interval's reported marginal price (settle, on the orders the
+        window saw). None when the orders are all on one side.
+
+        The orders' breakpoint prices form a ladder. Between two consecutive rungs every order's quantity is a straight
+        line in the price (a continuous segment interpolates; anything else is constant or absent), so the net quantity
+        N(p) = supply + demand is linear on each open interval; at a rung supply may jump up (a limit order, an
+        all-or-nothing vertex) and just above it demand may drop off. N never decreases with the price. Walking up the
+        ladder, the first of these to hold is the crossing:
+
+        - N >= 0 at a rung: the price is the rung. Demand there fills in full. Supply is rationed: what each supply order
+          already offered just below the rung is below the margin and fills in full; what it adds at the rung competes
+          for the rest under the matching strategy (_sequential_fills, _proportional_fills), an all-or-nothing addition
+          taken whole or not at all. This is what the ladder walk does at a rung where the resting side offers more than
+          the aggressive order wants, applied once to the summed book.
+        - N >= 0 just above a rung (demand drops off there): the price is the rung; supply fills in full and demand is
+          rationed the same way, what each demand order still wants just above the rung being below the margin.
+        - N > 0 just below the next rung: the crossing is strictly inside the segment, at the interpolated price, and
+          every order fills its own quantity there: the base market's interpolation on the summed curve, and the ladder
+          walk's linear standing-order case.
+
+        Supply market orders exceeding all demand (N >= 0 at the bottom of the ladder) or demand market orders exceeding
+        all supply (N < 0 at the top) are a surplus or deficit no price clears: the side that can trade fills in full,
+        the market orders ration it and the rest of them stands, and the price is the end of the ladder nearest the
+        crossing (the lowest or highest price any order names), as the base market prices an interval whose curve never
+        crosses zero at the curve end nearest zero. When no order names a price at all the fills have none (an infinite
+        price), which settle treats as an unpriced interval.
+        """
+        supply = [o for o in orders if o.supply_or_demand is SupplyOrDemand.SUPPLY]
+        demand = [o for o in orders if o.supply_or_demand is SupplyOrDemand.DEMAND]
+        if not supply or not demand:
+            return None
+        rungs = sorted({v.price for o in orders for v in o.vertices if math.isfinite(v.price)})
+        tolerance = 1e-9 * max(1.0, sum(abs(v.quantity) for o in orders for v in o.vertices))
+        ladder = [-INF, *rungs, INF]
+
+        def quantity_at(order, price):
+            return order.get_quantity_from_price(test_price=price).quantity
+
+        def limits(low, high):
+            """Every order's quantity just above `low` and just below `high`, consecutive rungs (the quantity is linear
+            between them, so two probes inside the gap give both ends; outside the finite rungs it is constant)."""
+            if math.isfinite(low) and math.isfinite(high):
+                probes = (low + (high - low) / 3, low + 2 * (high - low) / 3)
+            else:
+                anchor = (high - 1.0) if math.isfinite(high) else (low + 1.0) if math.isfinite(low) else 0.0
+                probes = (anchor, anchor)
+            result = {}
+            for order in orders:
+                q1, q2 = quantity_at(order, probes[0]), quantity_at(order, probes[1])
+                result[id(order)] = (2 * q1 - q2, 2 * q2 - q1) if probes[0] != probes[1] else (q1, q1)
+            return result
+
+        gaps = [limits(ladder[i], ladder[i + 1]) for i in range(len(ladder) - 1)]
+        for i, rung in enumerate(ladder):
+            above = gaps[i] if i < len(gaps) else None  # each order's quantity just above this rung
+            if i == 0:
+                if sum(q for q, _ in above.values()) >= -tolerance:
+                    return self._end_crossing(rungs[0] if rungs else -INF, short=demand, long=supply,
+                                              tolerance=tolerance, kind='surplus')
+            elif above is None:
+                return self._end_crossing(rungs[-1] if rungs else INF, short=supply, long=demand, tolerance=tolerance,
+                                          kind='deficit')
+            else:
+                if sum(quantity_at(o, rung) for o in orders) >= -tolerance:
+                    below = gaps[i - 1]  # supply's quantity just below the rung is below the margin
+                    return self._rung_crossing(rung, short=demand, long=supply,
+                                               infra={id(o): below[id(o)][1] for o in supply}, tolerance=tolerance)
+                if sum(q for q, _ in above.values()) >= -tolerance:
+                    return self._rung_crossing(rung, short=supply, long=demand,  # demand still wanted just above it
+                                               infra={id(o): above[id(o)][0] for o in demand}, tolerance=tolerance)
+            net_above = sum(q for q, _ in above.values())
+            net_before_next = sum(q for _, q in above.values())
+            if net_before_next > tolerance:  # the sides cross strictly inside this segment, where N is linear
+                low, high = rung, ladder[i + 1]
+                price = low + (high - low) * (-net_above) / (net_before_next - net_above)
+                fills = [(o, quantity_at(o, price)) for o in orders]
+                return Crossing(price, self._balance_fills(fills, price, tolerance), 'interior')
+        return None  # not reached: the top of the ladder is a deficit when nothing before it crossed
+
+    def _rung_crossing(self, price: float, short: list, long: list, infra: dict, tolerance: float,
+                       kind: str = 'rung') -> 'Crossing':
+        """
+        The fills at a rung of the ladder: the short side in full at its quantity at the rung; of the long side, what
+        each order offers beyond the rung (`infra`, by id: its quantity just below or just above it) in full, and what it
+        adds at the rung rationed under the matching strategy for what the short side still takes.
+        """
+        fills = [(o, o.get_quantity_from_price(test_price=price).quantity) for o in short]
+        taken = -sum(q for _, q in fills)  # signed as the long side
+        increments, by_vertex, long_fills = [], {}, {}
+        for order in long:
+            here = order.get_quantity_from_price(test_price=price)
+            long_fills[id(order)] = infra[id(order)]
+            increment = here.quantity - infra[id(order)]
+            if abs(increment) <= tolerance:
+                continue
+            if (increment > 0) != (taken > 0) and taken != 0.0:
+                long_fills[id(order)] = here.quantity  # it offers less at the rung than beyond it: that much, in full
+                continue
+            vertex = Vertex(price=price, quantity=increment, continuity=here.continuity, curve=order)
+            increments.append(vertex)
+            by_vertex[id(vertex)] = order
+        needed = taken - sum(long_fills.values())  # what the increments must supply, signed as the long side
+        if increments and abs(needed) > tolerance and (needed > 0) == (taken > 0):
+            increments.sort(key=self._priority_key())
+            if self.matching_strategy and self.matching_strategy[0] is MatchingStrategy.PROPORTIONAL_VOLUME:
+                planned = self._proportional_fills(-needed, increments)
+            else:
+                planned = self._sequential_fills(-needed, increments)
+            for vertex, quantity in planned:
+                long_fills[id(by_vertex[id(vertex)])] += quantity
+        fills.extend((o, long_fills[id(o)]) for o in long)
+        return Crossing(price, self._balance_fills(fills, price, tolerance), kind)
+
+    def _end_crossing(self, price: float, short: list, long: list, tolerance: float, kind: str) -> 'Crossing':
+        """A surplus or deficit: the short side fills in full at what it offers at the end of the ladder, the long
+        side's market orders ration it (nothing else of the long side is in the money there), the rest stands."""
+        market_orders = [o for o in long if all(not math.isfinite(v.price) for v in o.vertices)]
+        others = [o for o in long if not any(o is m for m in market_orders)]
+        end = -INF if kind == 'surplus' else INF
+        infra = {id(o): 0.0 for o in long}
+        infra.update({id(o): o.get_quantity_from_price(test_price=end).quantity for o in others})
+        # The curves on the long side offer what they offer at the end (nothing, or the market orders would not be the
+        # leftover); the market orders are the increments that compete.
+        crossing = self._rung_crossing(end, short=short, long=long, infra=infra, tolerance=tolerance, kind=kind)
+        return Crossing(price, crossing.fills, kind)
+
+    def _balance_fills(self, fills: list, price: float, tolerance: float) -> list:
+        """
+        Make planned fills ([(order, signed quantity)]) sum to zero and drop the empty ones. Rationing at the margin can
+        leave the two sides unequal when an all-or-nothing order cannot take its share: the excess is trimmed from the
+        over-filled side's partially fillable orders, largest first, and when that side has none its smallest
+        all-or-nothing fill is dropped and the sides compared again. Rounding dust lands on the largest fill.
+        """
+        fills = [(o, q) for o, q in fills if abs(q) > tolerance]
+        while fills:
+            net = sum(q for _, q in fills)
+            if abs(net) <= tolerance:
+                if net != 0.0:
+                    i = max(range(len(fills)), key=lambda k: abs(fills[k][1]))
+                    fills[i] = (fills[i][0], fills[i][1] - net)
+                return [(o, q) for o, q in fills if q != 0.0]
+            over = [i for i, (o, q) in enumerate(fills) if (q > 0) == (net > 0)]
+            divisible = [i for i in over if fills[i][0].get_quantity_from_price(test_price=price).continuity]
+            if divisible:
+                for i in sorted(divisible, key=lambda k: -abs(fills[k][1])):
+                    cut = net if abs(net) <= abs(fills[i][1]) else fills[i][1]
+                    fills[i] = (fills[i][0], fills[i][1] - cut)
+                    net -= cut
+                    if abs(net) <= tolerance:
+                        break
+                fills = [(o, q) for o, q in fills if abs(q) > tolerance]
+                continue
+            del fills[min(over, key=lambda k: abs(fills[k][1]))]
+        return []
+
+    def _book_fills(self, fills: list, price: float) -> None:
+        """
+        Book the fills of a batch clearing at one price. The legs are paired across the sides (largest fills first) so
+        that every leg has a counterparty, as a match's legs do; each filled order is superseded by its legs (one per
+        counterparty, Order.match) and its remainder, which stands on, as _apply_fills books a match. Which order is
+        paired with which does not change what anyone trades or pays: all legs are at the one price.
+        """
+        def rank(item):
+            order, quantity = item
+            return -abs(quantity), order.time_stamp, order.actor.name, str(order.id)
+
+        supply = sorted([(o, q) for o, q in fills if q > 0], key=rank)
+        demand = sorted([(o, -q) for o, q in fills if q < 0], key=rank)
+        legs: dict[int, list] = {id(o): [] for o, _ in fills}
+        dust = 1e-9 * max(1.0, sum(q for _, q in supply))
+        i, j = 0, 0
+        left_s, left_d = (supply[0][1] if supply else 0.0), (demand[0][1] if demand else 0.0)
+        while i < len(supply) and j < len(demand):
+            quantity = min(left_s, left_d)
+            legs[id(supply[i][0])].append((demand[j][0], quantity))
+            legs[id(demand[j][0])].append((supply[i][0], -quantity))
+            left_s, left_d = left_s - quantity, left_d - quantity
+            if left_s <= dust:
+                i += 1
+                left_s = supply[i][1] if i < len(supply) else 0.0
+            if left_d <= dust:
+                j += 1
+                left_d = demand[j][1] if j < len(demand) else 0.0
+        for order, total in fills:
+            pairs = legs[id(order)]
+            if pairs:  # the last leg absorbs the pairing's rounding, so the legs sum to the fill exactly
+                counterparty, last = pairs[-1]
+                pairs[-1] = (counterparty, last + (total - sum(q for _, q in pairs)))
+            for counterparty, quantity in pairs:
+                leg, _ = order.match(quantity=quantity, match_price=price, counter_party=counterparty.actor)
+                if leg and leg.order_or_none():
+                    self.matchList.append(leg)
+            remainder = order.remainder(total)
+            self._supersede(order)
+            if remainder and remainder.order_or_none():
+                if remainder.status in (OrderStatus.NEW, OrderStatus.NEW_REVISED):
+                    remainder.status = OrderStatus.STANDING_ORDER
+                self.orderList.append(remainder)
+
     def get_order_by_id(self, an_id: int or None = None):
         """
         Return order object from among the orders in orderList or matchLIst that match a given ID.
@@ -505,9 +807,18 @@ class OrderBook:
 
     @property
     def average_match_prices(self) -> Measurement:
-        """Per interval, the volume-weighted average price of the interval's matches [$/kWh], recorded for reporting
-        beside the marginal price (the price of the last match). Held in the market's BlendedPrice measurement."""
+        """Per interval, the volume-weighted average price of the interval's priced legs [$/kWh], recorded for
+        reporting beside the marginal price. It is what the interval's trades cost on average, not a marginal price: in
+        batch mode every leg is at the crossing price and the two coincide; in continuous mode the legs are at the
+        resting orders' prices and they differ. Held in the market's BlendedPrice measurement."""
         return self.blended_prices1
+
+    def last_fill_price(self, time_interval) -> float | None:
+        """The price of the interval's last priced leg [$/kWh], or None without one: the marginal trade of a continuous
+        book, kept for reporting. It is not the interval's marginal price (see settle) and is not archived."""
+        priced = [leg for leg in self.matchList if leg.interval.name == time_interval.name
+                  and math.isfinite(leg.vertices[-1].price)]
+        return priced[-1].vertices[-1].price if priced else None
 
     def _legs_by_interval(self) -> dict[str, list[Order]]:
         legs: dict[str, list[Order]] = {}
@@ -525,10 +836,15 @@ class OrderBook:
         Turn the matched legs into the market's result, per interval. Each entity's scheduled power is the signed sum
         of its matched legs (supply positive, demand negative; unmatched remainders did not trade), stored through the
         cleared-power store so that Entity.market_power returns it and the entities schedule from it as they do after
-        an auction clears. The interval's marginal price is the price of the last match, the marginal trade; the
-        volume-weighted average match price is recorded beside it (average_match_prices). An interval with no match
-        keeps its opening price and is left to its entities' curves; such intervals are logged, once, by name. The
-        entities are then asked for their schedules as Auction.while_in_delivery_lead asks them.
+        an auction clears. The interval's marginal price is where the supply and demand the window saw cross
+        (crossing, on window_orders: every order in its original quantities and prices, filled, standing, expired or
+        cancelled), in both clearing modes: in batch mode that is the price every leg was made at; in continuous mode
+        the legs were made at the resting orders' prices and the crossing is what the same orders would have cleared at
+        together, the last fill being available as last_fill_price. The volume-weighted average price of the legs is
+        recorded beside it (average_match_prices). An interval with no match keeps its opening price and is left to
+        its entities' curves; such intervals are logged, once, by name, as is one whose orders name no price (market
+        orders met by market orders), whose matched quantities are scheduled at the opening price. The entities are
+        then asked for their schedules as Auction.while_in_delivery_lead asks them.
         """
         entities = [*self.tn.local_assets, *self.tn.neighbors]
         legs_by_interval = self._legs_by_interval()
@@ -538,20 +854,21 @@ class OrderBook:
             if not legs:
                 unmatched.append(time_interval.name)
                 continue
-            # A match made at an infinite price level (a market order met by another market order) discovers no price;
-            # the priced legs do. An interval whose matches are all unpriced trades its quantities at the opening price.
+            crossing = self.crossing(self.window_orders(time_interval))
             priced = [leg for leg in legs if math.isfinite(leg.vertices[-1].price)]
             volume = sum(abs(self._leg_quantity(leg)) for leg in legs)
-            if priced:
-                marginal_price = priced[-1].vertices[-1].price
-                priced_volume = sum(abs(self._leg_quantity(leg)) for leg in priced)
-                average = sum(leg.vertices[-1].price * abs(self._leg_quantity(leg)) for leg in priced) / priced_volume
+            if crossing is not None and math.isfinite(crossing.price):
+                marginal_price = crossing.price
                 self.marginal_prices.update(time_interval, marginal_price)
                 self._own_prices.add(time_interval.start_time)  # not to be overwritten by a prior market's price
-                self.average_match_prices.update(time_interval, average)
             else:
                 unpriced.append(time_interval.name)
                 marginal_price = self.marginal_prices.get_by_interval(time_interval).value
+            if priced:
+                priced_volume = sum(abs(self._leg_quantity(leg)) for leg in priced)
+                average = sum(leg.vertices[-1].price * abs(self._leg_quantity(leg)) for leg in priced) / priced_volume
+                self.average_match_prices.update(time_interval, average)
+            else:
                 average = float('nan')
             for entity in entities:
                 sd_curve = entity.active_vertices.get_by_interval(time_interval)
@@ -571,9 +888,9 @@ class OrderBook:
             _log.warning(f'MARKET: {self.name} had no match in {len(unmatched)} of {len(self.time_intervals)} '
                          f'intervals; they keep their opening prices: {unmatched}.')
         if unpriced:
-            _log.warning(f'MARKET: {self.name} matched only market orders against market orders in {len(unpriced)} of '
-                         f'{len(self.time_intervals)} intervals, which discovers no price; the matched quantities are '
-                         f'scheduled at the opening prices: {unpriced}.')
+            _log.warning(f'MARKET: {self.name} saw no order naming a price in {len(unpriced)} of '
+                         f'{len(self.time_intervals)} intervals (market orders met by market orders), which discovers '
+                         f'no price; the matched quantities are scheduled at the opening prices: {unpriced}.')
         # Schedules follow the settlement: the assets' from the cleared powers where an interval settled (an interval
         # without a match keeps the schedule its curve gives at the opening price), the neighbors' through their own
         # schedule_power, which reads the same store.
@@ -671,7 +988,8 @@ class OrderBook:
         (ORDER_AGE: oldest first; ORDER_VOLUME and PROPORTIONAL_VOLUME: largest first; NONE: no ranking); all-or-nothing
         vertices then sort before partially fillable ones of equal rank, so whole fills are taken from orders that
         cannot accept a partial one and the partial fill falls on an order that can; the unused ranking breaks any
-        remaining ties.
+        remaining ties, and the actor's name the last of them, so that the outcome never depends on the order the
+        orders were booked in (a batch clearing must not).
         """
         by_age = lambda so: so.curve.time_stamp
         by_volume = lambda so: -abs(so.quantity)
@@ -685,6 +1003,7 @@ class OrderBook:
                 raise ValueError(f'Unrecognised matching strategy: {strategy!r}')
         ranks.append(lambda so: so.continuity)
         ranks.extend(rank for rank in (by_volume, by_age) if rank not in ranks)
+        ranks.append(lambda so: so.curve.actor.name)
         return lambda so: tuple(rank(so) for rank in ranks)
 
     @staticmethod

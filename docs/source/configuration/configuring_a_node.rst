@@ -1979,6 +1979,12 @@ An object of this class contains all the critical timing and initialization prop
      - names of market_series
      - Name of the series whose markets this series refines.
      -  
+   * - ``clearing``
+     - one of "batch", "continuous"
+     - "batch"
+     -  
+     - How the book clears an interval. "batch": every order of the interval is collected, supply and demand are summed, the price where they cross is found and the fills are allocated there, all legs at that one price; the result does not depend on the order in which the entities were quoted. Orders below the margin fill in full; at the margin the matching_strategy tie-breaks decide which orders fill and by how much, and all-or-nothing orders fill whole or not at all. Inelastic quantities (market orders) enter the sums, so a node's own inelastic supply and load net against each other and the exchange proposed to a neighbor is the net; an inelastic surplus or deficit the curves cannot absorb is left standing as a market order. "continuous": each order is matched on arrival against the book then standing, at the resting orders' prices; order_expiry, age priority and the arrival order (local assets, then neighbors, in configuration order) keep their meaning, and whichever side was quoted first rests and sets the prices. In both modes the interval's reported marginal price is where the supply and demand seen in the window cross.
+     -  
    * - ``matching_strategy``
      - array of string
      - ['ORDER_VOLUME']
@@ -2139,6 +2145,12 @@ An object of this class contains all the critical timing and initialization prop
      - names of market_series
      - Name of the series whose markets this series refines.
      -  
+   * - ``clearing``
+     - one of "batch", "continuous"
+     - "batch"
+     -  
+     - How the book clears an interval. "batch": every order of the interval is collected, supply and demand are summed, the price where they cross is found and the fills are allocated there, all legs at that one price; the result does not depend on the order in which the entities were quoted. Orders below the margin fill in full; at the margin the matching_strategy tie-breaks decide which orders fill and by how much, and all-or-nothing orders fill whole or not at all. Inelastic quantities (market orders) enter the sums, so a node's own inelastic supply and load net against each other and the exchange proposed to a neighbor is the net; an inelastic surplus or deficit the curves cannot absorb is left standing as a market order. "continuous": each order is matched on arrival against the book then standing, at the resting orders' prices; order_expiry, age priority and the arrival order (local assets, then neighbors, in configuration order) keep their meaning, and whichever side was quoted first rests and sets the prices. In both modes the interval's reported marginal price is where the supply and demand seen in the window cross.
+     -  
    * - ``matching_strategy``
      - array of string
      - ['ORDER_VOLUME']
@@ -2298,6 +2310,12 @@ An object of this class contains all the critical timing and initialization prop
      - None
      - names of market_series
      - Name of the series whose markets this series refines.
+     -  
+   * - ``clearing``
+     - one of "batch", "continuous"
+     - "batch"
+     -  
+     - How the book clears an interval. "batch": every order of the interval is collected, supply and demand are summed, the price where they cross is found and the fills are allocated there, all legs at that one price; the result does not depend on the order in which the entities were quoted. Orders below the margin fill in full; at the margin the matching_strategy tie-breaks decide which orders fill and by how much, and all-or-nothing orders fill whole or not at all. Inelastic quantities (market orders) enter the sums, so a node's own inelastic supply and load net against each other and the exchange proposed to a neighbor is the net; an inelastic surplus or deficit the curves cannot absorb is left standing as a market order. "continuous": each order is matched on arrival against the book then standing, at the resting orders' prices; order_expiry, age priority and the arrival order (local assets, then neighbors, in configuration order) keep their meaning, and whichever side was quoted first rests and sets the prices. In both modes the interval's reported marginal price is where the supply and demand seen in the window cross.
      -  
    * - ``matching_strategy``
      - array of string

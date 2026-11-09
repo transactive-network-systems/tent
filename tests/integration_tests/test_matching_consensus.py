@@ -113,7 +113,7 @@ def test_the_class_is_registered_and_shares_the_book():
     assert issubclass(MatchingConsensusMarket, ConsensusMarket)
     assert MatchingConsensusMarket.MARKET_TYPE is MarketTypes.matching_consensus
     assert MatchingConsensusMarket.BALANCE_POINT == 'matched_quantity'
-    assert set(MatchingConsensusMarket.Config.model_fields) == {'actuate_assets', 'max_balance_iterations',
+    assert set(MatchingConsensusMarket.Config.model_fields) == {'actuate_assets', 'clearing', 'max_balance_iterations',
                                                                 'matching_strategy', 'order_expiry', 'order_archiving'}
     tables = {d['name']: d for d in MatchingConsensusMarket.get_archive_definitions()}
     assert tables['matching_consensus']['inherits'] == 'market'
@@ -399,3 +399,44 @@ def test_the_deployed_hierarchy_negotiates_its_books_to_consensus(tmp_path, capl
     traceback_free = [r for r in caplog.records if 'Traceback' in r.getMessage()]
     assert not traceback_free
     check_exchanges(nodes, markets)
+
+
+# ------------------------------------------------------------------------------------ netting inside a batch (T-71)
+
+def test_two_inelastic_market_orders_on_one_node_net_inside_the_batch_and_the_neighbor_is_offered_the_net(clock, caplog):
+    """The campus's case: an inelastic 30 kW of solar (a supply market order) and an inelastic 100 kW of buildings (a
+    demand market order) on one node, and the city's offer from 0.04 at 0 kW to 0.08 at 1000 kW. Summed, the node needs
+    70 kW: the crossing is inside the city's curve at its price for 70 kW, 0.0428, every leg at it, the solar and the
+    buildings included (with continuous clearing the two market orders met at the infinite rung, an unpriced fill and
+    a warning). The exchange proposed to the city (balance point rule 'matched_quantity') is the net, 70 kW."""
+    campus = build_node('campus', 'city', asset_curve=[[INF, 0.0, -100.0, True]], asset_limits=(-100.0, 0.0),
+                        neighbor_curve=CITY_CURVE, neighbor_limits=(0.0, 1000.0), up_or_down='upstream')
+    solar = FlexibleAsset(transactive_node=campus, name='solar', cost_parameters=[0.0, 0.0, 0.0],
+                          default_vertices=[[-INF, 0.0, 30.0, True]], minimum_power=0.0, maximum_power=30.0)
+    campus.local_assets.append(solar)
+    sent = []
+    campus.register_recipient('city', sent.append)
+    market = market_of(campus)
+    assert market.clearing == 'batch'
+    times = market.transition_times
+    clock['t'] = times.active
+    campus.step()
+    with caplog.at_level(logging.DEBUG, logger='tent.market'):
+        clock['t'] = times.negotiation
+        campus.step()
+    assert not [r for r in caplog.records if 'names a price' in r.getMessage()], 'no unpriced fill, no warning'
+    assert not market.unbalanceable
+    buildings, city = campus.local_assets[0], campus.neighbors[0]
+    for ti in market.time_intervals:
+        legs = [leg for leg in market.matchList if leg.interval.name == ti.name]
+        assert {round(leg.vertices[-1].price, 9) for leg in legs} == {round(0.04 + 0.04 * 70.0 / 1000.0, 9)}
+        assert market.marginal_prices.get_by_interval(ti).value == pytest.approx(0.0428)
+        assert market.cleared_power(solar, ti) == pytest.approx(30.0)
+        assert market.cleared_power(buildings, ti) == pytest.approx(-100.0)
+        assert market.cleared_power(city, ti) == pytest.approx(70.0), 'the net'
+        assert city.scheduled_powers.get_by_interval(ti).value == pytest.approx(70.0)
+        assert sum(leg.vertices[-1].quantity for leg in legs if leg.actor is solar) == pytest.approx(30.0)
+    assert len(sent) == 1
+    signal = city.last_sent_signals[market]
+    for ti in market.time_intervals:  # in the city's perspective: it supplies the campus's net 70 kW
+        assert signal.balance_point(ti).quantity == pytest.approx(-70.0), 'the exchange proposed is the net quantity'
